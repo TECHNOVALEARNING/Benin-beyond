@@ -192,13 +192,14 @@ export function HeroPinterestCarousel() {
         )}
       </div>
 
-      {/* 2. Top Header (Brand Logo + Connexion) */}
+      {/* 2. Top Header (Brand Logo - Bouton Connexion masqué temporairement) */}
       <div className="absolute inset-x-0 top-0 z-30 px-6 pt-7 md:px-12">
         <div className="mx-auto flex max-w-8xl items-center justify-between">
           <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-white hover:opacity-90 transition-opacity">
             Bénin Beyond
           </Link>
 
+          {/* Bouton de connexion masqué temporairement à la demande de l'utilisateur
           <div className="flex items-center gap-2.5">
             <Link
               to="/login"
@@ -208,6 +209,7 @@ export function HeroPinterestCarousel() {
               <span>Connexion</span>
             </Link>
           </div>
+          */}
         </div>
       </div>
 

@@ -27,11 +27,14 @@ function ScrollToTop() {
 }
 
 export function App() {
+  const location = useLocation();
+  const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
+
   return (
     <AuthProvider>
       <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
         <ScrollToTop />
-        <main className="flex-1 pb-28">
+        <main className={`flex-1 ${isDashboard ? '' : 'pb-28'}`}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/explore" element={<ExplorePage />} />
@@ -52,8 +55,8 @@ export function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
-        <Footer />
-        <Navbar />
+        {!isDashboard && <Footer />}
+        {!isDashboard && <Navbar />}
       </div>
     </AuthProvider>
   );

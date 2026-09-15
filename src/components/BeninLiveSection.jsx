@@ -1,6 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Clock, Calendar, MapPin, ChevronLeft, ChevronRight, Wind, Droplets } from 'lucide-react';
+import {
+  Sun,
+  Moon,
+  Cloud,
+  CloudSun,
+  CloudMoon,
+  CloudRain,
+  CloudLightning,
+  Clock,
+  Calendar,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Wind,
+  Droplets,
+  Thermometer,
+  Radio
+} from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
+
+const BENIN_CITIES = [
+  { id: 'cotonou', name: 'Cotonou', region: 'Littoral', lat: 6.3654, lon: 2.4186 },
+  { id: 'ouidah', name: 'Ouidah', region: 'Cité Mémorielle', lat: 6.3625, lon: 2.0819 },
+  { id: 'natitingou', name: 'Pendjari / Nord', region: 'Atacora & Faune', lat: 10.3042, lon: 1.3796 },
+  { id: 'portonovo', name: 'Porto-Novo', region: 'Capitale', lat: 6.4969, lon: 2.6283 }
+];
 
 const CULTURAL_EVENTS = [
   {
@@ -55,9 +79,80 @@ const CULTURAL_EVENTS = [
   }
 ];
 
+function getWeatherInfo(code, isDay) {
+  if (code === 0) {
+    return {
+      label: isDay ? 'Ensoleillé' : 'Nuit claire',
+      icon: isDay ? Sun : Moon,
+      condition: isDay ? 'Ciel dégagé' : 'Ciel étoilé'
+    };
+  }
+  if (code === 1 || code === 2) {
+    return {
+      label: isDay ? 'Éclaircies' : 'Nuit voilée',
+      icon: isDay ? CloudSun : CloudMoon,
+      condition: isDay ? 'Passages nuageux' : 'Ciel partiellement voilé'
+    };
+  }
+  if (code === 3) {
+    return {
+      label: 'Couvert',
+      icon: Cloud,
+      condition: 'Ciel couvert'
+    };
+  }
+  if (code === 45 || code === 48) {
+    return {
+      label: 'Brume côtière',
+      icon: Wind,
+      condition: 'Brume & humidité'
+    };
+  }
+  if (code >= 51 && code <= 57) {
+    return {
+      label: 'Bruine légère',
+      icon: CloudRain,
+      condition: 'Bruine passagère'
+    };
+  }
+  if ((code >= 61 && code <= 65) || (code >= 80 && code <= 82)) {
+    return {
+      label: isDay ? 'Pluie côtière' : 'Averse nocturne',
+      icon: CloudRain,
+      condition: 'Précipitations'
+    };
+  }
+  if (code >= 95) {
+    return {
+      label: 'Orage tropical',
+      icon: CloudLightning,
+      condition: 'Activité orageuse'
+    };
+  }
+  return {
+    label: isDay ? 'Climat doux' : 'Nuit tempérée',
+    icon: isDay ? Sun : Moon,
+    condition: 'Climat béninois'
+  };
+}
+
 export function BeninLiveSection() {
   const [activeEventIndex, setActiveEventIndex] = useState(0);
   const [timeString, setTimeString] = useState('');
+  const [selectedCityId, setSelectedCityId] = useState('cotonou');
+
+  // Météo temps réel (Open-Meteo API)
+  const [weatherData, setWeatherData] = useState({
+    temp: 27,
+    apparentTemp: 30,
+    humidity: 80,
+    windSpeed: 16,
+    isDay: false,
+    code: 2,
+    loading: false
+  });
+
+  const selectedCity = BENIN_CITIES.find((c) => c.id === selectedCityId) || BENIN_CITIES[0];
 
   // Horloge synchronisée sur le fuseau du Bénin (GMT+1 / WAT)
   useEffect(() => {
@@ -78,7 +173,42 @@ export function BeninLiveSection() {
     return () => clearInterval(interval);
   }, []);
 
-  // Défilement automatique des événements
+  // Récupération de la météo réelle via Open-Meteo API
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchRealWeather = async () => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${selectedCity.lat}&longitude=${selectedCity.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&timezone=Africa%2FPorto-Novo`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && data?.current) {
+          setWeatherData({
+            temp: Math.round(data.current.temperature_2m),
+            apparentTemp: Math.round(data.current.apparent_temperature),
+            humidity: Math.round(data.current.relative_humidity_2m),
+            windSpeed: Math.round(data.current.wind_speed_10m),
+            isDay: Boolean(data.current.is_day),
+            code: data.current.weather_code,
+            loading: false
+          });
+        }
+      } catch (err) {
+        console.warn('API Météo temps réel indisponible, utilisation des données locales:', err);
+      }
+    };
+
+    fetchRealWeather();
+    // Rafraîchissement automatique toutes les 5 minutes
+    const weatherInterval = setInterval(fetchRealWeather, 300000);
+    return () => {
+      isMounted = false;
+      clearInterval(weatherInterval);
+    };
+  }, [selectedCity]);
+
+  // Défilement automatique des événements culturels
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveEventIndex((prev) => (prev + 1) % CULTURAL_EVENTS.length);
@@ -94,65 +224,108 @@ export function BeninLiveSection() {
     setActiveEventIndex((prev) => (prev - 1 + CULTURAL_EVENTS.length) % CULTURAL_EVENTS.length);
   };
 
+  const weatherInfo = getWeatherInfo(weatherData.code, weatherData.isDay);
+  const WeatherIcon = weatherInfo.icon;
+
   return (
     <section className="border-y border-foreground/10 bg-muted/40">
-      {/* 1. Live Status Bar (Météo, Heure, Climat béninois) */}
-      <ScrollReveal delay={0} y={20} className="border-b border-foreground/10 bg-card/60 backdrop-blur-sm px-6 py-4 md:px-12">
-        <div className="mx-auto flex max-w-8xl flex-wrap items-center justify-between gap-4">
-          {/* Heure locale Bénin */}
+      {/* 1. Live Status Bar (Météo Réelle API, Heure WAT, Couleurs Marron Harmoniques) */}
+      <ScrollReveal delay={0} y={20} className="border-b border-foreground/10 bg-card/75 backdrop-blur-md px-6 py-4 md:px-12">
+        <div className="mx-auto flex max-w-8xl flex-wrap items-center justify-between gap-5">
+          
+          {/* A. Heure locale Bénin (Couleur Marron / Terracotta unifiée, sans vert) */}
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
               <Clock className="h-4 w-4" strokeWidth={2} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-bold text-foreground">
-                  {timeString || '12:00:00'}
+                <span className="font-mono text-base font-bold text-foreground tracking-tight">
+                  {timeString || '22:30:00'}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                
+                {/* Badge WAT avec pulsation Marron / Terracotta */}
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 font-mono text-[10px] font-bold text-primary">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                   </span>
                   <span>WAT (GMT+1)</span>
                 </span>
-                <span className="text-[10px] text-emerald-700 font-semibold hidden sm:inline">
+
+                {/* Statut En direct en Marron / Terracotta */}
+                <span className="text-[11px] text-primary font-bold hidden sm:inline-flex items-center gap-1">
                   • En direct
                 </span>
               </div>
-              <p className="text-[11px] text-foreground/60">Heure locale · Cotonou, Bénin</p>
+              <p className="text-[11px] text-foreground/60">Fuseau officiel · République du Bénin</p>
             </div>
           </div>
 
-          {/* Météo côtière en direct */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
-              <Sun className="h-5 w-5 animate-[spin_12s_linear_infinite]" strokeWidth={2} />
+          {/* B. Météo Réelle en Direct (Connectée à l'API Open-Meteo, Gestion Jour/Nuit) */}
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors ${
+                weatherData.isDay
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/25'
+                  : 'bg-primary/10 text-primary border-primary/25'
+              }`}
+            >
+              <WeatherIcon
+                className={`h-5 w-5 ${weatherData.isDay ? 'animate-[spin_16s_linear_infinite]' : ''}`}
+                strokeWidth={2}
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-heading text-base font-bold text-foreground">
-                  29°C
+                <span className="font-heading text-lg font-bold text-foreground">
+                  {weatherData.temp}°C
                 </span>
-                <span className="text-xs text-foreground/80 font-medium">
-                  Ensoleillé · Climat côtier
+                <span className="text-xs text-foreground/90 font-semibold">
+                  {weatherInfo.label}
                 </span>
+
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-foreground/60">
+
+              {/* Indicateurs précis : Ressenti, Humidité, Vent et Sélecteur de Ville */}
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-foreground/65 mt-0.5">
                 <span className="flex items-center gap-1">
-                  <Droplets className="h-3 w-3 text-primary/70" /> 76% Humidité
+                  <Thermometer className="h-3 w-3 text-primary" /> Ressenti {weatherData.apparentTemp}°C
                 </span>
                 <span className="flex items-center gap-1">
-                  <Wind className="h-3 w-3 text-primary/70" /> 16 km/h Brise marine
+                  <Droplets className="h-3 w-3 text-primary" /> {weatherData.humidity}% Humidité
                 </span>
+                <span className="flex items-center gap-1">
+                  <Wind className="h-3 w-3 text-primary" /> {weatherData.windSpeed} km/h
+                </span>
+
+                {/* Sélecteur de ville béninoise pour la météo */}
+                <span className="text-foreground/30">•</span>
+                <div className="flex items-center gap-1 text-[11px]">
+                  <MapPin className="h-3 w-3 text-primary" />
+                  <select
+                    value={selectedCityId}
+                    onChange={(e) => setSelectedCityId(e.target.value)}
+                    className="bg-transparent font-semibold text-foreground hover:text-primary cursor-pointer border-none p-0 focus:outline-none focus:ring-0 text-[11px]"
+                    title="Changer de ville pour la météo"
+                  >
+                    {BENIN_CITIES.map((c) => (
+                      <option key={c.id} value={c.id} className="bg-card text-foreground">
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Période touristique recommandée */}
-          <div className="hidden lg:flex items-center rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent-foreground font-medium">
-            <span>Saison propice aux séjours balnéaires et safaris dans la Pendjari</span>
+          {/* C. Climat & Recommandation Saisonnière */}
+          <div className="hidden xl:flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary font-medium">
+            <Radio className="h-3.5 w-3.5 text-primary animate-pulse" />
+            <span>Le Bénin vous accueille toute l'année</span>
           </div>
+
         </div>
       </ScrollReveal>
 

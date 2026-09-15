@@ -1,15 +1,23 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { House, BedDouble, Car, Compass, Layers, ShoppingBag } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faHouse,
+  faBed,
+  faCar,
+  faCompass,
+  faLayerGroup,
+  faBagShopping
+} from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Accueil', icon: House },
-  { to: '/explore?type=stay', label: 'Séjourner', icon: BedDouble, match: 'stay' },
-  { to: '/explore?type=drive', label: 'Conduire', icon: Car, match: 'drive' },
-  { to: '/tourisme', label: 'Tourisme', icon: Compass, isTourisme: true },
-  { to: '/packs', label: 'Packs', icon: Layers, isPack: true },
-  { to: '/panier', label: 'Panier', icon: ShoppingBag, cart: true }
+  { to: '/', label: 'Accueil', faIcon: faHouse },
+  { to: '/explore?type=stay', label: 'Séjourner', faIcon: faBed, match: 'stay' },
+  { to: '/explore?type=drive', label: 'Conduire', faIcon: faCar, match: 'drive' },
+  { to: '/tourisme', label: 'Tourisme', faIcon: faCompass, isTourisme: true },
+  { to: '/packs', label: 'Packs', faIcon: faLayerGroup, isPack: true },
+  { to: '/panier', label: 'Panier', faIcon: faBagShopping, cart: true }
 ];
 
 export function Navbar() {
@@ -41,7 +49,7 @@ export function Navbar() {
                   : 'text-foreground/70 hover:text-foreground'
               }`}
             >
-              <Icon className="h-5 w-5" strokeWidth={1.5} />
+              <FontAwesomeIcon icon={item.faIcon} className="h-4 w-4 mb-0.5" />
               <span className="hidden sm:block">{item.label}</span>
               {item.cart && count > 0 && (
                 <span

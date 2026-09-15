@@ -119,9 +119,8 @@ export function TourismPage() {
         
         <div className="relative z-10 mx-auto max-w-8xl px-6 md:px-12">
           <ScrollReveal delay={0} y={20}>
-            <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs font-semibold text-accent mb-6">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Guide Culturel & Patrimoine du Bénin</span>
+            <div className="inline-flex items-center gap-2 mb-6">
+
             </div>
             
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight max-w-4xl leading-tight">
@@ -137,7 +136,7 @@ export function TourismPage() {
             <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs sm:text-sm text-secondary-foreground/90 backdrop-blur-sm">
               <Info className="h-4 w-4 text-accent shrink-0" />
               <span>
-                <strong>Guide informatif en accès libre :</strong> Les sites patrimoniaux et monuments présentés ci-dessous sont des repères culturels pour enrichir votre séjour.
+                Les sites patrimoniaux et monuments présentés ci-dessous sont des repères culturels pour enrichir votre séjour.
               </span>
             </div>
           </ScrollReveal>

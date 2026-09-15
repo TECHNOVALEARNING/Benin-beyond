@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Shield, 
-  Sparkles, 
-  ArrowRight, 
-  Lock, 
-  Mail, 
-  Crown, 
-  Building, 
-  UserCheck, 
-  CheckCircle2, 
-  Info 
-} from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faWandMagicSparkles,
+  faCrown,
+  faBuilding,
+  faEnvelope,
+  faLock,
+  faArrowRight,
+  faCircleCheck,
+  faCircleInfo
+} from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 
@@ -98,7 +97,7 @@ export function LoginPage() {
           {/* 1-Click Demo Sandbox Banner */}
           <div className="mb-6 rounded-2xl border border-accent/40 bg-accent/10 p-4 shadow-sm backdrop-blur-md">
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-4 w-4 text-accent animate-spin" style={{ animationDuration: '4s' }} />
+              <FontAwesomeIcon icon={faWandMagicSparkles} className="h-3.5 w-3.5 text-accent" />
               <span className="text-xs font-bold text-foreground uppercase tracking-wider">
                 Accès Démo Immédiat (1-Clic)
               </span>
@@ -111,18 +110,18 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickDemo('admin')}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/15 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
+                className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/15 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
               >
-                <Crown className="h-3.5 w-3.5 shrink-0" />
+                <FontAwesomeIcon icon={faCrown} className="h-3.5 w-3.5 shrink-0" />
                 <span>Démo Admin</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickDemo('owner')}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-accent/40 bg-accent/20 px-3 py-2.5 text-xs font-semibold text-accent-foreground hover:bg-accent hover:text-black transition-all shadow-sm active:scale-95"
+                className="flex items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/20 px-3 py-2.5 text-xs font-semibold text-accent-foreground hover:bg-accent hover:text-black transition-all shadow-sm active:scale-95"
               >
-                <Building className="h-3.5 w-3.5 shrink-0" />
+                <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 shrink-0" />
                 <span>Démo Propriétaire</span>
               </button>
             </div>
@@ -133,13 +132,13 @@ export function LoginPage() {
             {/* Feedback messages */}
             {error && (
               <div className="mb-4 rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
-                <Info className="h-4 w-4 shrink-0" />
+                <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
             {successMsg && (
               <div className="mb-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 font-semibold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <FontAwesomeIcon icon={faCircleCheck} className="h-3.5 w-3.5 shrink-0" />
                 <span>{successMsg}</span>
               </div>
             )}
@@ -193,7 +192,10 @@ export function LoginPage() {
                   Adresse e-mail
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                  <FontAwesomeIcon
+                    icon={faEnvelope}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
+                  />
                   <input
                     type="email"
                     required
@@ -216,7 +218,10 @@ export function LoginPage() {
                   </span>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                  <FontAwesomeIcon
+                    icon={faLock}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
+                  />
                   <input
                     type="password"
                     required
@@ -234,7 +239,7 @@ export function LoginPage() {
                 className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/95 active:scale-[0.98] transition-all"
               >
                 <span>Se connecter</span>
-                <ArrowRight className="h-4 w-4" />
+                <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
               </button>
             </form>
 

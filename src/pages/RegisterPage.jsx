@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Shield, 
-  ArrowRight, 
-  Lock, 
-  Mail, 
-  User, 
-  Building, 
-  Car, 
-  CheckCircle2, 
-  Info, 
-  Compass 
-} from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faCompass,
+  faBuilding,
+  faCircleInfo,
+  faCircleCheck,
+  faUser,
+  faEnvelope,
+  faLock,
+  faArrowRight,
+  faHouse,
+  faCar
+} from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 
@@ -104,7 +105,7 @@ export function RegisterPage() {
               }`}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <Compass className={`h-5 w-5 ${accountType === 'client' ? 'text-primary' : 'text-foreground/50'}`} />
+                <FontAwesomeIcon icon={faCompass} className={`h-4 w-4 ${accountType === 'client' ? 'text-primary' : 'text-foreground/50'}`} />
                 <span className="font-heading text-sm font-bold text-foreground">
                   Voyageur
                 </span>
@@ -123,7 +124,7 @@ export function RegisterPage() {
               }`}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <Building className={`h-5 w-5 ${accountType === 'owner' ? 'text-accent' : 'text-foreground/50'}`} />
+                <FontAwesomeIcon icon={faBuilding} className={`h-4 w-4 ${accountType === 'owner' ? 'text-accent' : 'text-foreground/50'}`} />
                 <span className="font-heading text-sm font-bold text-foreground">
                   Propriétaire / Hôte
                 </span>
@@ -138,13 +139,13 @@ export function RegisterPage() {
           <div className="rounded-3xl border border-foreground/10 bg-card/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
             {error && (
               <div className="mb-4 rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
-                <Info className="h-4 w-4 shrink-0" />
+                <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
             {successMsg && (
               <div className="mb-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 font-semibold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <FontAwesomeIcon icon={faCircleCheck} className="h-3.5 w-3.5 shrink-0" />
                 <span>{successMsg}</span>
               </div>
             )}
@@ -156,7 +157,7 @@ export function RegisterPage() {
                   Nom complet / Représentant
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                  <FontAwesomeIcon icon={faUser} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
                   <input
                     type="text"
                     required
@@ -174,7 +175,7 @@ export function RegisterPage() {
                   Adresse e-mail professionnelle ou personnelle
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                  <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
                   <input
                     type="email"
                     required
@@ -194,7 +195,7 @@ export function RegisterPage() {
                       Nom de votre société ou agence (optionnel)
                     </label>
                     <div className="relative">
-                      <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                      <FontAwesomeIcon icon={faBuilding} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
                       <input
                         type="text"
                         value={company}
@@ -213,24 +214,26 @@ export function RegisterPage() {
                       <button
                         type="button"
                         onClick={() => toggleAssetType('stay')}
-                        className={`rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
                           assetTypes.includes('stay')
                             ? 'bg-primary/20 border-primary text-primary'
                             : 'border-foreground/10 text-foreground/60 hover:text-foreground'
                         }`}
                       >
-                        🏡 Logements (Villas & Appartements)
+                        <FontAwesomeIcon icon={faHouse} className="h-3 w-3 text-primary" />
+                        <span>Logements (Villas & Appartements)</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleAssetType('drive')}
-                        className={`rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
                           assetTypes.includes('drive')
                             ? 'bg-accent/20 border-accent text-accent-foreground'
                             : 'border-foreground/10 text-foreground/60 hover:text-foreground'
                         }`}
                       >
-                        🚗 Véhicules (Location ou Vente)
+                        <FontAwesomeIcon icon={faCar} className="h-3 w-3 text-accent" />
+                        <span>Véhicules (Location ou Vente)</span>
                       </button>
                     </div>
                   </div>
@@ -243,7 +246,7 @@ export function RegisterPage() {
                   Mot de passe
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+                  <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
                   <input
                     type="password"
                     required
@@ -265,7 +268,7 @@ export function RegisterPage() {
                     ? "Activer mon espace Propriétaire"
                     : "Créer mon compte Voyageur"}
                 </span>
-                <ArrowRight className="h-4 w-4" />
+                <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
               </button>
             </form>
 
