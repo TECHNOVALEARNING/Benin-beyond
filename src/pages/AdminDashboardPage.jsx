@@ -36,11 +36,15 @@ import {
   faCheck,
   faBan,
   faFileContract,
-  faLocationDot
+  faLocationDot,
+  faCamera,
+  faVideo,
+  faTriangleExclamation,
+  faPlay
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { COMBINED_PACKS } from '../data/packsData';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -147,10 +151,15 @@ export function AdminDashboardPage() {
   // Modals & Details
   const [selectedBookingModal, setSelectedBookingModal] = useState(null);
   const [selectedKycModal, setSelectedKycModal] = useState(null);
+  const [mediaAuditModal, setMediaAuditModal] = useState(null);
+  const [rejectionModalListing, setRejectionModalListing] = useState(null);
+  const [rejectionPresetReason, setRejectionPresetReason] = useState('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
+  const [rejectionCustomNote, setRejectionCustomNote] = useState('');
 
   // Filters & Searches
   const [listingSearch, setListingSearch] = useState('');
   const [listingTypeFilter, setListingTypeFilter] = useState('all'); // 'all' | 'stay' | 'drive'
+  const [listingStatusFilter, setListingStatusFilter] = useState('all'); // 'all' | 'pending' | 'active' | 'refused' | 'suspended'
   const [bookingFilter, setBookingFilter] = useState('all'); // 'all' | 'confirmed' | 'pending'
   const [bookingSearch, setBookingSearch] = useState('');
 
@@ -187,6 +196,7 @@ export function AdminDashboardPage() {
     const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
     const pendingPayoutsCount = payouts.filter((p) => p.status === 'pending').length;
     const pendingKycCount = partners.filter((p) => p.kycStatus === 'pending').length;
+    const pendingListingsCount = listings.filter((l) => l.status === 'pending').length;
 
     return {
       gmv: totalGmv,
@@ -196,7 +206,8 @@ export function AdminDashboardPage() {
       partnersCount: partners.length,
       pendingBookingsCount,
       pendingPayoutsCount,
-      pendingKycCount
+      pendingKycCount,
+      pendingListingsCount
     };
   }, [bookings, listings, partners, payouts]);
 
@@ -206,6 +217,7 @@ export function AdminDashboardPage() {
       prev.map((item) => {
         if (item.id === id) {
           const newStatus = item.status === 'suspended' ? 'active' : 'suspended';
+          updateListingStatus(id, newStatus);
           return { ...item, status: newStatus };
         }
         return item;
@@ -214,11 +226,52 @@ export function AdminDashboardPage() {
     showToast('Statut de l’annonce mis à jour sur la marketplace.');
   };
 
+  const handleApproveListing = (id) => {
+    updateListingStatus(id, 'active');
+    setListings((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: 'active', rejection_reason: '' } : item))
+    );
+    showToast("L'annonce a été approuvée et mise en ligne avec succès !");
+    if (mediaAuditModal && mediaAuditModal.id === id) {
+      setMediaAuditModal((prev) => ({ ...prev, status: 'active', rejection_reason: '' }));
+    }
+  };
+
+  const handleOpenRejectionModal = (listing) => {
+    setRejectionModalListing(listing);
+    setRejectionPresetReason('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
+    setRejectionCustomNote('');
+  };
+
+  const handleConfirmRejection = () => {
+    if (!rejectionModalListing) return;
+    const finalReason = rejectionCustomNote.trim()
+      ? `${rejectionPresetReason} — ${rejectionCustomNote.trim()}`
+      : rejectionPresetReason;
+
+    updateListingStatus(rejectionModalListing.id, 'refused', finalReason);
+    setListings((prev) =>
+      prev.map((item) =>
+        item.id === rejectionModalListing.id
+          ? { ...item, status: 'refused', rejection_reason: finalReason }
+          : item
+      )
+    );
+    showToast(`Annonce refusée : motif de non-conformité notifié.`);
+    setRejectionModalListing(null);
+    if (mediaAuditModal && mediaAuditModal.id === rejectionModalListing.id) {
+      setMediaAuditModal((prev) => ({ ...prev, status: 'refused', rejection_reason: finalReason }));
+    }
+  };
+
   const handleDeleteListingItem = (id, title) => {
     if (window.confirm(`Retirer définitivement l'annonce "${title}" de Bénin Beyond ?`)) {
       deleteListing(id);
       setListings((prev) => prev.filter((item) => item.id !== id));
       showToast(`L'annonce "${title}" a été supprimée.`);
+      if (mediaAuditModal && mediaAuditModal.id === id) {
+        setMediaAuditModal(null);
+      }
     }
   };
 
@@ -271,9 +324,17 @@ export function AdminDashboardPage() {
         item.title?.toLowerCase().includes(q) ||
         item.location?.toLowerCase().includes(q) ||
         item.owner_name?.toLowerCase().includes(q);
-      return matchType && matchSearch;
+
+      const matchStatus =
+        listingStatusFilter === 'all' ||
+        (listingStatusFilter === 'pending' && item.status === 'pending') ||
+        (listingStatusFilter === 'active' && (item.status === 'active' || !item.status)) ||
+        (listingStatusFilter === 'refused' && item.status === 'refused') ||
+        (listingStatusFilter === 'suspended' && item.status === 'suspended');
+
+      return matchType && matchSearch && matchStatus;
     });
-  }, [listings, listingTypeFilter, listingSearch]);
+  }, [listings, listingTypeFilter, listingSearch, listingStatusFilter]);
 
   // Filtered bookings
   const filteredBookings = useMemo(() => {
@@ -296,7 +357,7 @@ export function AdminDashboardPage() {
       key: 'moderation',
       label: 'Modération Catalogue',
       icon: faShieldHalved,
-      badge: listings.length > 0 ? `${listings.length} biens` : null
+      badge: platformMetrics.pendingListingsCount > 0 ? `${platformMetrics.pendingListingsCount} en attente` : `${listings.length} biens`
     },
     {
       key: 'reservations',
@@ -678,51 +739,117 @@ export function AdminDashboardPage() {
           {currentSection === 'moderation' && (
             <div className="space-y-6">
               {/* Filter and Search Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
-                <div className="relative flex-1 max-w-md">
-                  <FontAwesomeIcon
-                    icon={faMagnifyingGlass}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
-                  />
-                  <input
-                    type="text"
-                    value={listingSearch}
-                    onChange={(e) => setListingSearch(e.target.value)}
-                    placeholder="Rechercher par titre, ville ou hôte..."
-                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
-                  />
+              <div className="flex flex-col gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="relative flex-1 max-w-md">
+                    <FontAwesomeIcon
+                      icon={faMagnifyingGlass}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
+                    />
+                    <input
+                      type="text"
+                      value={listingSearch}
+                      onChange={(e) => setListingSearch(e.target.value)}
+                      placeholder="Rechercher par titre, ville ou hôte..."
+                      className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Category Type Filter */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setListingTypeFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        listingTypeFilter === 'all'
+                          ? 'bg-primary text-white'
+                          : 'bg-muted text-foreground/70 hover:text-foreground'
+                      }`}
+                    >
+                      Tous ({listings.length})
+                    </button>
+                    <button
+                      onClick={() => setListingTypeFilter('stay')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        listingTypeFilter === 'stay'
+                          ? 'bg-primary text-white'
+                          : 'bg-muted text-foreground/70 hover:text-foreground'
+                      }`}
+                    >
+                      🏡 Séjours
+                    </button>
+                    <button
+                      onClick={() => setListingTypeFilter('drive')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        listingTypeFilter === 'drive'
+                          ? 'bg-primary text-white'
+                          : 'bg-muted text-foreground/70 hover:text-foreground'
+                      }`}
+                    >
+                      🚗 Véhicules
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Status Tabs Filter (Pending, Active, Refused, Suspended) */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-foreground/10 text-xs">
+                  <span className="text-[11px] font-semibold text-foreground/60 mr-1">Filtrer par statut :</span>
                   <button
-                    onClick={() => setListingTypeFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'all'
-                        ? 'bg-primary text-white'
+                    onClick={() => setListingStatusFilter('all')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                      listingStatusFilter === 'all'
+                        ? 'bg-foreground text-background'
                         : 'bg-muted text-foreground/70 hover:text-foreground'
                     }`}
                   >
                     Tous ({listings.length})
                   </button>
+
                   <button
-                    onClick={() => setListingTypeFilter('stay')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'stay'
-                        ? 'bg-primary text-white'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    onClick={() => setListingStatusFilter('pending')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
+                      listingStatusFilter === 'pending'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
                     }`}
                   >
-                    🏡 Séjours
+                    <FontAwesomeIcon icon={faClock} className="text-[10px]" />
+                    <span>En attente ({listings.filter((l) => l.status === 'pending').length})</span>
                   </button>
+
                   <button
-                    onClick={() => setListingTypeFilter('drive')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'drive'
-                        ? 'bg-primary text-white'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    onClick={() => setListingStatusFilter('active')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
+                      listingStatusFilter === 'active'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
                     }`}
                   >
-                    🚗 Véhicules
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-[10px]" />
+                    <span>En ligne ({listings.filter((l) => l.status === 'active' || !l.status).length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setListingStatusFilter('refused')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
+                      listingStatusFilter === 'refused'
+                        ? 'bg-rose-600 text-white shadow-sm'
+                        : 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/20'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faTriangleExclamation} className="text-[10px]" />
+                    <span>Refusées ({listings.filter((l) => l.status === 'refused').length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setListingStatusFilter('suspended')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
+                      listingStatusFilter === 'suspended'
+                        ? 'bg-neutral-600 text-white shadow-sm'
+                        : 'bg-neutral-500/10 text-neutral-700 hover:bg-neutral-500/20'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faBan} className="text-[10px]" />
+                    <span>Suspendues ({listings.filter((l) => l.status === 'suspended').length})</span>
                   </button>
                 </div>
               </div>
@@ -734,95 +861,174 @@ export function AdminDashboardPage() {
                     <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="p-4">Bien ou Véhicule</th>
+                        <th className="p-4">Médias Fournis</th>
                         <th className="p-4">Catégorie</th>
                         <th className="p-4">Localisation</th>
                         <th className="p-4">Prix Public</th>
                         <th className="p-4">Hôte / Agence</th>
-                        <th className="p-4">Statut</th>
+                        <th className="p-4">Statut Modération</th>
                         <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/5">
-                      {filteredListings.map((item) => (
-                        <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=120&q=80'}
-                                alt={item.title}
-                                className="h-10 w-14 object-cover rounded-lg border border-foreground/10"
-                              />
-                              <div>
-                                <p className="font-bold text-foreground line-clamp-1">
-                                  {item.title}
-                                </p>
-                                <span className="text-[10px] text-foreground/50 font-mono">
-                                  ID: {item.id}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80">
-                              {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
-                            </span>
-                          </td>
-                          <td className="p-4 text-foreground/70">
-                            {item.location}
-                          </td>
-                          <td className="p-4 font-bold text-foreground">
-                            {formatPrice(item.price)}
-                            <span className="text-[10px] text-foreground/50 font-normal">
-                              {' '}/{item.price_unit || 'nuit'}
-                            </span>
-                          </td>
-                          <td className="p-4 text-foreground/80">
-                            {item.owner_name || 'Hôte Partenaire'}
-                          </td>
-                          <td className="p-4">
-                            {item.status === 'suspended' ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-700 px-2 py-0.5 text-[10px] font-bold">
-                                <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
-                                Suspendue
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2 py-0.5 text-[10px] font-bold">
-                                <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
-                                En Ligne (Active)
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Link
-                                to={`/listing/${item.id}`}
-                                className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary hover:border-primary transition-colors"
-                                title="Voir sur le site public"
-                              >
-                                <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
-                              </Link>
-                              <button
-                                onClick={() => handleToggleListingStatus(item.id)}
-                                className={`p-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                                  item.status === 'suspended'
-                                    ? 'border-emerald-500/30 text-emerald-700 hover:bg-emerald-50'
-                                    : 'border-amber-500/30 text-amber-700 hover:bg-amber-50'
-                                }`}
-                                title={item.status === 'suspended' ? 'Activer' : 'Suspendre'}
-                              >
-                                <FontAwesomeIcon icon={item.status === 'suspended' ? faCheck : faBan} className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteListingItem(item.id, item.title)}
-                                className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-50 transition-colors"
-                                title="Supprimer définitivement"
-                              >
-                                <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                              </button>
-                            </div>
+                      {filteredListings.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-foreground/50">
+                            Aucune annonce ne correspond aux filtres sélectionnés.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        filteredListings.map((item) => (
+                          <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=120&q=80'}
+                                  alt={item.title}
+                                  className="h-11 w-16 object-cover rounded-lg border border-foreground/10 cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => setMediaAuditModal(item)}
+                                  title="Cliquer pour inspecter les photos"
+                                />
+                                <div>
+                                  <p className="font-bold text-foreground line-clamp-1">
+                                    {item.title}
+                                  </p>
+                                  <span className="text-[10px] text-foreground/50 font-mono">
+                                    ID: {item.id}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Médias & Vidéo */}
+                            <td className="p-4">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 bg-muted px-2 py-0.5 rounded text-[10px] font-semibold text-foreground/80">
+                                  <FontAwesomeIcon icon={faCamera} className="text-primary text-[9px]" />
+                                  <span>{item.gallery?.length || 1} photo(s)</span>
+                                </span>
+
+                                {item.video_url ? (
+                                  <button
+                                    onClick={() => setMediaAuditModal(item)}
+                                    className="inline-flex items-center gap-1 bg-accent text-black px-2 py-0.5 rounded text-[10px] font-bold shadow-sm hover:bg-accent/80 transition-colors"
+                                    title="Regarder la visite vidéo"
+                                  >
+                                    <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
+                                    <span>Vidéo dispo</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-foreground/40 italic">Sans vidéo</span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="p-4">
+                              <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80">
+                                {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
+                              </span>
+                            </td>
+
+                            <td className="p-4 text-foreground/70">
+                              {item.location}
+                            </td>
+
+                            <td className="p-4 font-bold text-foreground">
+                              {formatPrice(item.price)}
+                              <span className="text-[10px] text-foreground/50 font-normal">
+                                {' '}/{item.price_unit || 'nuit'}
+                              </span>
+                            </td>
+
+                            <td className="p-4 text-foreground/80">
+                              {item.owner_name || 'Hôte Partenaire'}
+                            </td>
+
+                            {/* Statut Modération */}
+                            <td className="p-4">
+                              {item.status === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-800 px-2.5 py-0.5 text-[10px] font-bold border border-amber-500/30">
+                                  <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
+                                  À Contrôler
+                                </span>
+                              ) : item.status === 'refused' ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold border border-rose-500/30 cursor-pointer"
+                                  title={item.rejection_reason || 'Non conforme'}
+                                  onClick={() => handleOpenRejectionModal(item)}
+                                >
+                                  <FontAwesomeIcon icon={faTriangleExclamation} className="h-2.5 w-2.5" />
+                                  Refusée
+                                </span>
+                              ) : item.status === 'suspended' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-500/15 text-neutral-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
+                                  Suspendue
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
+                                  En Ligne (Active)
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Actions de modération */}
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Bouton Inspection Médias */}
+                                <button
+                                  onClick={() => setMediaAuditModal(item)}
+                                  className="p-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent-foreground hover:bg-accent hover:text-black transition-colors"
+                                  title="Auditer les photos et la vidéo"
+                                >
+                                  <FontAwesomeIcon icon={faCamera} className="h-3 w-3" />
+                                </button>
+
+                                {/* Bouton Approuver */}
+                                {item.status !== 'active' && item.status && (
+                                  <button
+                                    onClick={() => handleApproveListing(item.id)}
+                                    className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                    title="Approuver et mettre en ligne"
+                                  >
+                                    <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
+                                  </button>
+                                )}
+
+                                {/* Bouton Refuser avec motif */}
+                                {item.status !== 'refused' && (
+                                  <button
+                                    onClick={() => handleOpenRejectionModal(item)}
+                                    className="p-1.5 rounded-lg border border-rose-500/30 text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Refuser l'annonce (Photos/vidéo non conformes)"
+                                  >
+                                    <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                  </button>
+                                )}
+
+                                {/* Bouton Voir Public */}
+                                <Link
+                                  to={`/listing/${item.id}`}
+                                  className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary hover:border-primary transition-colors"
+                                  title="Voir fiche publique"
+                                >
+                                  <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
+                                </Link>
+
+                                {/* Bouton Supprimer Définitivement */}
+                                <button
+                                  onClick={() => handleDeleteListingItem(item.id, item.title)}
+                                  className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-600 hover:text-white transition-colors"
+                                  title="Supprimer définitivement"
+                                >
+                                  <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1368,6 +1574,268 @@ export function AdminDashboardPage() {
                 className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/95 transition-all shadow-md"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. MODAL AUDIT MÉDIAS (PHOTOS & VIDÉO) */}
+      {/* ========================================================================= */}
+      {mediaAuditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto animate-fadeIn">
+          <div className="relative w-full max-w-2xl rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground">
+                  <FontAwesomeIcon icon={faCamera} className="text-base" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Audit Visuel & Contrôle de Conformité
+                  </h3>
+                  <p className="text-[11px] text-foreground/60">
+                    Contrôle de la qualité des photos et de la vidéo soumises par l'hôte
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setMediaAuditModal(null)}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Listing Details Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3.5 rounded-2xl bg-muted/40 border border-foreground/10 text-xs">
+              <div>
+                <p className="font-bold text-foreground text-sm">{mediaAuditModal.title}</p>
+                <p className="text-foreground/60 flex items-center gap-1.5 mt-0.5">
+                  <FontAwesomeIcon icon={faLocationDot} className="text-primary text-[10px]" />
+                  <span>{mediaAuditModal.location}</span>
+                  <span>•</span>
+                  <span>{mediaAuditModal.owner_name || 'Hôte'}</span>
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="font-heading text-base font-bold text-primary font-mono">
+                  {formatPrice(mediaAuditModal.price)} <span className="text-[10px] font-normal text-foreground/60">/{mediaAuditModal.price_unit || 'nuit'}</span>
+                </p>
+                <span className="text-[10px] font-semibold text-foreground/60 uppercase">
+                  {mediaAuditModal.type === 'stay' ? 'Hébergement' : 'Véhicule'}
+                </span>
+              </div>
+            </div>
+
+            {/* Rejection Alert if already refused */}
+            {mediaAuditModal.status === 'refused' && mediaAuditModal.rejection_reason && (
+              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-800 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-rose-900">
+                  <FontAwesomeIcon icon={faTriangleExclamation} />
+                  <span>Motif de refus actuel :</span>
+                </div>
+                <p>{mediaAuditModal.rejection_reason}</p>
+              </div>
+            )}
+
+            {/* Photos Gallery Inspection */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <FontAwesomeIcon icon={faCamera} className="text-primary" />
+                  <span>Photos transmises ({mediaAuditModal.gallery?.length || 1})</span>
+                </span>
+                <span className="text-[11px] text-foreground/50">Vérifiez la netteté et la luminosité</span>
+              </div>
+
+              {/* Main Photo Full View */}
+              <div className="relative aspect-[16/10] w-full rounded-2xl overflow-hidden bg-black shadow">
+                <img
+                  src={mediaAuditModal.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'}
+                  alt={mediaAuditModal.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 left-2 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                  ★ Photo Principale
+                </div>
+              </div>
+
+              {/* Thumbnails Row if multiple photos */}
+              {mediaAuditModal.gallery && mediaAuditModal.gallery.length > 1 && (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-1">
+                  {mediaAuditModal.gallery.map((img, i) => (
+                    <div key={i} className="aspect-[16/10] rounded-xl overflow-hidden border border-foreground/10 bg-black">
+                      <img src={img} alt={`Miniature ${i + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Short Tour Video Inspection Player */}
+            <div className="space-y-2 pt-3 border-t border-foreground/10">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <FontAwesomeIcon icon={faVideo} className="text-accent" />
+                  <span>Visite Vidéo d'Aperçu</span>
+                </span>
+                {mediaAuditModal.video_url ? (
+                  <span className="text-emerald-700 font-bold text-[11px]">✓ Vidéo chargée</span>
+                ) : (
+                  <span className="text-foreground/40 italic text-[11px]">Aucune vidéo transmise</span>
+                )}
+              </div>
+
+              {mediaAuditModal.video_url ? (
+                <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow border border-foreground/10">
+                  <video
+                    src={mediaAuditModal.video_url}
+                    controls
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-muted/20 border border-dashed border-foreground/15 text-center text-xs text-foreground/50">
+                  L'hôte n'a pas inclus de courte vidéo d'ambiance pour cette annonce.
+                </div>
+              )}
+            </div>
+
+            {/* Description & Specs preview */}
+            <div className="p-3.5 rounded-2xl bg-muted/30 border border-foreground/10 text-xs space-y-2">
+              <p className="font-bold text-foreground">Descriptif & Prestations :</p>
+              <p className="text-foreground/75 leading-relaxed">{mediaAuditModal.description}</p>
+              {mediaAuditModal.specs && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {mediaAuditModal.specs.map((sp, idx) => (
+                    <span key={idx} className="bg-background border border-foreground/10 px-2 py-0.5 rounded-full text-[10px] text-foreground/70">
+                      {sp}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Actions Toolbar */}
+            <div className="pt-3 border-t border-foreground/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                onClick={() => handleDeleteListingItem(mediaAuditModal.id, mediaAuditModal.title)}
+                className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <FontAwesomeIcon icon={faTrash} />
+                <span>Supprimer l'annonce</span>
+              </button>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => handleOpenRejectionModal(mediaAuditModal)}
+                  className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-500/20 transition-colors flex items-center gap-1.5"
+                >
+                  <FontAwesomeIcon icon={faBan} />
+                  <span>Refuser (Non conforme)</span>
+                </button>
+
+                <button
+                  onClick={() => handleApproveListing(mediaAuditModal.id)}
+                  className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <FontAwesomeIcon icon={faCheck} />
+                  <span>Approuver & Mettre en ligne</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. MODAL DE REFUS DE CONFORMITÉ (REJECTION REASON) */}
+      {/* ========================================================================= */}
+      {rejectionModalListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="relative w-full max-w-md rounded-3xl bg-card border border-rose-500/30 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
+              <div className="flex items-center gap-2.5 text-rose-600 font-bold text-base">
+                <div className="h-8 w-8 rounded-xl bg-rose-500/15 flex items-center justify-center">
+                  <FontAwesomeIcon icon={faBan} />
+                </div>
+                <span>Refuser l'Annonce</span>
+              </div>
+              <button
+                onClick={() => setRejectionModalListing(null)}
+                className="text-foreground/40 hover:text-foreground p-1"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+
+            <div>
+              <p className="text-[11px] text-foreground/60 mb-0.5 font-medium">Bien concerné :</p>
+              <p className="font-bold text-foreground text-sm">{rejectionModalListing.title}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1.5">
+                  Motif principal de non-conformité *
+                </label>
+                <select
+                  value={rejectionPresetReason}
+                  onChange={(e) => setRejectionPresetReason(e.target.value)}
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                >
+                  <option value="Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)">
+                    Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)
+                  </option>
+                  <option value="Vidéo trop lourde, instable ou non représentative des lieux">
+                    Vidéo trop lourde, instable ou non représentative des lieux
+                  </option>
+                  <option value="Tarif incohérent ou anormal pour la catégorie">
+                    Tarif incohérent ou anormal pour la catégorie
+                  </option>
+                  <option value="Description trompeuse ou informations de contact privées">
+                    Description trompeuse ou informations de contact privées
+                  </option>
+                  <option value="Bien non conforme au positionnement de luxe Bénin Beyond">
+                    Bien non conforme au positionnement de luxe Bénin Beyond
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1.5">
+                  Précisions / Consignes pour l'hôte (Optionnel)
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectionCustomNote}
+                  onChange={(e) => setRejectionCustomNote(e.target.value)}
+                  placeholder="Ex : Merci de reprendre des photos horizontales lumineuses du séjour et de la piscine..."
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-rose-500 focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRejectionModalListing(null)}
+                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/75 hover:bg-muted"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmRejection}
+                className="rounded-xl bg-rose-600 px-5 py-2 text-xs font-bold text-white hover:bg-rose-700 transition-all shadow-md"
+              >
+                Confirmer le Refus
               </button>
             </div>
           </div>

@@ -15,6 +15,7 @@ import {
   faBars,
   faXmark,
   faCheckCircle,
+  faCircleCheck,
   faClock,
   faFilter,
   faMagnifyingGlass,
@@ -25,7 +26,6 @@ import {
   faPercent,
   faArrowTrendUp,
   faTrash,
-  faCircleCheck,
   faBuilding,
   faLocationDot,
   faBell,
@@ -40,7 +40,16 @@ import {
   faReceipt,
   faBed,
   faKey,
-  faCommentsDollar
+  faCommentsDollar,
+  faCamera,
+  faVideo,
+  faUpload,
+  faTriangleExclamation,
+  faImage,
+  faPlay,
+  faPlus,
+  faBan,
+  faCheck
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -48,7 +57,7 @@ import { addListing, deleteListing, getListings } from '../services/listingServi
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 
-const PRESET_PHOTOS = {
+const SAMPLE_INSPIRATION_PHOTOS = {
   stay: [
     { label: 'Villa Contemporaine Lagune', url: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80' },
     { label: 'Loft Océan Ouidah', url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80' },
@@ -91,8 +100,16 @@ export function PartnerDashboardPage() {
   const [formPurpose, setFormPurpose] = useState('location'); // 'location' | 'vente'
   const [formDescription, setFormDescription] = useState('');
   const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
-  const [selectedImage, setSelectedImage] = useState(PRESET_PHOTOS.stay[0].url);
+
+  // Custom Photos & Video state
+  const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
+  const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, name, sizeMB }
+  const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
+  const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
 
   // Payout request modal state
   const [showPayoutModal, setShowPayoutModal] = useState(false);
@@ -169,6 +186,84 @@ export function PartnerDashboardPage() {
     }
   };
 
+  // Photo handlers
+  const handlePhotoUpload = (e) => {
+    setPhotoError('');
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setPhotoError(`L'image "${file.name}" dépasse la taille recommandée de 10 Mo.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setUploadedPhotos((prev) => [...prev, event.target.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddPhotoUrl = () => {
+    if (!photoUrlInput.trim()) return;
+    setUploadedPhotos((prev) => [...prev, photoUrlInput.trim()]);
+    setPhotoUrlInput('');
+    setPhotoError('');
+  };
+
+  const handleRemovePhoto = (idx) => {
+    setUploadedPhotos((prev) => prev.filter((_, i) => i !== idx));
+    if (featuredPhotoIndex >= idx && featuredPhotoIndex > 0) {
+      setFeaturedPhotoIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleApplyInspirationPhotos = () => {
+    const presets = SAMPLE_INSPIRATION_PHOTOS[formType].map((p) => p.url);
+    setUploadedPhotos(presets);
+    setFeaturedPhotoIndex(0);
+    setPhotoError('');
+  };
+
+  // Video handlers (short tour video, max 25MB)
+  const handleVideoUpload = (e) => {
+    setVideoError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('video/')) {
+      setVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4 ou WebM.');
+      return;
+    }
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 25) {
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la rapidité de la plateforme, la taille maximale est de 25 Mo (durée recommandée : 15 à 45 secondes).`);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setUploadedVideo({
+      url: objectUrl,
+      name: file.name,
+      sizeMB: sizeMB.toFixed(1)
+    });
+  };
+
+  const handleRemoveVideo = () => {
+    if (uploadedVideo?.url && uploadedVideo.url.startsWith('blob:')) {
+      URL.revokeObjectURL(uploadedVideo.url);
+    }
+    setUploadedVideo(null);
+    setVideoError('');
+  };
+
   const handleDeleteListingItem = (id) => {
     if (window.confirm('Voulez-vous vraiment retirer cette annonce de la marketplace ?')) {
       deleteListing(id);
@@ -179,12 +274,27 @@ export function PartnerDashboardPage() {
   // Publishing an item
   const handlePublishSubmit = (e) => {
     e.preventDefault();
+    setPhotoError('');
+    setVideoError('');
+
+    if (uploadedPhotos.length === 0) {
+      setPhotoError("Vous devez ajouter au moins une photo en haute résolution de votre bien.");
+      return;
+    }
+
     const specsArray = formSpecs
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
 
     const priceNum = parseInt(formPrice, 10) || (formType === 'stay' ? 75000 : 45000);
+
+    // Reorder photos so featured photo is first
+    const finalGallery = [...uploadedPhotos];
+    if (featuredPhotoIndex > 0 && featuredPhotoIndex < finalGallery.length) {
+      const [feat] = finalGallery.splice(featuredPhotoIndex, 1);
+      finalGallery.unshift(feat);
+    }
 
     const newListing = addListing({
       title: formTitle || (formType === 'stay' ? 'Résidence de Standing' : 'Véhicule de Prestige'),
@@ -193,25 +303,30 @@ export function PartnerDashboardPage() {
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme vérifié par Bénin Beyond.',
-      badge: formPurpose === 'vente' ? 'À VENDRE • CONFORME' : 'VÉRIFIÉ BÉNIN BEYOND',
+      badge: 'EN ATTENTE DE MODÉRATION',
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
-      gallery: [selectedImage],
+      gallery: finalGallery,
+      video_url: uploadedVideo?.url || null,
+      status: 'pending', // Pending admin audit
       owner_id: user?.id || 'usr_partner_01',
       owner_name: user?.name || 'Propriétaire Certifié'
     });
 
     setListings((prev) => [newListing, ...prev]);
-    setPublishSuccess(`L'annonce "${newListing.title}" a été publiée avec succès sur la marketplace !`);
+    setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle a été transmise aux modérateurs de Bénin Beyond pour validation de vos photos et de votre vidéo.`);
 
     // Reset form
     setFormTitle('');
     setFormPrice('');
     setFormDescription('');
+    setUploadedPhotos([]);
+    setUploadedVideo(null);
+    setFeaturedPhotoIndex(0);
 
     setTimeout(() => {
       setCurrentSection('listings');
       setPublishSuccess('');
-    }, 1600);
+    }, 2000);
   };
 
   // Nav Items with FontAwesome
@@ -938,15 +1053,41 @@ export function PartnerDashboardPage() {
                         alt={item.title}
                         className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
-                      <div className="absolute left-3 top-3">
+                      <div className="absolute left-3 top-3 flex items-center gap-1.5">
                         <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-accent uppercase backdrop-blur-sm border border-white/10">
                           {item.type === 'stay' ? 'Logement' : 'Véhicule'}
                         </span>
+                        {item.video_url && (
+                          <span className="rounded-full bg-accent text-black px-2 py-0.5 text-[9px] font-bold shadow flex items-center gap-1">
+                            <FontAwesomeIcon icon={faVideo} className="text-[8px]" />
+                            <span>Vidéo</span>
+                          </span>
+                        )}
                       </div>
+
                       <div className="absolute right-3 top-3">
-                        <span className="rounded-full bg-emerald-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                          En ligne
-                        </span>
+                        {item.status === 'pending' ? (
+                          <span className="rounded-full bg-amber-500/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow flex items-center gap-1">
+                            <FontAwesomeIcon icon={faClock} className="text-[9px]" />
+                            <span>En modération</span>
+                          </span>
+                        ) : item.status === 'refused' ? (
+                          <button
+                            onClick={() => setSelectedRejectionModal(item)}
+                            className="rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow flex items-center gap-1 hover:bg-rose-700 transition-colors animate-pulse"
+                          >
+                            <FontAwesomeIcon icon={faTriangleExclamation} className="text-[9px]" />
+                            <span>Refusée (Voir motif)</span>
+                          </button>
+                        ) : item.status === 'suspended' ? (
+                          <span className="rounded-full bg-neutral-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
+                            Suspendue
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
+                            En ligne
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -962,6 +1103,18 @@ export function PartnerDashboardPage() {
                         <p className="mt-2 text-xs text-foreground/75 line-clamp-2">
                           {item.description}
                         </p>
+
+                        {item.status === 'refused' && (
+                          <div className="mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-800 text-[11px] flex items-center justify-between">
+                            <span className="truncate mr-2 font-medium">⚠️ Qualité non conforme aux critères</span>
+                            <button
+                              onClick={() => setSelectedRejectionModal(item)}
+                              className="font-bold underline text-rose-700 shrink-0 hover:text-rose-900"
+                            >
+                              Voir le motif
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-5 pt-4 border-t border-foreground/10 flex items-center justify-between">
@@ -1009,13 +1162,66 @@ export function PartnerDashboardPage() {
                   Publier une Nouvelle Annonce
                 </h2>
                 <p className="text-xs text-foreground/60">
-                  Mettez en ligne un logement ou un véhicule avec validation directe sur Bénin Beyond
+                  Mettez en ligne un hébergement de prestige ou un véhicule d'exception sur Bénin Beyond
                 </p>
               </div>
 
+              {/* CHARTE D'EXCELLENCE VISUELLE & AVERTISSEMENT MODÉRATION */}
+              <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-6 space-y-4 shadow-sm">
+                <div className="flex items-center gap-3 text-amber-900 font-bold text-sm">
+                  <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
+                    <FontAwesomeIcon icon={faShieldHalved} className="text-base" />
+                  </div>
+                  <div>
+                    <span className="block text-xs uppercase tracking-widest text-amber-800 font-bold">Standard de Luxe Bénin Beyond</span>
+                    <h3 className="font-heading text-sm sm:text-base font-bold text-amber-950">
+                      Charte d'Excellence Visuelle & Contrôle de Modération
+                    </h3>
+                  </div>
+                </div>
+
+                <p className="text-xs text-amber-950/85 leading-relaxed">
+                  Afin de garantir le prestige de notre marketplace et rassurer les voyageurs internationaux et la diaspora, 
+                  <strong> chaque bien soumis est rigoureusement audité par notre équipe de modération</strong>. 
+                  Vous devez fournir vos propres photos et vidéos en conformité avec les règles ci-dessous :
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-amber-950">
+                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 flex flex-col justify-between space-y-1.5">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <FontAwesomeIcon icon={faCamera} className="text-amber-700 text-xs" />
+                      <span>Photos Nettes (1080p)</span>
+                    </div>
+                    <p className="text-[11px] text-foreground/70 leading-snug">
+                      Prises de jour, nettes, bien éclairées et en format horizontal. Aucune capture d'écran pixelisée.
+                    </p>
+                  </div>
+
+                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 flex flex-col justify-between space-y-1.5">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <FontAwesomeIcon icon={faVideo} className="text-amber-700 text-xs" />
+                      <span>Vidéo Courte Légère</span>
+                    </div>
+                    <p className="text-[11px] text-foreground/70 leading-snug">
+                      Visite immersive courte (15 à 45 sec, max 25 Mo) montrant les pièces ou le véhicule.
+                    </p>
+                  </div>
+
+                  <div className="bg-rose-500/10 p-3.5 rounded-2xl border border-rose-500/25 flex flex-col justify-between space-y-1.5">
+                    <div className="flex items-center gap-2 font-bold text-rose-800">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="text-rose-600 text-xs" />
+                      <span>Refus si non conforme</span>
+                    </div>
+                    <p className="text-[11px] text-rose-950/80 leading-snug">
+                      Toute annonce floue, sombre ou de mauvaise qualité sera <strong>rejetée par l'admin</strong> avec motif.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {publishSuccess && (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3">
-                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-base" />
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3 animate-fadeIn">
+                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-lg" />
                   <span>{publishSuccess}</span>
                 </div>
               )}
@@ -1032,7 +1238,6 @@ export function PartnerDashboardPage() {
                       type="button"
                       onClick={() => {
                         setFormType('stay');
-                        setSelectedImage(PRESET_PHOTOS.stay[0].url);
                         setFormPriceUnit('nuit');
                       }}
                       className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
@@ -1054,7 +1259,6 @@ export function PartnerDashboardPage() {
                       type="button"
                       onClick={() => {
                         setFormType('drive');
-                        setSelectedImage(PRESET_PHOTOS.drive[0].url);
                         setFormPriceUnit('jour');
                       }}
                       className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
@@ -1105,7 +1309,7 @@ export function PartnerDashboardPage() {
                   </div>
                 </div>
 
-                {/* 3. Tarification & Commission Réelle */}
+                {/* 3. Tarification & Commission */}
                 <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">
@@ -1196,34 +1400,198 @@ export function PartnerDashboardPage() {
                   />
                 </div>
 
-                {/* 5. Galerie photo suggérée */}
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-2">
-                    Sélectionnez une photo de vitrine haute définition :
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {PRESET_PHOTOS[formType].map((img, i) => (
-                      <div
-                        key={i}
-                        onClick={() => setSelectedImage(img.url)}
-                        className={`group relative aspect-[16/10] rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                          selectedImage === img.url
-                            ? 'border-primary ring-2 ring-primary/30'
-                            : 'border-transparent opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={img.url} alt={img.label} className="h-full w-full object-cover" />
-                        {selectedImage === img.url && (
-                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                            <FontAwesomeIcon icon={faCheckCircle} className="text-white text-lg drop-shadow" />
-                          </div>
-                        )}
-                        <span className="absolute bottom-1 left-1 text-[9px] text-white bg-black/60 px-1.5 py-0.5 rounded backdrop-blur-sm truncate max-w-[90%]">
-                          {img.label}
-                        </span>
-                      </div>
-                    ))}
+                {/* 5. TÉLÉVERSEMENT DE VOS PHOTOS (CHOISIES PAR L'HÔTE) */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                        3. Vos Photos Haute Définition *
+                      </label>
+                      <p className="text-[11px] text-foreground/60">
+                        Choisissez vos propres photos de votre logement ou véhicule (min. 1 photo, format paysage recommandé)
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleApplyInspirationPhotos}
+                      className="text-[11px] font-semibold text-accent hover:underline flex items-center gap-1.5 self-start sm:self-auto"
+                    >
+                      <FontAwesomeIcon icon={faImage} />
+                      <span>Charger des photos d'inspiration</span>
+                    </button>
                   </div>
+
+                  {photoError && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
+                      <FontAwesomeIcon icon={faTriangleExclamation} />
+                      <span>{photoError}</span>
+                    </div>
+                  )}
+
+                  {/* Dropzone / File Picker */}
+                  <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-6 text-center transition-colors bg-muted/20">
+                    <input
+                      type="file"
+                      id="host-photo-upload"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handlePhotoUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                      <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl">
+                        <FontAwesomeIcon icon={faUpload} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">
+                          Cliquez pour sélectionner vos photos ou glissez-déposez
+                        </p>
+                        <p className="text-[11px] text-foreground/50 mt-0.5">
+                          JPG, PNG, WebP — Résolution minimale recommandée : 1920x1080px (10 Mo max par photo)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual URL entry */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      placeholder="Ou collez un lien URL d'image web..."
+                      value={photoUrlInput}
+                      onChange={(e) => setPhotoUrlInput(e.target.value)}
+                      className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPhotoUrl}
+                      className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+
+                  {/* Uploaded Photos Preview Grid */}
+                  {uploadedPhotos.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between text-xs text-foreground/70">
+                        <span className="font-semibold">{uploadedPhotos.length} photo(s) sélectionnée(s)</span>
+                        <span className="text-[11px] text-accent font-medium">La photo avec le badge doré est la couverture</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {uploadedPhotos.map((photo, index) => (
+                          <div
+                            key={index}
+                            className={`group relative aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all ${
+                              featuredPhotoIndex === index
+                                ? 'border-accent ring-2 ring-accent/40'
+                                : 'border-foreground/10 hover:border-foreground/30'
+                            }`}
+                          >
+                            <img src={photo} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
+
+                            {/* Badge Couverture */}
+                            {featuredPhotoIndex === index ? (
+                              <span className="absolute top-1.5 left-1.5 bg-accent text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md">
+                                ★ Couverture
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setFeaturedPhotoIndex(index)}
+                                className="absolute top-1.5 left-1.5 bg-black/70 hover:bg-black text-white text-[9px] font-semibold px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                Définir couverture
+                              </button>
+                            )}
+
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(index)}
+                              className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/70 hover:bg-rose-600 text-white text-xs flex items-center justify-center transition-colors"
+                              title="Supprimer cette photo"
+                            >
+                              <FontAwesomeIcon icon={faXmark} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. TÉLÉVERSEMENT DE VIDÉO COURTE D'APERÇU (Short Tour) */}
+                <div className="space-y-3 pt-3 border-t border-foreground/10">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                      4. Visite Vidéo d'Aperçu (Optionnelle mais fortement recommandée)
+                    </label>
+                    <p className="text-[11px] text-foreground/60">
+                      Ajoutez une courte vidéo immersive (15 à 45 secondes, max 25 Mo) montrant l'intérieur ou les extérieurs
+                    </p>
+                  </div>
+
+                  {videoError && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
+                      <FontAwesomeIcon icon={faTriangleExclamation} />
+                      <span>{videoError}</span>
+                    </div>
+                  )}
+
+                  {!uploadedVideo ? (
+                    <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
+                      <input
+                        type="file"
+                        id="host-video-upload"
+                        accept="video/mp4,video/webm,video/quicktime"
+                        onChange={handleVideoUpload}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
+                        <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
+                          <FontAwesomeIcon icon={faVideo} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">
+                            Sélectionner une vidéo d'aperçu (.MP4 ou .WebM)
+                          </p>
+                          <p className="text-[10px] text-foreground/50">
+                            Fichier vidéo léger obligatoire : 25 Mo max pour un chargement fluide sur mobile
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl border border-foreground/10 bg-background space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
+                          <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
+                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB} Mo)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveVideo}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                          <span>Supprimer la vidéo</span>
+                        </button>
+                      </div>
+
+                      {/* Integrated HTML5 Video Preview Player */}
+                      <div className="aspect-video w-full max-w-md mx-auto rounded-xl overflow-hidden bg-black shadow">
+                        <video
+                          src={uploadedVideo.url}
+                          controls
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit button */}
@@ -1241,10 +1609,53 @@ export function PartnerDashboardPage() {
                     className="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
                   >
                     <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>Mettre en ligne l'annonce</span>
+                    <span>Transmettre à la modération</span>
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Modal to view rejection reason by host */}
+          {selectedRejectionModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+              <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 p-6 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
+                  <div className="flex items-center gap-2 text-rose-600 font-bold text-base">
+                    <FontAwesomeIcon icon={faTriangleExclamation} />
+                    <span>Non-Conformité & Motif du Refus</span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedRejectionModal(null)}
+                    className="text-foreground/40 hover:text-foreground p-1"
+                  >
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-foreground/60 mb-0.5 font-medium">Annonce auditée :</p>
+                  <p className="font-bold text-foreground text-sm">{selectedRejectionModal.title}</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-950 text-xs leading-relaxed space-y-1">
+                  <p className="font-bold text-rose-800">Motif notifié par la modération :</p>
+                  <p>{selectedRejectionModal.rejection_reason || "Qualité des photos insuffisante ou non conforme à la charte d'excellence visuelle Bénin Beyond."}</p>
+                </div>
+
+                <p className="text-[11px] text-foreground/60 leading-normal">
+                  Conseil : Reprenez des photos horizontales lumineuses en plein jour ou filmez une courte vidéo claire afin de soumettre à nouveau votre bien.
+                </p>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => setSelectedRejectionModal(null)}
+                    className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

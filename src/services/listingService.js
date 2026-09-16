@@ -75,7 +75,9 @@ export function addListing(listingData) {
   const newListing = {
     id: `lst_custom_${Date.now()}`,
     created_date: new Date().toISOString(),
-    status: 'active', // 'active' | 'pending' | 'suspended'
+    status: listingData.status || 'pending', // 'pending' | 'active' | 'refused' | 'suspended'
+    rejection_reason: '',
+    video_url: listingData.video_url || null,
     rating: 5.0,
     reviews_count: 1,
     featured: false,
@@ -87,11 +89,15 @@ export function addListing(listingData) {
   return newListing;
 }
 
-export function updateListingStatus(id, newStatus) {
+export function updateListingStatus(id, newStatus, rejectionReason = '') {
   const custom = getCustomListings();
   const index = custom.findIndex((item) => item.id === id);
   if (index !== -1) {
-    custom[index] = { ...custom[index], status: newStatus };
+    custom[index] = {
+      ...custom[index],
+      status: newStatus,
+      rejection_reason: rejectionReason || custom[index].rejection_reason || ''
+    };
     saveCustomListings(custom);
     return custom[index];
   }
