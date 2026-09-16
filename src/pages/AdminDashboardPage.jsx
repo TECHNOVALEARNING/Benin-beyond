@@ -376,19 +376,27 @@ export function AdminDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-muted/20 text-foreground flex flex-col md:flex-row">
+    <div className="h-screen w-screen overflow-hidden bg-muted/20 text-foreground flex flex-col md:flex-row">
       
+      {/* Mobile Backdrop Overlay */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+        />
+      )}
+
       {/* ========================================================================= */}
-      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green matching Partner Dashboard) */}
+      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED) */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 flex flex-col justify-between border-r border-foreground/10 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div>
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
           {/* Logo & Close button on Mobile */}
-          <div className="flex items-center justify-between px-6 py-6 border-b border-secondary-foreground/10">
+          <div className="flex items-center justify-between px-6 py-6 border-b border-secondary-foreground/10 shrink-0">
             <Link to="/" className="flex items-center gap-3">
               <span className="font-heading text-xl font-bold tracking-tight text-white">
                 Bénin Beyond
@@ -406,7 +414,7 @@ export function AdminDashboardPage() {
           </div>
 
           {/* Admin Profile Card */}
-          <div className="p-4 mx-4 my-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3">
+          <div className="p-4 mx-4 my-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3 shrink-0">
             <div className="h-10 w-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center font-heading font-bold text-accent">
               <FontAwesomeIcon icon={faCrown} className="h-4 w-4" />
             </div>
@@ -422,7 +430,7 @@ export function AdminDashboardPage() {
           </div>
 
           {/* Navigation Items */}
-          <nav className="px-3 space-y-1">
+          <nav className="px-3 space-y-1 flex-1">
             {navItems.map((item) => {
               const isActive = currentSection === item.key;
               return (
@@ -462,8 +470,8 @@ export function AdminDashboardPage() {
           </nav>
         </div>
 
-        {/* Sidebar Footer Links */}
-        <div className="p-4 border-t border-secondary-foreground/10 space-y-2">
+        {/* Sidebar Footer Links (Strictly Pinned at the Bottom) */}
+        <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
           <Link
             to="/dashboard/partner"
             className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/5 hover:text-white transition-colors"
@@ -500,12 +508,12 @@ export function AdminDashboardPage() {
       </aside>
 
       {/* ========================================================================= */}
-      {/* 2. MAIN ADMIN CONTENT CONTAINER */}
+      {/* 2. MAIN ADMIN CONTENT CONTAINER - INDEPENDENT FLUID SCROLL */}
       {/* ========================================================================= */}
-      <main className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth">
         
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
