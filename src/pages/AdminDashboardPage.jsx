@@ -40,14 +40,31 @@ import {
   faCamera,
   faVideo,
   faTriangleExclamation,
-  faPlay
+  faPlay,
+  faCirclePlus,
+  faUpload,
+  faImage,
+  faPlus
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing, updateListingStatus } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus, addListing } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { COMBINED_PACKS } from '../data/packsData';
 import { ScrollReveal } from '../components/ScrollReveal';
+
+const SAMPLE_INSPIRATION_PHOTOS = {
+  stay: [
+    { label: 'Villa Contemporaine Lagune', url: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80' },
+    { label: 'Loft Océan Ouidah', url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80' },
+    { label: 'Appartement Standing Cotonou', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80' }
+  ],
+  drive: [
+    { label: 'SUV Toyota Fortuner VIP', url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80' },
+    { label: 'Berline Mercedes Luxe', url: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80' },
+    { label: '4x4 Tout-Terrain Expédition', url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80' }
+  ]
+};
 
 const INITIAL_PARTNERS = [
   {
@@ -163,6 +180,26 @@ export function AdminDashboardPage() {
   const [bookingFilter, setBookingFilter] = useState('all'); // 'all' | 'confirmed' | 'pending'
   const [bookingSearch, setBookingSearch] = useState('');
 
+  // Host & Direct Property Creation states inside Admin Cockpit
+  const [formType, setFormType] = useState('stay'); // 'stay' | 'drive'
+  const [formTitle, setFormTitle] = useState('');
+  const [formLocation, setFormLocation] = useState('Cotonou, Haie Vive');
+  const [formPrice, setFormPrice] = useState('');
+  const [formPriceUnit, setFormPriceUnit] = useState('nuit');
+  const [formPurpose, setFormPurpose] = useState('location'); // 'location' | 'vente'
+  const [formDescription, setFormDescription] = useState('');
+  const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+  const [adminInstantPublish, setAdminInstantPublish] = useState(true); // Direct online as Super-Admin
+
+  // Custom Photos & Video state
+  const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
+  const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, name, sizeMB }
+  const [videoError, setVideoError] = useState('');
+  const [publishSuccess, setPublishSuccess] = useState('');
+
   useEffect(() => {
     loadAllData();
   }, []);
@@ -186,6 +223,137 @@ export function AdminDashboardPage() {
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3500);
+  };
+
+  // Photo handlers for Admin Property Publishing
+  const handlePhotoUpload = (e) => {
+    setPhotoError('');
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setPhotoError(`L'image "${file.name}" dépasse la taille recommandée de 10 Mo.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setUploadedPhotos((prev) => [...prev, event.target.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddPhotoUrl = () => {
+    if (!photoUrlInput.trim()) return;
+    setUploadedPhotos((prev) => [...prev, photoUrlInput.trim()]);
+    setPhotoUrlInput('');
+    setPhotoError('');
+  };
+
+  const handleRemovePhoto = (idx) => {
+    setUploadedPhotos((prev) => prev.filter((_, i) => i !== idx));
+    if (featuredPhotoIndex >= idx && featuredPhotoIndex > 0) {
+      setFeaturedPhotoIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleApplyInspirationPhotos = () => {
+    const presets = SAMPLE_INSPIRATION_PHOTOS[formType].map((p) => p.url);
+    setUploadedPhotos(presets);
+    setFeaturedPhotoIndex(0);
+    setPhotoError('');
+  };
+
+  // Video handlers (short tour video, max 25MB)
+  const handleVideoUpload = (e) => {
+    setVideoError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('video/')) {
+      setVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4 ou WebM.');
+      return;
+    }
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 25) {
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité, la taille maximale est de 25 Mo.`);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setUploadedVideo({
+      url: objectUrl,
+      name: file.name,
+      sizeMB: sizeMB.toFixed(1)
+    });
+  };
+
+  const handleRemoveVideo = () => {
+    if (uploadedVideo?.url && uploadedVideo.url.startsWith('blob:')) {
+      URL.revokeObjectURL(uploadedVideo.url);
+    }
+    setUploadedVideo(null);
+    setVideoError('');
+  };
+
+  // Submit Listing by Admin directly inside Cockpit
+  const handleAdminPublishSubmit = (e) => {
+    e.preventDefault();
+    setPhotoError('');
+    setVideoError('');
+
+    if (uploadedPhotos.length === 0) {
+      setPhotoError("Vous devez ajouter au moins une photo en haute résolution du bien.");
+      return;
+    }
+
+    const specsArray = formSpecs
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const priceNum = parseInt(formPrice, 10) || (formType === 'stay' ? 85000 : 50000);
+
+    // Reorder photos so featured photo is first
+    const finalGallery = [...uploadedPhotos];
+    if (featuredPhotoIndex > 0 && featuredPhotoIndex < finalGallery.length) {
+      const [feat] = finalGallery.splice(featuredPhotoIndex, 1);
+      finalGallery.unshift(feat);
+    }
+
+    const newListing = addListing({
+      title: formTitle || (formType === 'stay' ? 'Résidence de Standing Bénin Beyond' : 'Véhicule de Prestige Bénin Beyond'),
+      type: formType,
+      location: formLocation,
+      price: priceNum,
+      price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
+      description: formDescription || 'Hébergement ou véhicule haut de gamme certifié par la direction Bénin Beyond.',
+      badge: adminInstantPublish ? 'CERTIFIÉ LUXE' : 'EN ATTENTE DE MODÉRATION',
+      specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing Exclusif'],
+      gallery: finalGallery,
+      video_url: uploadedVideo?.url || null,
+      status: adminInstantPublish ? 'active' : 'pending',
+      owner_id: user?.id || 'usr_admin_master',
+      owner_name: user?.name || 'Direction Plateforme Bénin Beyond'
+    });
+
+    setListings((prev) => [newListing, ...prev]);
+    setPublishSuccess(`Le bien "${newListing.title}" a été créé avec succès et est ${adminInstantPublish ? 'immédiatement EN LIGNE dans le catalogue public !' : 'placé dans la file de modération.'}`);
+    showToast(adminInstantPublish ? `Bien "${newListing.title}" publié en ligne !` : `Bien "${newListing.title}" créé en attente.`);
+
+    // Reset form
+    setFormTitle('');
+    setFormPrice('');
+    setFormDescription('');
+    setUploadedPhotos([]);
+    setUploadedVideo(null);
   };
 
   // Financial calculations
@@ -351,29 +519,59 @@ export function AdminDashboardPage() {
     });
   }, [bookings, bookingFilter, bookingSearch]);
 
-  const navItems = [
-    { key: 'cockpit', label: 'Tour de Contrôle', icon: faCrown },
+  const navGroups = [
     {
-      key: 'moderation',
-      label: 'Modération Catalogue',
-      icon: faShieldHalved,
-      badge: platformMetrics.pendingListingsCount > 0 ? `${platformMetrics.pendingListingsCount} en attente` : `${listings.length} biens`
+      title: 'SUPERVISION & GOUVERNANCE',
+      items: [
+        { key: 'cockpit', label: 'Tour de Contrôle', icon: faCrown },
+        {
+          key: 'moderation',
+          label: 'Modération Catalogue',
+          icon: faShieldHalved,
+          badge: platformMetrics.pendingListingsCount > 0 ? `${platformMetrics.pendingListingsCount} en attente` : null,
+          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+        },
+        {
+          key: 'reservations',
+          label: 'Réservations Globales',
+          icon: faCalendarCheck,
+          badge: platformMetrics.pendingBookingsCount > 0 ? `${platformMetrics.pendingBookingsCount} à valider` : null,
+          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+        },
+        {
+          key: 'partners',
+          label: 'Hôtes & Partenaires',
+          icon: faUsers,
+          badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null,
+          badgeColor: 'bg-rose-500/25 text-rose-300 border-rose-500/40'
+        },
+        { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
+        { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup }
+      ]
     },
     {
-      key: 'reservations',
-      label: 'Réservations Globales',
-      icon: faCalendarCheck,
-      badge: platformMetrics.pendingBookingsCount > 0 ? `${platformMetrics.pendingBookingsCount} à valider` : null
-    },
-    {
-      key: 'partners',
-      label: 'Hôtes & Partenaires',
-      icon: faUsers,
-      badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null
-    },
-    { key: 'finances', label: 'Trésorerie & Commissions', icon: faWallet },
-    { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup }
+      title: 'CRÉATION & INVENTAIRE (PROPRIÉTAIRE)',
+      items: [
+        {
+          key: 'publish',
+          label: 'Publier une annonce',
+          icon: faCirclePlus,
+          isHighlight: true,
+          badge: 'Direct en ligne',
+          badgeColor: 'bg-accent text-black font-extrabold'
+        },
+        {
+          key: 'catalog_inventory',
+          label: 'Inventaire des Biens',
+          icon: faHouse,
+          badge: `${listings.length} biens`,
+          badgeColor: 'bg-white/10 text-white/70 border-white/15'
+        }
+      ]
+    }
   ];
+
+  const allNavItems = navGroups.flatMap((g) => g.items);
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-muted/20 text-foreground flex flex-col md:flex-row">
@@ -387,7 +585,7 @@ export function AdminDashboardPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED) */}
+      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED & GROUPED) */}
       {/* ========================================================================= */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
@@ -396,7 +594,7 @@ export function AdminDashboardPage() {
       >
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
           {/* Logo & Close button on Mobile */}
-          <div className="flex items-center justify-between px-6 py-6 border-b border-secondary-foreground/10 shrink-0">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
             <Link to="/" className="flex items-center gap-3">
               <span className="font-heading text-xl font-bold tracking-tight text-white">
                 Bénin Beyond
@@ -407,15 +605,15 @@ export function AdminDashboardPage() {
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-secondary-foreground/60 hover:text-white"
+              className="md:hidden text-secondary-foreground/60 hover:text-white p-1"
             >
               <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
             </button>
           </div>
 
           {/* Admin Profile Card */}
-          <div className="p-4 mx-4 my-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3 shrink-0">
-            <div className="h-10 w-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center font-heading font-bold text-accent">
+          <div className="p-3.5 mx-4 my-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3 shrink-0 shadow-sm">
+            <div className="h-10 w-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center font-heading font-bold text-accent shrink-0">
               <FontAwesomeIcon icon={faCrown} className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
@@ -429,65 +627,107 @@ export function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Navigation Items */}
-          <nav className="px-3 space-y-1 flex-1">
-            {navItems.map((item) => {
-              const isActive = currentSection === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    setCurrentSection(item.key);
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-primary text-white shadow-lg font-semibold'
-                      : 'text-secondary-foreground/75 hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <FontAwesomeIcon
-                      icon={item.icon}
-                      className={`h-4 w-4 ${isActive ? 'text-accent' : 'text-secondary-foreground/60'}`}
-                    />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isActive
-                          ? 'bg-black/30 text-white'
-                          : 'bg-accent/20 text-accent border border-accent/30'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Navigation Groups */}
+          <nav className="px-3 py-1 space-y-5 flex-1">
+            {navGroups.map((group, gIdx) => (
+              <div key={gIdx} className="space-y-1.5">
+                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-secondary-foreground/50 flex items-center justify-between">
+                  <span>{group.title}</span>
+                  <span className="h-px flex-1 bg-white/10 ml-2" />
+                </div>
+
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const isActive = currentSection === item.key;
+                    if (item.isHighlight) {
+                      return (
+                        <button
+                          key={item.key}
+                          onClick={() => {
+                            setCurrentSection(item.key);
+                            setSidebarOpen(false);
+                          }}
+                          className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all duration-200 ${
+                            isActive
+                              ? 'bg-accent text-black shadow-lg shadow-accent/25 font-bold ring-2 ring-accent/60'
+                              : 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`h-7 w-7 rounded-xl flex items-center justify-center transition-colors ${
+                                isActive
+                                  ? 'bg-black/15 text-black'
+                                  : 'bg-accent/20 text-accent group-hover:bg-accent group-hover:text-black'
+                              }`}
+                            >
+                              <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="tracking-tight">{item.label}</span>
+                          </div>
+                          {item.badge && (
+                            <span
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-sm ${
+                                isActive ? 'bg-black/20 text-black' : item.badgeColor
+                              }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          setCurrentSection(item.key);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-medium transition-all duration-200 ${
+                          isActive
+                            ? 'bg-primary text-white shadow-md shadow-primary/30 font-bold ring-1 ring-white/20'
+                            : 'text-secondary-foreground/75 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`h-7 w-7 rounded-xl flex items-center justify-center transition-colors ${
+                              isActive
+                                ? 'bg-accent text-black font-bold shadow-sm'
+                                : 'bg-white/5 text-secondary-foreground/60 group-hover:bg-white/15 group-hover:text-white'
+                            }`}
+                          >
+                            <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="tracking-tight">{item.label}</span>
+                        </div>
+                        {item.badge && (
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              isActive ? 'bg-black/30 text-white border-transparent' : item.badgeColor
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
-        {/* Sidebar Footer Links (Strictly Pinned at the Bottom) */}
+        {/* Sidebar Footer Links (Strictly Pinned at the Bottom - Direct & Clean) */}
         <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
           <Link
-            to="/dashboard/partner"
-            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/5 hover:text-white transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent" />
-              <span>Espace Propriétaire</span>
-            </div>
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-secondary-foreground/40" />
-          </Link>
-
-          <Link
             to="/"
-            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/5 hover:text-white transition-colors"
+            className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/10 hover:text-white transition-colors"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <FontAwesomeIcon icon={faHouse} className="h-3.5 w-3.5 text-accent" />
               <span>Voir le site public</span>
             </div>
@@ -499,7 +739,7 @@ export function AdminDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/10 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>
@@ -523,26 +763,44 @@ export function AdminDashboardPage() {
             </button>
             <div>
               <h1 className="font-heading text-lg font-bold text-foreground">
-                {navItems.find((n) => n.key === currentSection)?.label || 'Administration'}
+                {currentSection === 'publish'
+                  ? 'Publier une Nouvelle Annonce (Mode Super-Admin)'
+                  : currentSection === 'catalog_inventory'
+                  ? 'Inventaire & Gestion des Biens'
+                  : allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
               </h1>
               <p className="text-[11px] text-foreground/60">
-                Portail de gouvernance opérationnelle & financière Bénin Beyond
+                Supervision générale, gouvernance opérationnelle & création • Bénin Beyond
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Quick Action: Publier un bien */}
+            <button
+              onClick={() => setCurrentSection('publish')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                currentSection === 'publish'
+                  ? 'bg-accent text-black ring-2 ring-accent/40 shadow-accent/20'
+                  : 'bg-accent/15 text-accent border border-accent/40 hover:bg-accent/25 hover:text-accent-foreground'
+              }`}
+            >
+              <FontAwesomeIcon icon={faCirclePlus} className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">+ Publier un bien</span>
+            </button>
+
             {platformMetrics.pendingBookingsCount > 0 && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-semibold text-amber-800">
+              <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-semibold text-amber-800">
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                <span>{platformMetrics.pendingBookingsCount} réservation(s) à modérer</span>
+                <span>{platformMetrics.pendingBookingsCount} résa(s)</span>
               </span>
             )}
+            
             <Link
               to="/explore"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-semibold text-foreground hover:border-primary transition-colors"
             >
-              <span>Catalogue</span>
+              <span>Voir le catalogue</span>
               <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/40" />
             </Link>
           </div>
@@ -1508,6 +1766,752 @@ export function AdminDashboardPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 7: PUBLIER UNE NOUVELLE ANNONCE (SUPER-ADMIN & PROPRIÉTAIRE) */}
+          {/* ========================================================================= */}
+          {currentSection === 'publish' && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-xl font-bold text-foreground">
+                    Publier une Nouvelle Annonce
+                  </h2>
+                  <p className="text-xs text-foreground/60">
+                    Ajoutez un hébergement de prestige ou un véhicule d'exception directement au catalogue Bénin Beyond
+                  </p>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setCurrentSection('catalog_inventory')}
+                  className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground/75 hover:bg-muted self-start sm:self-auto"
+                >
+                  <FontAwesomeIcon icon={faHouse} className="mr-1.5 text-accent" />
+                  <span>Voir l'inventaire ({listings.length})</span>
+                </button>
+              </div>
+
+              {/* Super-Admin Direct Publication Power Switch */}
+              <div className="rounded-3xl border border-accent/40 bg-gradient-to-r from-accent/15 via-accent/10 to-transparent p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-2xl bg-accent text-black font-bold flex items-center justify-center shrink-0 shadow-sm">
+                      <FontAwesomeIcon icon={faCrown} className="text-sm" />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold tracking-wider text-accent-foreground">Privilège Direction</span>
+                      <h4 className="font-heading text-sm font-bold text-foreground">
+                        Mode de Publication Instantané
+                      </h4>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={adminInstantPublish}
+                      onChange={(e) => setAdminInstantPublish(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-foreground/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                  </label>
+                </div>
+
+                <p className="text-xs text-foreground/75 leading-relaxed">
+                  {adminInstantPublish ? (
+                    <span className="text-emerald-800 font-medium">
+                      ✓ <strong>Mise en ligne immédiate activée</strong> : Cette annonce sera certifiée conforme et directement réservable par les voyageurs dès l'enregistrement.
+                    </span>
+                  ) : (
+                    <span className="text-amber-800 font-medium">
+                      ⏳ <strong>Mise en attente de modération</strong> : L'annonce sera enregistrée avec le statut « En attente » pour un audit ultérieur.
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Charte d'excellence visuelle */}
+              <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-5 sm:p-6 space-y-4 shadow-sm">
+                <div className="flex items-center gap-3 text-amber-900 font-bold text-sm">
+                  <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
+                    <FontAwesomeIcon icon={faShieldHalved} className="text-base" />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-widest text-amber-800 font-bold">Standard de Luxe Bénin Beyond</span>
+                    <h3 className="font-heading text-sm sm:text-base font-bold text-amber-950">
+                      Critères d'Excellence & Médias Requis
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-amber-950">
+                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <FontAwesomeIcon icon={faCamera} className="text-amber-700 text-xs" />
+                      <span>Photos Nettes 1080p (Horizontales)</span>
+                    </div>
+                    <p className="text-foreground/70 leading-snug">
+                      Clichés lumineux en plein jour. Pas de captures floues ou sombres.
+                    </p>
+                  </div>
+
+                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <FontAwesomeIcon icon={faVideo} className="text-amber-700 text-xs" />
+                      <span>Vidéo Courte d'Aperçu (25 Mo max)</span>
+                    </div>
+                    <p className="text-foreground/70 leading-snug">
+                      Visite immersive de 15 à 45 secondes pour maximiser le taux de réservation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {publishSuccess && (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3 animate-fadeIn">
+                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-lg shrink-0" />
+                  <span>{publishSuccess}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleAdminPublishSubmit} className="rounded-3xl border border-foreground/10 bg-card p-6 sm:p-8 shadow-sm space-y-6">
+                
+                {/* 1. Sélection de Catégorie */}
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block mb-3">
+                    1. Catégorie du bien
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormType('stay');
+                        setFormPriceUnit('nuit');
+                      }}
+                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                        formType === 'stay'
+                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
+                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                      }`}
+                    >
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <FontAwesomeIcon icon={faHouse} className="text-primary text-base" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-foreground">Hébergement</p>
+                        <p className="text-[11px] text-foreground/60">Villa, Appartement, Loft lagune</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormType('drive');
+                        setFormPriceUnit('jour');
+                      }}
+                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                        formType === 'drive'
+                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
+                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                      }`}
+                    >
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <FontAwesomeIcon icon={faCar} className="text-primary text-base" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-foreground">Véhicule</p>
+                        <p className="text-[11px] text-foreground/60">SUV VIP, Berline ou Vente certifiée</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Titre & Localisation */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                      Titre de l'annonce *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={formType === 'stay' ? 'ex: Villa Royale Cotonou Lagune' : 'ex: SUV Toyota Fortuner 7 Places VIP'}
+                      value={formTitle}
+                      onChange={(e) => setFormTitle(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                      Ville & Quartier *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ex: Cotonou, Haie Vive ou Ouidah Plage"
+                      value={formLocation}
+                      onChange={(e) => setFormLocation(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Tarification */}
+                <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      2. Tarification & Commission Plateforme (15%)
+                    </span>
+                    <span className="text-[11px] text-accent-foreground font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
+                      Commission standard : 15%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                        Tarif brut public (FCFA) *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        placeholder={formType === 'stay' ? '85000' : '45000'}
+                        value={formPrice}
+                        onChange={(e) => setFormPrice(e.target.value)}
+                        className="w-full rounded-xl border border-foreground/15 bg-card px-3.5 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                        Fréquence / Modalité
+                      </label>
+                      <select
+                        value={formPriceUnit}
+                        onChange={(e) => setFormPriceUnit(e.target.value)}
+                        className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                      >
+                        {formType === 'stay' ? (
+                          <>
+                            <option value="nuit">Par nuit</option>
+                            <option value="semaine">Par semaine</option>
+                            <option value="mois">Par mois</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="jour">Par jour</option>
+                            <option value="semaine">Par semaine</option>
+                            <option value="vente totale">Vente directe (Prix total)</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="bg-card p-2.5 rounded-xl border border-foreground/10 flex flex-col justify-center">
+                      <p className="text-[10px] text-foreground/60">Marge plateforme (15%) :</p>
+                      <p className="font-heading text-sm font-bold text-accent font-mono">
+                        {formPrice ? formatPrice(Math.round(parseInt(formPrice, 10) * 0.15)) : '0 FCFA'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Caractéristiques & Description */}
+                <div>
+                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                    Caractéristiques clés (séparées par des virgules)
+                  </label>
+                  <input
+                    type="text"
+                    value={formSpecs}
+                    onChange={(e) => setFormSpecs(e.target.value)}
+                    placeholder={
+                      formType === 'stay'
+                        ? '4 Chambres, Piscine privée, Climatisation, Wifi Fibre'
+                        : '7 Places, Automatique, Climatisation, Essence'
+                    }
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                    Description détaillée du bien
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="Décrivez les atouts majeurs, les finitions, l'accès sécurisé et le niveau de confort..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* 5. Photos Upload */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                        3. Photos Haute Définition *
+                      </label>
+                      <p className="text-[11px] text-foreground/60">
+                        Sélectionnez les photos du bien (1 photo minimum requise)
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleApplyInspirationPhotos}
+                      className="text-[11px] font-semibold text-accent hover:underline flex items-center gap-1.5 self-start sm:self-auto"
+                    >
+                      <FontAwesomeIcon icon={faImage} />
+                      <span>Charger des photos d'inspiration</span>
+                    </button>
+                  </div>
+
+                  {photoError && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
+                      <FontAwesomeIcon icon={faTriangleExclamation} />
+                      <span>{photoError}</span>
+                    </div>
+                  )}
+
+                  {/* Dropzone */}
+                  <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-6 text-center transition-colors bg-muted/20">
+                    <input
+                      type="file"
+                      id="admin-photo-upload"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handlePhotoUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                      <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-lg">
+                        <FontAwesomeIcon icon={faUpload} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">
+                          Cliquez pour sélectionner vos photos ou glissez-déposez
+                        </p>
+                        <p className="text-[10px] text-foreground/50 mt-0.5">
+                          JPG, PNG, WebP — Résolution recommandée : 1920x1080px
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* URL Input */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      placeholder="Ou collez un lien URL d'image web..."
+                      value={photoUrlInput}
+                      onChange={(e) => setPhotoUrlInput(e.target.value)}
+                      className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPhotoUrl}
+                      className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+
+                  {/* Preview Grid */}
+                  {uploadedPhotos.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between text-xs text-foreground/70">
+                        <span className="font-semibold">{uploadedPhotos.length} photo(s) sélectionnée(s)</span>
+                        <span className="text-[11px] text-accent font-medium">La photo avec le badge doré est la couverture</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {uploadedPhotos.map((photo, index) => (
+                          <div
+                            key={index}
+                            className={`group relative aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all ${
+                              featuredPhotoIndex === index
+                                ? 'border-accent ring-2 ring-accent/40'
+                                : 'border-foreground/10 hover:border-foreground/30'
+                            }`}
+                          >
+                            <img src={photo} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
+
+                            {featuredPhotoIndex === index ? (
+                              <span className="absolute top-1.5 left-1.5 bg-accent text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md">
+                                ★ Couverture
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setFeaturedPhotoIndex(index)}
+                                className="absolute top-1.5 left-1.5 bg-black/70 hover:bg-black text-white text-[9px] font-semibold px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                Définir couverture
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(index)}
+                              className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/70 hover:bg-rose-600 text-white text-xs flex items-center justify-center transition-colors"
+                              title="Supprimer"
+                            >
+                              <FontAwesomeIcon icon={faXmark} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. Video Tour Upload */}
+                <div className="space-y-3 pt-3 border-t border-foreground/10">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                      4. Visite Vidéo d'Aperçu (Optionnelle)
+                    </label>
+                    <p className="text-[11px] text-foreground/60">
+                      Vidéo immersive courte (15 à 45 sec, 25 Mo max)
+                    </p>
+                  </div>
+
+                  {videoError && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
+                      <FontAwesomeIcon icon={faTriangleExclamation} />
+                      <span>{videoError}</span>
+                    </div>
+                  )}
+
+                  {!uploadedVideo ? (
+                    <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
+                      <input
+                        type="file"
+                        id="admin-video-upload"
+                        accept="video/mp4,video/webm,video/quicktime"
+                        onChange={handleVideoUpload}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
+                        <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
+                          <FontAwesomeIcon icon={faVideo} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground">
+                            Sélectionner une vidéo d'aperçu (.MP4 ou .WebM)
+                          </p>
+                          <p className="text-[10px] text-foreground/50">
+                            Fichier vidéo léger recommandé : 25 Mo max
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl border border-foreground/10 bg-background space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
+                          <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
+                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB} Mo)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveVideo}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                          <span>Supprimer la vidéo</span>
+                        </button>
+                      </div>
+
+                      <div className="aspect-video w-full max-w-md mx-auto rounded-xl overflow-hidden bg-black shadow">
+                        <video src={uploadedVideo.url} controls className="w-full h-full object-contain" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Submit Action */}
+                <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentSection('catalog_inventory')}
+                    className="rounded-xl border border-foreground/15 px-5 py-2.5 text-xs font-semibold text-foreground/75 hover:bg-muted"
+                  >
+                    Annuler
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
+                  >
+                    <FontAwesomeIcon icon={faCirclePlus} />
+                    <span>{adminInstantPublish ? 'Mettre en ligne immédiatement' : 'Enregistrer en attente de modération'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 8: INVENTAIRE GLOBAL DES BIENS & PROPRIÉTÉS */}
+          {/* ========================================================================= */}
+          {currentSection === 'catalog_inventory' && (
+            <div className="space-y-6">
+              
+              {/* Header & Quick Action */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-xl font-bold text-foreground">
+                    Inventaire Global des Biens & Flotte
+                  </h2>
+                  <p className="text-xs text-foreground/60">
+                    Gérez l'ensemble des hébergements et véhicules enregistrés sur Bénin Beyond ({listings.length} biens au total)
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setCurrentSection('publish')}
+                  className="rounded-xl bg-accent text-black px-4 py-2 text-xs font-bold shadow-md hover:bg-accent/90 transition-all flex items-center gap-2 self-start sm:self-auto"
+                >
+                  <FontAwesomeIcon icon={faCirclePlus} />
+                  <span>+ Publier un nouveau bien</span>
+                </button>
+              </div>
+
+              {/* Inventory Filter Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-foreground/10">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setListingTypeFilter('all');
+                      setListingStatusFilter('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'all' && listingStatusFilter === 'all'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
+                    }`}
+                  >
+                    Tous ({listings.length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setListingTypeFilter('stay');
+                      setListingStatusFilter('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'stay' && listingStatusFilter === 'all'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
+                    }`}
+                  >
+                    Hébergements ({listings.filter((l) => l.type === 'stay').length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setListingTypeFilter('drive');
+                      setListingStatusFilter('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'drive' && listingStatusFilter === 'all'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
+                    }`}
+                  >
+                    Véhicules ({listings.filter((l) => l.type === 'drive').length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setListingTypeFilter('all');
+                      setListingStatusFilter('active');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      listingStatusFilter === 'active'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    En ligne ({listings.filter((l) => l.status === 'active' || !l.status).length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setListingTypeFilter('all');
+                      setListingStatusFilter('pending');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      listingStatusFilter === 'pending'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    En attente ({listings.filter((l) => l.status === 'pending').length})
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative min-w-[220px]">
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-foreground/40" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par titre ou ville..."
+                    value={listingSearch}
+                    onChange={(e) => setListingSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-foreground/15 bg-background text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Listings Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredListings.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Image Header with Badges */}
+                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted">
+                        <img
+                          src={item.gallery?.[0] || item.image}
+                          alt={item.title}
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                          <span className="rounded-full bg-black/60 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                            {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
+                          </span>
+                          {item.video_url && (
+                            <span className="rounded-full bg-accent text-black px-2 py-0.5 text-[10px] font-bold flex items-center gap-1 shadow">
+                              <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
+                              <span>Vidéo</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="absolute top-3 right-3">
+                          {(!item.status || item.status === 'active') && (
+                            <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
+                              ✓ En ligne
+                            </span>
+                          )}
+                          {item.status === 'pending' && (
+                            <span className="rounded-full bg-amber-500 text-black px-2.5 py-0.5 text-[10px] font-bold shadow">
+                              ⏳ En attente
+                            </span>
+                          )}
+                          {item.status === 'refused' && (
+                            <span className="rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
+                              ✕ Refusé
+                            </span>
+                          )}
+                          {item.status === 'suspended' && (
+                            <span className="rounded-full bg-gray-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
+                              ⏸ Suspendu
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Content */}
+                      <div className="p-5 space-y-2.5">
+                        <h4 className="font-heading text-base font-bold text-foreground line-clamp-1">
+                          {item.title}
+                        </h4>
+                        <p className="text-xs text-foreground/60 flex items-center gap-1">
+                          <FontAwesomeIcon icon={faLocationDot} className="text-accent" />
+                          <span className="truncate">{item.location}</span>
+                        </p>
+
+                        <div className="pt-2 flex items-center justify-between border-t border-foreground/10 text-xs">
+                          <span className="font-heading font-black text-primary text-sm">
+                            {formatPrice(item.price)} <span className="text-[10px] font-normal text-foreground/60">/ {item.price_unit || (item.type === 'stay' ? 'nuit' : 'jour')}</span>
+                          </span>
+                          <span className="text-[11px] text-foreground/50 truncate max-w-[120px]">
+                            {item.owner_name || 'Direction'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions Row */}
+                    <div className="p-4 pt-0 border-t border-foreground/10 mt-3 flex items-center justify-between gap-2">
+                      <Link
+                        to={`/listing/${item.id}`}
+                        className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors flex items-center gap-1.5"
+                      >
+                        <FontAwesomeIcon icon={faEye} className="text-xs" />
+                        <span>Fiche</span>
+                      </Link>
+
+                      <div className="flex items-center gap-1.5">
+                        {item.status === 'pending' || item.status === 'suspended' || item.status === 'refused' ? (
+                          <button
+                            onClick={() => {
+                              handleApproveListing(item.id);
+                              showToast(`Bien "${item.title}" activé et mis en ligne !`);
+                            }}
+                            className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                            title="Mettre en ligne"
+                          >
+                            <FontAwesomeIcon icon={faCheck} className="mr-1" />
+                            <span>Mettre en ligne</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              handleSuspendListing(item.id);
+                              showToast(`Bien "${item.title}" suspendu.`);
+                            }}
+                            className="rounded-xl bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground/75 hover:bg-muted/80"
+                            title="Suspendre"
+                          >
+                            <FontAwesomeIcon icon={faBan} />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleDeleteListingItem(item.id)}
+                          className="h-8 w-8 rounded-xl border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
+                          title="Supprimer définitivement"
+                        >
+                          <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {filteredListings.length === 0 && (
+                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
+                  <FontAwesomeIcon icon={faHouse} className="h-10 w-10 text-foreground/20 mb-3" />
+                  <h4 className="font-heading text-base font-bold text-foreground">
+                    Aucun bien correspondant
+                  </h4>
+                  <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
+                    Aucun hébergement ou véhicule ne correspond aux critères de recherche actuels.
+                  </p>
+                  <button
+                    onClick={() => setCurrentSection('publish')}
+                    className="mt-4 rounded-xl bg-accent text-black px-4 py-2 text-xs font-bold shadow-md hover:bg-accent/90 transition-all inline-flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faCirclePlus} />
+                    <span>Publier un nouveau bien</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
