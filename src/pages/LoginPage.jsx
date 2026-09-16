@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faWandMagicSparkles,
-  faCrown,
   faBuilding,
   faEnvelope,
   faLock,
@@ -17,7 +15,7 @@ import { ScrollReveal } from '../components/ScrollReveal';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginAsDemo } = useAuth();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,20 +52,6 @@ export function LoginPage() {
     }
   };
 
-  const handleQuickDemo = (role) => {
-    const demoUser = loginAsDemo(role);
-    setSuccessMsg(`Session Démo activée (${demoUser.name}) ! Redirection...`);
-    setTimeout(() => {
-      if (role === 'admin') {
-        navigate('/admin');
-      } else if (role === 'owner') {
-        navigate('/dashboard/partner');
-      } else {
-        navigate('/');
-      }
-    }, 400);
-  };
-
   return (
     <div className="relative min-h-[90vh] w-full flex items-center justify-center px-4 py-16">
       {/* Subtle Background Glow */}
@@ -92,39 +76,6 @@ export function LoginPage() {
             <p className="text-xs text-foreground/60 mt-1.5">
               Accédez à vos réservations, gérez vos biens ou administrez la plateforme
             </p>
-          </div>
-
-          {/* 1-Click Demo Sandbox Banner */}
-          <div className="mb-6 rounded-2xl border border-accent/40 bg-accent/10 p-4 shadow-sm backdrop-blur-md">
-            <div className="flex items-center gap-2 mb-2">
-              <FontAwesomeIcon icon={faWandMagicSparkles} className="h-3.5 w-3.5 text-accent" />
-              <span className="text-xs font-bold text-foreground uppercase tracking-wider">
-                Accès Démo Immédiat (1-Clic)
-              </span>
-            </div>
-            <p className="text-[11px] text-foreground/75 mb-3 leading-relaxed">
-              Testez immédiatement toutes les fonctionnalités sans saisir de mot de passe :
-            </p>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('admin')}
-                className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/15 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
-              >
-                <FontAwesomeIcon icon={faCrown} className="h-3.5 w-3.5 shrink-0" />
-                <span>Démo Admin</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('owner')}
-                className="flex items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/20 px-3 py-2.5 text-xs font-semibold text-accent-foreground hover:bg-accent hover:text-black transition-all shadow-sm active:scale-95"
-              >
-                <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 shrink-0" />
-                <span>Démo Propriétaire</span>
-              </button>
-            </div>
           </div>
 
           {/* Form Card */}

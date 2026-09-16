@@ -1,67 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  Crown, 
-  ShieldCheck, 
-  Sparkles, 
-  Building2, 
-  Car, 
-  Users, 
-  ShoppingBag, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  TrendingUp, 
-  RefreshCw, 
-  Plus, 
-  ArrowUpRight, 
-  Eye, 
-  Filter 
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faCrown,
+  faShieldHalved,
+  faCalendarCheck,
+  faUsers,
+  faWallet,
+  faLayerGroup,
+  faHouse,
+  faCar,
+  faCheckCircle,
+  faCircleCheck,
+  faCircleXmark,
+  faClock,
+  faFilter,
+  faMagnifyingGlass,
+  faEye,
+  faTrash,
+  faBuilding,
+  faPhone,
+  faEnvelope,
+  faChartPie,
+  faArrowTrendUp,
+  faMoneyBillWave,
+  faPercent,
+  faRightFromBracket,
+  faBars,
+  faXmark,
+  faDownload,
+  faReceipt,
+  faHandHoldingDollar,
+  faArrowUpRightFromSquare,
+  faCircleExclamation,
+  faCheck,
+  faBan,
+  faFileContract,
+  faLocationDot
+} from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing } from '../services/listingService';
+import { getBookings, updateBookingStatus } from '../services/bookingService';
+import { COMBINED_PACKS } from '../data/packsData';
 import { ScrollReveal } from '../components/ScrollReveal';
-
-const INITIAL_RESERVATIONS = [
-  {
-    id: 'RES-8921',
-    client: 'Jean-Marc Dupont',
-    itemTitle: 'Villa Cotonou Riviera',
-    category: 'stay',
-    dates: '20 — 25 Sept 2026',
-    amount: 425000,
-    status: 'confirmed' // 'confirmed' | 'pending' | 'completed'
-  },
-  {
-    id: 'RES-8922',
-    client: 'Nadia Benali',
-    itemTitle: 'SUV Toyota Fortuner VIP',
-    category: 'drive',
-    dates: '22 — 24 Sept 2026',
-    amount: 90000,
-    status: 'pending'
-  },
-  {
-    id: 'RES-8923',
-    client: 'Koffi Mensah',
-    itemTitle: 'Pack Cotonou Riviera & 4x4 VIP',
-    category: 'pack',
-    dates: '28 Sept — 03 Oct 2026',
-    amount: 680000,
-    status: 'confirmed'
-  },
-  {
-    id: 'RES-8924',
-    client: 'Élodie Laurent',
-    itemTitle: 'Ganvié — Cité lacustre',
-    category: 'discover',
-    dates: '26 Sept 2026',
-    amount: 56000,
-    status: 'completed'
-  }
-];
 
 const INITIAL_PARTNERS = [
   {
@@ -69,51 +51,124 @@ const INITIAL_PARTNERS = [
     name: 'Patrice Hounkpati',
     company: 'Littoral Prestige Assets',
     email: 'proprietaire@beninbeyond.bj',
-    listingsCount: 3,
-    kycStatus: 'verified',
-    joined: 'Août 2026'
+    phone: '+229 97 22 45 10',
+    listingsCount: 4,
+    kycStatus: 'verified', // 'verified' | 'pending' | 'rejected'
+    docType: 'Titre Foncier + CNI Béninoise',
+    joined: 'Août 2026',
+    balance: 850000
   },
   {
     id: 'part_02',
     name: 'Armel Dossou',
-    company: 'Cotonou VIP Rental',
+    company: 'Cotonou VIP Rental & Fleet',
     email: 'armel.d@rentcar-benin.com',
-    listingsCount: 2,
+    phone: '+229 96 11 00 22',
+    listingsCount: 3,
     kycStatus: 'verified',
-    joined: 'Juillet 2026'
+    docType: 'Cartes Grises + RC Commerce',
+    joined: 'Juillet 2026',
+    balance: 420000
   },
   {
     id: 'part_03',
     name: 'Claire Ahouandjinou',
     company: 'Ouidah Heritage Lodges',
     email: 'claire@ouidah-lodges.bj',
+    phone: '+229 95 80 30 15',
     listingsCount: 2,
     kycStatus: 'pending',
-    joined: 'Septembre 2026'
+    docType: 'Attestation d’Hébergeur Touristique',
+    joined: 'Septembre 2026',
+    balance: 290000
+  },
+  {
+    id: 'part_04',
+    name: 'Désiré Tokpo',
+    company: 'Ganvié Ecotour & Pirogues VIP',
+    email: 'desire@ganvie-tours.bj',
+    phone: '+229 90 40 88 12',
+    listingsCount: 2,
+    kycStatus: 'verified',
+    docType: 'Agrément Ministère du Tourisme',
+    joined: 'Août 2026',
+    balance: 180000
   }
 ];
 
-export function AdminDashboardPage() {
-  const { user, isDemoMode, loginAsDemo } = useAuth();
+const INITIAL_PAYOUT_REQUESTS = [
+  {
+    id: 'PO-401',
+    partnerName: 'Patrice Hounkpati',
+    company: 'Littoral Prestige Assets',
+    amount: 550000,
+    method: 'MTN Mobile Money',
+    recipient: '+229 97 22 45 10',
+    date: '15 Sept 2026, 11:20',
+    status: 'pending' // 'pending' | 'approved' | 'rejected'
+  },
+  {
+    id: 'PO-402',
+    partnerName: 'Armel Dossou',
+    company: 'Cotonou VIP Rental',
+    amount: 320000,
+    method: 'Celtiis Cash',
+    recipient: '+229 40 11 22 33',
+    date: '14 Sept 2026, 16:45',
+    status: 'approved'
+  }
+];
 
-  const [activeTab, setActiveTab] = useState('moderation'); // 'moderation' | 'reservations' | 'partners'
+const MONTHLY_STATS = [
+  { month: 'Mai', gmv: 4200000, commission: 630000 },
+  { month: 'Juin', gmv: 6800000, commission: 1020000 },
+  { month: 'Juillet', gmv: 9400000, commission: 1410000 },
+  { month: 'Août', gmv: 12500000, commission: 1875000 },
+  { month: 'Septembre', gmv: 14850000, commission: 2227500 }
+];
+
+export function AdminDashboardPage() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  // Navigation State
+  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'finances' | 'packs'
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Data states
   const [listings, setListings] = useState([]);
-  const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
+  const [bookings, setBookings] = useState([]);
   const [partners, setPartners] = useState(INITIAL_PARTNERS);
+  const [payouts, setPayouts] = useState(INITIAL_PAYOUT_REQUESTS);
+  const [packs, setPacks] = useState(COMBINED_PACKS);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
 
+  // Modals & Details
+  const [selectedBookingModal, setSelectedBookingModal] = useState(null);
+  const [selectedKycModal, setSelectedKycModal] = useState(null);
+
+  // Filters & Searches
+  const [listingSearch, setListingSearch] = useState('');
+  const [listingTypeFilter, setListingTypeFilter] = useState('all'); // 'all' | 'stay' | 'drive'
+  const [bookingFilter, setBookingFilter] = useState('all'); // 'all' | 'confirmed' | 'pending'
+  const [bookingSearch, setBookingSearch] = useState('');
+
   useEffect(() => {
-    loadListings();
+    loadAllData();
   }, []);
 
-  const loadListings = async () => {
+  const loadAllData = async () => {
     setLoading(true);
     try {
-      const data = await getListings();
-      setListings(data);
-    } catch {
-      setListings([]);
+      const [allListings, allBookings] = await Promise.all([
+        getListings(),
+        getBookings()
+      ]);
+      setListings(allListings);
+      setBookings(allBookings);
+    } catch (err) {
+      console.error('Erreur chargement admin:', err);
     } finally {
       setLoading(false);
     }
@@ -124,7 +179,29 @@ export function AdminDashboardPage() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const toggleListingStatus = (id) => {
+  // Financial calculations
+  const platformMetrics = useMemo(() => {
+    const totalGmv = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || 0), 0) || 14850000;
+    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || 0) * 0.15)), 0) || 2227500;
+    const totalDisbursed = totalGmv - totalCommissions;
+    const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
+    const pendingPayoutsCount = payouts.filter((p) => p.status === 'pending').length;
+    const pendingKycCount = partners.filter((p) => p.kycStatus === 'pending').length;
+
+    return {
+      gmv: totalGmv,
+      commissions: totalCommissions,
+      disbursed: totalDisbursed,
+      activeListings: listings.length,
+      partnersCount: partners.length,
+      pendingBookingsCount,
+      pendingPayoutsCount,
+      pendingKycCount
+    };
+  }, [bookings, listings, partners, payouts]);
+
+  // Actions
+  const handleToggleListingStatus = (id) => {
     setListings((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -134,475 +211,1169 @@ export function AdminDashboardPage() {
         return item;
       })
     );
-    showToast('Statut de l’annonce mis à jour avec succès.');
+    showToast('Statut de l’annonce mis à jour sur la marketplace.');
   };
 
-  const handleDeleteListing = (id, title) => {
-    if (window.confirm(`Supprimer l'annonce "${title}" de la plateforme ?`)) {
+  const handleDeleteListingItem = (id, title) => {
+    if (window.confirm(`Retirer définitivement l'annonce "${title}" de Bénin Beyond ?`)) {
       deleteListing(id);
       setListings((prev) => prev.filter((item) => item.id !== id));
-      showToast(`Annonce "${title}" supprimée.`);
+      showToast(`L'annonce "${title}" a été supprimée.`);
     }
   };
 
-  const updateReservationStatus = (resId, newStatus) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === resId ? { ...r, status: newStatus } : r))
+  const handleUpdateBooking = async (bookingId, newStatus) => {
+    await updateBookingStatus(bookingId, newStatus);
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.id === bookingId || b.booking_ref === bookingId
+          ? { ...b, status: newStatus }
+          : b
+      )
     );
-    showToast(`Réservation ${resId} marquée comme "${newStatus}".`);
+    if (selectedBookingModal && (selectedBookingModal.id === bookingId || selectedBookingModal.booking_ref === bookingId)) {
+      setSelectedBookingModal((prev) => ({ ...prev, status: newStatus }));
+    }
+    showToast(`Réservation mise à jour : Statut "${newStatus}".`);
   };
 
-  const handleSimulateNewBooking = () => {
-    const randomRes = {
-      id: `RES-${Math.floor(1000 + Math.random() * 9000)}`,
-      client: 'Marc V. (Client Test Démo)',
-      itemTitle: 'Villa Contemporaine & Chauffeur Privé',
-      category: 'stay',
-      dates: '02 — 06 Octobre 2026',
-      amount: 390000,
-      status: 'confirmed'
-    };
-    setReservations((prev) => [randomRes, ...prev]);
-    showToast('Nouvelle réservation démo simulée (+390 000 FCFA) !');
+  const handleApprovePayout = (payoutId) => {
+    setPayouts((prev) =>
+      prev.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p))
+    );
+    showToast(`Virement Mobile Money validé pour le partenaire !`);
   };
 
-  const totalRevenue = reservations.reduce((sum, r) => sum + r.amount, 0);
+  const handleRejectPayout = (payoutId) => {
+    setPayouts((prev) =>
+      prev.map((p) => (p.id === payoutId ? { ...p, status: 'rejected' } : p))
+    );
+    showToast(`Demande de versement rejetée.`);
+  };
+
+  const handleVerifyPartnerKyc = (partnerId) => {
+    setPartners((prev) =>
+      prev.map((p) => (p.id === partnerId ? { ...p, kycStatus: 'verified' } : p))
+    );
+    if (selectedKycModal && selectedKycModal.id === partnerId) {
+      setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'verified' }));
+    }
+    showToast('Partenaire certifié conforme (KYC validé).');
+  };
+
+  // Filtered listings
+  const filteredListings = useMemo(() => {
+    return listings.filter((item) => {
+      const matchType = listingTypeFilter === 'all' || item.type === listingTypeFilter;
+      const q = listingSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        item.title?.toLowerCase().includes(q) ||
+        item.location?.toLowerCase().includes(q) ||
+        item.owner_name?.toLowerCase().includes(q);
+      return matchType && matchSearch;
+    });
+  }, [listings, listingTypeFilter, listingSearch]);
+
+  // Filtered bookings
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const matchFilter = bookingFilter === 'all' || b.status === bookingFilter;
+      const q = bookingSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        b.customer_name?.toLowerCase().includes(q) ||
+        b.booking_ref?.toLowerCase().includes(q) ||
+        b.listing_title?.toLowerCase().includes(q) ||
+        b.customer_phone?.toLowerCase().includes(q);
+      return matchFilter && matchSearch;
+    });
+  }, [bookings, bookingFilter, bookingSearch]);
+
+  const navItems = [
+    { key: 'cockpit', label: 'Tour de Contrôle', icon: faCrown },
+    {
+      key: 'moderation',
+      label: 'Modération Catalogue',
+      icon: faShieldHalved,
+      badge: listings.length > 0 ? `${listings.length} biens` : null
+    },
+    {
+      key: 'reservations',
+      label: 'Réservations Globales',
+      icon: faCalendarCheck,
+      badge: platformMetrics.pendingBookingsCount > 0 ? `${platformMetrics.pendingBookingsCount} à valider` : null
+    },
+    {
+      key: 'partners',
+      label: 'Hôtes & Partenaires',
+      icon: faUsers,
+      badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null
+    },
+    { key: 'finances', label: 'Trésorerie & Commissions', icon: faWallet },
+    { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup }
+  ];
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* 1. Admin Demo Banner */}
-      <div className="bg-gradient-to-r from-primary via-primary/90 to-secondary text-white px-6 py-3 md:px-12 shadow-md">
-        <div className="mx-auto flex max-w-8xl flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <Crown className="h-4 w-4 text-accent animate-pulse" />
-            <span className="font-bold tracking-wider uppercase text-accent">
-              Mode Démo Administrateur Actif
-            </span>
-            <span className="hidden sm:inline text-white/70">
-              • Vous disposez des droits complets de supervision, modération et test en direct.
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSimulateNewBooking}
-              className="flex items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 px-3 py-1 text-[11px] font-semibold text-white transition-all backdrop-blur-md active:scale-95"
-            >
-              <Sparkles className="h-3 w-3 text-accent" />
-              <span>Simuler une réservation VIP</span>
-            </button>
-            <Link
-              to="/"
-              className="rounded-full bg-black/30 hover:bg-black/50 px-3 py-1 text-[11px] font-medium text-white/90 transition-colors"
-            >
-              Retour au site client
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Top Header */}
-      <div className="border-b border-foreground/10 bg-card/60 backdrop-blur-md px-6 py-6 md:px-12">
-        <div className="mx-auto flex max-w-8xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="font-heading text-2xl font-bold text-foreground">
-                Portail Administration & Modération
-              </h1>
-              <span className="rounded-md bg-primary/15 px-2 py-0.5 text-[11px] font-mono font-bold text-primary">
-                v2.4 Live
+    <div className="min-h-screen bg-muted/20 text-foreground flex flex-col md:flex-row">
+      
+      {/* ========================================================================= */}
+      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green matching Partner Dashboard) */}
+      {/* ========================================================================= */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 flex flex-col justify-between border-r border-foreground/10 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div>
+          {/* Logo & Close button on Mobile */}
+          <div className="flex items-center justify-between px-6 py-6 border-b border-secondary-foreground/10">
+            <Link to="/" className="flex items-center gap-3">
+              <span className="font-heading text-xl font-bold tracking-tight text-white">
+                Bénin Beyond
               </span>
+              <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent uppercase">
+                Admin Cockpit
+              </span>
+            </Link>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden text-secondary-foreground/60 hover:text-white"
+            >
+              <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Admin Profile Card */}
+          <div className="p-4 mx-4 my-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center font-heading font-bold text-accent">
+              <FontAwesomeIcon icon={faCrown} className="h-4 w-4" />
             </div>
-            <p className="text-xs text-foreground/60 mt-1">
-              Supervision des annonces, réservations clients et partenaires du Bénin
-            </p>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">
+                {user?.name || 'Direction Plateforme'}
+              </p>
+              <div className="flex items-center gap-1.5 text-[11px] text-accent">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Superviseur Général</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Items */}
+          <nav className="px-3 space-y-1">
+            {navItems.map((item) => {
+              const isActive = currentSection === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setCurrentSection(item.key);
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-primary text-white shadow-lg font-semibold'
+                      : 'text-secondary-foreground/75 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <FontAwesomeIcon
+                      icon={item.icon}
+                      className={`h-4 w-4 ${isActive ? 'text-accent' : 'text-secondary-foreground/60'}`}
+                    />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isActive
+                          ? 'bg-black/30 text-white'
+                          : 'bg-accent/20 text-accent border border-accent/30'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Sidebar Footer Links */}
+        <div className="p-4 border-t border-secondary-foreground/10 space-y-2">
+          <Link
+            to="/dashboard/partner"
+            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent" />
+              <span>Espace Propriétaire</span>
+            </div>
+            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-secondary-foreground/40" />
+          </Link>
+
+          <Link
+            to="/"
+            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <FontAwesomeIcon icon={faHouse} className="h-3.5 w-3.5 text-accent" />
+              <span>Voir le site public</span>
+            </div>
+            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-secondary-foreground/40" />
+          </Link>
+
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/10 transition-colors"
+          >
+            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            <span>Déconnexion</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ========================================================================= */}
+      {/* 2. MAIN ADMIN CONTENT CONTAINER */}
+      {/* ========================================================================= */}
+      <main className="flex-1 min-w-0 flex flex-col">
+        
+        {/* Top Header Bar */}
+        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 rounded-lg border border-foreground/10 text-foreground hover:bg-muted"
+            >
+              <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
+            </button>
+            <div>
+              <h1 className="font-heading text-lg font-bold text-foreground">
+                {navItems.find((n) => n.key === currentSection)?.label || 'Administration'}
+              </h1>
+              <p className="text-[11px] text-foreground/60">
+                Portail de gouvernance opérationnelle & financière Bénin Beyond
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              to="/dashboard/partner"
-              className="flex items-center gap-1.5 rounded-full border border-foreground/15 bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
-            >
-              <Building2 className="h-4 w-4 text-accent" />
-              <span>Vue Propriétaire</span>
-            </Link>
-
+            {platformMetrics.pendingBookingsCount > 0 && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-semibold text-amber-800">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                <span>{platformMetrics.pendingBookingsCount} réservation(s) à modérer</span>
+              </span>
+            )}
             <Link
               to="/explore"
-              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/95 shadow-md transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
             >
-              <span>Catalogue Client</span>
-              <ArrowUpRight className="h-3.5 w-3.5" />
+              <span>Catalogue</span>
+              <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/40" />
             </Link>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Main Content */}
-      <div className="mx-auto max-w-8xl px-6 pt-8 md:px-12">
-        {/* Toast alert */}
+        {/* Feedback Toast */}
         {toastMessage && (
-          <div className="mb-6 rounded-2xl bg-primary/15 border border-primary/30 p-4 text-xs font-semibold text-primary flex items-center gap-2 animate-fadeIn">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <div className="m-6 mb-0 rounded-2xl bg-primary/15 border border-primary/30 p-4 text-xs font-semibold text-primary flex items-center gap-2 animate-fadeIn">
+            <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* 3. Platform Metric KPIs */}
-        <ScrollReveal delay={0} y={15}>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-8">
-            <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                <span>Volume d'affaires global</span>
-                <TrendingUp className="h-4 w-4 text-emerald-600" />
+        {/* Scrollable Section Content */}
+        <div className="flex-1 p-6 md:p-8 space-y-8 overflow-y-auto">
+
+          {/* ========================================================================= */}
+          {/* SECTION 1: COCKPIT MACRO (TOUR DE CONTRÔLE) */}
+          {/* ========================================================================= */}
+          {currentSection === 'cockpit' && (
+            <div className="space-y-8">
+              {/* Macro KPIs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
+                      Volume Global (GMV)
+                    </span>
+                    <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                      <FontAwesomeIcon icon={faMoneyBillWave} className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <p className="font-heading text-2xl font-black text-foreground">
+                    {formatPrice(platformMetrics.gmv)}
+                  </p>
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+                    <FontAwesomeIcon icon={faArrowTrendUp} className="h-3 w-3" />
+                    <span>+24.5% vs mois précédent</span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/75 font-semibold">
+                      Commissions Bénin Beyond (15%)
+                    </span>
+                    <div className="h-8 w-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground">
+                      <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <p className="font-heading text-2xl font-black text-foreground">
+                    {formatPrice(platformMetrics.commissions)}
+                  </p>
+                  <p className="text-[11px] text-foreground/70 font-medium mt-1">
+                    Revenus nets conservés par la plateforme
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
+                      Biens & Flottes Actifs
+                    </span>
+                    <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center text-foreground/70">
+                      <FontAwesomeIcon icon={faHouse} className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <p className="font-heading text-2xl font-black text-foreground">
+                    {platformMetrics.activeListings}
+                  </p>
+                  <p className="text-[11px] text-foreground/60 mt-1">
+                    Villas, appartements & véhicules vérifiés
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
+                      Hôtes & Partenaires
+                    </span>
+                    <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center text-foreground/70">
+                      <FontAwesomeIcon icon={faUsers} className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <p className="font-heading text-2xl font-black text-foreground">
+                    {platformMetrics.partnersCount}
+                  </p>
+                  <p className="text-[11px] text-foreground/60 mt-1">
+                    Propriétaires certifiés au Bénin
+                  </p>
+                </div>
               </div>
-              <p className="font-heading text-2xl font-bold text-foreground">
-                {formatPrice(totalRevenue)}
-              </p>
-              <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                +38% vs trimestre précédent
-              </p>
-            </div>
 
-            <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                <span>Réservations gérées</span>
-                <ShoppingBag className="h-4 w-4 text-primary" />
-              </div>
-              <p className="font-heading text-2xl font-bold text-foreground">
-                {reservations.length}
-              </p>
-              <p className="text-[11px] text-foreground/60 mt-1">
-                {reservations.filter((r) => r.status === 'pending').length} en attente de confirmation
-              </p>
-            </div>
+              {/* Monthly Trend Visual Bar Chart */}
+              <div className="rounded-3xl border border-foreground/10 bg-card p-6 md:p-8 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Croissance Mensuelle du Volume d'Affaires & Commissions
+                    </h3>
+                    <p className="text-xs text-foreground/60 mt-0.5">
+                      Progression continue des transactions sur le littoral béninois
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-md bg-primary" />
+                      <span className="text-foreground/70 font-medium">GMV Total</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-md bg-accent" />
+                      <span className="text-foreground/70 font-medium">Commission 15%</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                <span>Biens & Flottes en ligne</span>
-                <Building2 className="h-4 w-4 text-accent" />
-              </div>
-              <p className="font-heading text-2xl font-bold text-foreground">
-                {listings.length}
-              </p>
-              <p className="text-[11px] text-foreground/60 mt-1">
-                Villas, voitures et découvertes
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                <span>Propriétaires certifiés</span>
-                <Users className="h-4 w-4 text-blue-600" />
-              </div>
-              <p className="font-heading text-2xl font-bold text-foreground">
-                {partners.length}
-              </p>
-              <p className="text-[11px] text-blue-600 font-semibold mt-1">
-                100% audités par nos soins
-              </p>
-            </div>
-          </div>
-        </ScrollReveal>
-
-        {/* 4. Tab Navigation */}
-        <div className="flex items-center gap-2 border-b border-foreground/10 pb-4 mb-6 text-sm font-semibold">
-          <button
-            onClick={() => setActiveTab('moderation')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
-              activeTab === 'moderation'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <Building2 className="h-4 w-4" />
-            <span>Modération des Annonces ({listings.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reservations')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
-              activeTab === 'reservations'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <ShoppingBag className="h-4 w-4" />
-            <span>Réservations Clients ({reservations.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('partners')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 transition-all ${
-              activeTab === 'partners'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            <span>Partenaires & Hôtes ({partners.length})</span>
-          </button>
-        </div>
-
-        {/* 5. TAB CONTENT: Modération des Annonces */}
-        {activeTab === 'moderation' && (
-          <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-foreground/10 flex items-center justify-between">
-              <h3 className="font-heading text-base font-bold text-foreground">
-                Toutes les annonces soumises sur la plateforme
-              </h3>
-              <button
-                onClick={loadListings}
-                className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>Actualiser la liste</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-4">Visuel & Titre</th>
-                    <th className="p-4">Catégorie</th>
-                    <th className="p-4">Localisation</th>
-                    <th className="p-4">Tarif</th>
-                    <th className="p-4">Statut</th>
-                    <th className="p-4 text-right">Actions Admin</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-foreground/5">
-                  {listings.map((item) => {
-                    const isSuspended = item.status === 'suspended';
+                <div className="grid grid-cols-5 gap-3 sm:gap-6 items-end pt-8 pb-2 border-b border-foreground/10 h-64">
+                  {MONTHLY_STATS.map((stat, idx) => {
+                    const heightPercent = Math.min(100, Math.round((stat.gmv / 15000000) * 100));
                     return (
-                      <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=150&q=80'}
-                              alt={item.title}
-                              className="h-12 w-14 rounded-xl object-cover border border-foreground/10 shrink-0"
-                            />
-                            <div>
-                              <span className="font-heading text-sm font-bold text-foreground line-clamp-1">
-                                {item.title}
-                              </span>
-                              <span className="text-[10px] text-foreground/50 font-mono">
-                                ID: {item.id}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="p-4">
-                          <span className="rounded-full bg-foreground/10 px-2.5 py-1 text-[10px] font-semibold text-foreground">
-                            {item.type === 'stay' ? 'Villa / Séjour' : item.type === 'drive' ? 'Véhicule' : 'Expérience'}
-                          </span>
-                        </td>
-
-                        <td className="p-4 text-foreground/80">
-                          {item.location}
-                        </td>
-
-                        <td className="p-4 font-bold text-foreground">
-                          {formatPrice(item.price)}
-                          <span className="text-[10px] font-normal text-foreground/60 ml-1">
-                            / {item.price_unit}
-                          </span>
-                        </td>
-
-                        <td className="p-4">
-                          {isSuspended ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2.5 py-1 text-[10px] font-bold text-destructive">
-                              <XCircle className="h-3 w-3" />
-                              Suspendue
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Approuvée & En Ligne
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => toggleListingStatus(item.id)}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition-all ${
-                                isSuspended
-                                  ? 'border-emerald-600/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
-                                  : 'border-amber-600/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
-                              }`}
-                            >
-                              {isSuspended ? 'Réactiver' : 'Suspendre'}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteListing(item.id, item.title)}
-                              className="rounded-lg border border-destructive/30 bg-destructive/10 p-1.5 text-destructive hover:bg-destructive/20 transition-colors"
-                              title="Supprimer définitivement"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end">
+                        <span className="text-[10px] font-bold text-foreground/60 hidden sm:block">
+                          {Math.round(stat.gmv / 1000000 * 10) / 10}M
+                        </span>
+                        <div className="w-full max-w-[50px] bg-muted/60 rounded-xl overflow-hidden flex flex-col justify-end p-1 relative h-full">
+                          <div
+                            className="w-full bg-primary rounded-lg transition-all duration-500"
+                            style={{ height: `${heightPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-foreground/80">
+                          {stat.month}
+                        </span>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                </div>
+              </div>
 
-        {/* 6. TAB CONTENT: Réservations Clients */}
-        {activeTab === 'reservations' && (
-          <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-foreground/10 flex items-center justify-between">
-              <h3 className="font-heading text-base font-bold text-foreground">
-                Suivi des commandes & réservations en direct
+              {/* Quick Action Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div
+                  onClick={() => setCurrentSection('moderation')}
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                      <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
+                    </span>
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
+                  </div>
+                  <h4 className="font-heading text-sm font-bold text-foreground">
+                    Modérer les annonces
+                  </h4>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    Gérer la conformité et les suspensions du catalogue ({listings.length} actifs).
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setCurrentSection('reservations')}
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <FontAwesomeIcon icon={faCalendarCheck} className="h-4 w-4" />
+                    </span>
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
+                  </div>
+                  <h4 className="font-heading text-sm font-bold text-foreground">
+                    Superviser les réservations
+                  </h4>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    Contrôler les réservations clients et l'attribution conciergerie.
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setCurrentSection('partners')}
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="h-9 w-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground group-hover:bg-accent group-hover:text-black transition-colors">
+                      <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4" />
+                    </span>
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
+                  </div>
+                  <h4 className="font-heading text-sm font-bold text-foreground">
+                    Demandes de versement
+                  </h4>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    {payouts.filter((p) => p.status === 'pending').length} demande(s) de virement Mobile Money en attente d'approbation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 2: MODÉRATION DU CATALOGUE */}
+          {/* ========================================================================= */}
+          {currentSection === 'moderation' && (
+            <div className="space-y-6">
+              {/* Filter and Search Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
+                <div className="relative flex-1 max-w-md">
+                  <FontAwesomeIcon
+                    icon={faMagnifyingGlass}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
+                  />
+                  <input
+                    type="text"
+                    value={listingSearch}
+                    onChange={(e) => setListingSearch(e.target.value)}
+                    placeholder="Rechercher par titre, ville ou hôte..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setListingTypeFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'all'
+                        ? 'bg-primary text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    Tous ({listings.length})
+                  </button>
+                  <button
+                    onClick={() => setListingTypeFilter('stay')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'stay'
+                        ? 'bg-primary text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    🏡 Séjours
+                  </button>
+                  <button
+                    onClick={() => setListingTypeFilter('drive')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      listingTypeFilter === 'drive'
+                        ? 'bg-primary text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    🚗 Véhicules
+                  </button>
+                </div>
+              </div>
+
+              {/* Listings Table */}
+              <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4">Bien ou Véhicule</th>
+                        <th className="p-4">Catégorie</th>
+                        <th className="p-4">Localisation</th>
+                        <th className="p-4">Prix Public</th>
+                        <th className="p-4">Hôte / Agence</th>
+                        <th className="p-4">Statut</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {filteredListings.map((item) => (
+                        <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=120&q=80'}
+                                alt={item.title}
+                                className="h-10 w-14 object-cover rounded-lg border border-foreground/10"
+                              />
+                              <div>
+                                <p className="font-bold text-foreground line-clamp-1">
+                                  {item.title}
+                                </p>
+                                <span className="text-[10px] text-foreground/50 font-mono">
+                                  ID: {item.id}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80">
+                              {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-foreground/70">
+                            {item.location}
+                          </td>
+                          <td className="p-4 font-bold text-foreground">
+                            {formatPrice(item.price)}
+                            <span className="text-[10px] text-foreground/50 font-normal">
+                              {' '}/{item.price_unit || 'nuit'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-foreground/80">
+                            {item.owner_name || 'Hôte Partenaire'}
+                          </td>
+                          <td className="p-4">
+                            {item.status === 'suspended' ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-700 px-2 py-0.5 text-[10px] font-bold">
+                                <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
+                                Suspendue
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2 py-0.5 text-[10px] font-bold">
+                                <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
+                                En Ligne (Active)
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Link
+                                to={`/listing/${item.id}`}
+                                className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary hover:border-primary transition-colors"
+                                title="Voir sur le site public"
+                              >
+                                <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
+                              </Link>
+                              <button
+                                onClick={() => handleToggleListingStatus(item.id)}
+                                className={`p-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                                  item.status === 'suspended'
+                                    ? 'border-emerald-500/30 text-emerald-700 hover:bg-emerald-50'
+                                    : 'border-amber-500/30 text-amber-700 hover:bg-amber-50'
+                                }`}
+                                title={item.status === 'suspended' ? 'Activer' : 'Suspendre'}
+                              >
+                                <FontAwesomeIcon icon={item.status === 'suspended' ? faCheck : faBan} className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteListingItem(item.id, item.title)}
+                                className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Supprimer définitivement"
+                              >
+                                <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 3: RÉSERVATIONS GLOBALES */}
+          {/* ========================================================================= */}
+          {currentSection === 'reservations' && (
+            <div className="space-y-6">
+              {/* Search and Filters */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
+                <div className="relative flex-1 max-w-md">
+                  <FontAwesomeIcon
+                    icon={faMagnifyingGlass}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
+                  />
+                  <input
+                    type="text"
+                    value={bookingSearch}
+                    onChange={(e) => setBookingSearch(e.target.value)}
+                    placeholder="Rechercher par client, référence ou bien..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setBookingFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      bookingFilter === 'all'
+                        ? 'bg-primary text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    Toutes ({bookings.length})
+                  </button>
+                  <button
+                    onClick={() => setBookingFilter('confirmed')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      bookingFilter === 'confirmed'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    Confirmées
+                  </button>
+                  <button
+                    onClick={() => setBookingFilter('pending')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      bookingFilter === 'pending'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-muted text-foreground/70 hover:text-foreground'
+                    }`}
+                  >
+                    En Attente
+                  </button>
+                </div>
+              </div>
+
+              {/* Bookings Table */}
+              <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4">Réf & Voyageur</th>
+                        <th className="p-4">Prestation réservée</th>
+                        <th className="p-4">Dates</th>
+                        <th className="p-4">Brut Client</th>
+                        <th className="p-4">Com. Bénin Beyond (15%)</th>
+                        <th className="p-4">Net Hôte (85%)</th>
+                        <th className="p-4">Statut</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {filteredBookings.map((b) => {
+                        const gross = Number(b.gross_amount) || 0;
+                        const comm = Number(b.commission_amount) || Math.round(gross * 0.15);
+                        const net = gross - comm;
+
+                        return (
+                          <tr key={b.id || b.booking_ref} className="hover:bg-muted/20 transition-colors">
+                            <td className="p-4">
+                              <p className="font-bold text-foreground">
+                                {b.customer_name}
+                              </p>
+                              <p className="text-[11px] text-foreground/60">
+                                {b.customer_phone}
+                              </p>
+                              <span className="font-mono text-[10px] text-accent font-bold">
+                                {b.booking_ref}
+                              </span>
+                            </td>
+                            <td className="p-4 font-medium text-foreground">
+                              {b.listing_title}
+                            </td>
+                            <td className="p-4 text-foreground/70 whitespace-nowrap">
+                              {b.dates || 'Séjour à venir'}
+                            </td>
+                            <td className="p-4 font-bold text-foreground">
+                              {formatPrice(gross)}
+                            </td>
+                            <td className="p-4 font-bold text-accent">
+                              +{formatPrice(comm)}
+                            </td>
+                            <td className="p-4 font-bold text-emerald-700">
+                              {formatPrice(net)}
+                            </td>
+                            <td className="p-4">
+                              {b.status === 'confirmed' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
+                                  Confirmée
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
+                                  En attente
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedBookingModal(b)}
+                                  className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary transition-colors"
+                                  title="Voir le reçu détaillé"
+                                >
+                                  <FontAwesomeIcon icon={faReceipt} className="h-3.5 w-3.5" />
+                                </button>
+                                {b.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleUpdateBooking(b.id || b.booking_ref, 'confirmed')}
+                                    className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition-colors"
+                                  >
+                                    Valider
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 4: HÔTES, PARTENAIRES & VÉRIFICATION KYC */}
+          {/* ========================================================================= */}
+          {currentSection === 'partners' && (
+            <div className="space-y-8">
+              {/* Payout Requests Pending Admin Approval */}
+              <div className="rounded-3xl border border-accent/40 bg-card p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/10">
+                  <div className="flex items-center gap-2">
+                    <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4 text-accent" />
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Demandes de Versement Partenaires (Mobile Money & Banque)
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-bold text-accent-foreground">
+                    {payouts.filter((p) => p.status === 'pending').length} en attente
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {payouts.map((po) => (
+                    <div
+                      key={po.id}
+                      className="rounded-2xl border border-foreground/10 bg-background/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-foreground">{po.partnerName}</span>
+                          <span className="text-xs text-foreground/60">({po.company})</span>
+                        </div>
+                        <p className="text-xs text-foreground/70 mt-1">
+                          Canal : <strong className="text-primary">{po.method}</strong> • Bénéficiaire : <span className="font-mono">{po.recipient}</span>
+                        </p>
+                        <p className="text-[11px] text-foreground/40 mt-0.5">
+                          Date demande : {po.date}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-heading text-base font-black text-foreground">
+                            {formatPrice(po.amount)}
+                          </p>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                            po.status === 'approved' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
+                          }`}>
+                            {po.status === 'approved' ? '✓ Virement Exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente validation'}
+                          </span>
+                        </div>
+
+                        {po.status === 'pending' && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleApprovePayout(po.id)}
+                              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                            >
+                              Approuver
+                            </button>
+                            <button
+                              onClick={() => handleRejectPayout(po.id)}
+                              className="rounded-xl border border-rose-500/30 hover:bg-rose-50 text-rose-600 px-3 py-1.5 text-xs font-bold transition-all"
+                            >
+                              Refuser
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Partners Directory & KYC Audit */}
+              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-foreground/10 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Annuaire des Hôtes & Audits Légaux (KYC)
+                    </h3>
+                    <p className="text-xs text-foreground/60 mt-0.5">
+                      Vérification des titres fonciers, cartes grises et pièces d'identité
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4">Hôte / Représentant</th>
+                        <th className="p-4">Enseigne commerciale</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">Pièces Fournies</th>
+                        <th className="p-4">Statut KYC</th>
+                        <th className="p-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {partners.map((p) => (
+                        <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="p-4 font-bold text-foreground">
+                            {p.name}
+                          </td>
+                          <td className="p-4 text-foreground/80">
+                            {p.company}
+                          </td>
+                          <td className="p-4">
+                            <p className="text-foreground/80">{p.phone}</p>
+                            <p className="text-[11px] text-foreground/50">{p.email}</p>
+                          </td>
+                          <td className="p-4 text-foreground/70 font-medium">
+                            {p.docType}
+                          </td>
+                          <td className="p-4">
+                            {p.kycStatus === 'verified' ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
+                                Certifié Conforme
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                                Audit en attente
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-right">
+                            {p.kycStatus === 'pending' ? (
+                              <button
+                                onClick={() => handleVerifyPartnerKyc(p.id)}
+                                className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm"
+                              >
+                                Valider KYC
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-foreground/40 font-semibold">
+                                Validé
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 5: TRÉSORERIE & COMMISSIONS */}
+          {/* ========================================================================= */}
+          {currentSection === 'finances' && (
+            <div className="space-y-8">
+              {/* Financial Breakdown Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
+                  <div className="flex items-center gap-2 text-primary mb-2">
+                    <FontAwesomeIcon icon={faMoneyBillWave} className="h-4 w-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Total Encaissé</span>
+                  </div>
+                  <p className="font-heading text-3xl font-black text-foreground">
+                    {formatPrice(platformMetrics.gmv)}
+                  </p>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    Volume Brut de réservations perçu sur la plateforme
+                  </p>
+                </div>
+
+                <div className="rounded-3xl border border-accent/40 bg-accent/15 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 text-accent-foreground mb-2">
+                    <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Commissions Bénin Beyond (15%)</span>
+                  </div>
+                  <p className="font-heading text-3xl font-black text-foreground">
+                    {formatPrice(platformMetrics.commissions)}
+                  </p>
+                  <p className="text-xs text-foreground/70 mt-1">
+                    Chiffre d'Affaires Net de la plateforme
+                  </p>
+                </div>
+
+                <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
+                  <div className="flex items-center gap-2 text-emerald-700 mb-2">
+                    <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Reversements Hôtes (85%)</span>
+                  </div>
+                  <p className="font-heading text-3xl font-black text-foreground">
+                    {formatPrice(platformMetrics.disbursed)}
+                  </p>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    Fonds transférés ou à transférer aux propriétaires
+                  </p>
+                </div>
+              </div>
+
+              {/* Payment Methods Breakdown */}
+              <div className="rounded-3xl border border-foreground/10 bg-card p-6 md:p-8 shadow-sm">
+                <h3 className="font-heading text-base font-bold text-foreground mb-4">
+                  Répartition des Canaux de Paiement
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                    <span className="text-xs font-bold text-amber-500">MTN Mobile Money</span>
+                    <p className="font-heading text-xl font-bold text-foreground mt-1">54%</p>
+                    <p className="text-[11px] text-foreground/50">Canal N°1 au Bénin</p>
+                  </div>
+                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                    <span className="text-xs font-bold text-blue-600">Carte Visa / Mastercard</span>
+                    <p className="font-heading text-xl font-bold text-foreground mt-1">26%</p>
+                    <p className="text-[11px] text-foreground/50">Diaspora & Touristes</p>
+                  </div>
+                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                    <span className="text-xs font-bold text-emerald-600">Celtiis Cash</span>
+                    <p className="font-heading text-xl font-bold text-foreground mt-1">12%</p>
+                    <p className="text-[11px] text-foreground/50">Réseau national</p>
+                  </div>
+                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                    <span className="text-xs font-bold text-blue-400">Moov Money</span>
+                    <p className="font-heading text-xl font-bold text-foreground mt-1">8%</p>
+                    <p className="text-[11px] text-foreground/50">Opérateur Flooz</p>
+                  </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-foreground/10 flex items-center justify-between">
+                  <span className="text-xs text-foreground/60">
+                    Exportation comptable certifiée conforme au droit Ohada / République du Bénin
+                  </span>
+                  <button
+                    onClick={() => showToast('Relevé comptable mensuel (PDF/CSV) généré avec succès.')}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/95 transition-all"
+                  >
+                    <FontAwesomeIcon icon={faDownload} className="h-3.5 w-3.5" />
+                    <span>Télécharger Relevé Comptable</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 6: FORMULES & PACKS SIGNATURE */}
+          {/* ========================================================================= */}
+          {currentSection === 'packs' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Gestion des Formules & Packs Signature
+                  </h3>
+                  <p className="text-xs text-foreground/60 mt-0.5">
+                    Offres combinées réunissant hébergement, véhicule avec chauffeur et expériences
+                  </p>
+                </div>
+                <button
+                  onClick={() => showToast('Création de pack bientôt disponible dans la prochaine version.')}
+                  className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                >
+                  + Créer un nouveau Pack
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {packs.map((pk) => (
+                  <div
+                    key={pk.id}
+                    className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="relative h-44 w-full overflow-hidden">
+                        <img
+                          src={pk.included?.[0]?.image || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=600&q=80'}
+                          alt={pk.title}
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute top-3 left-3 rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-[10px] font-bold text-accent uppercase">
+                          {pk.location}
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        <h4 className="font-heading text-base font-bold text-foreground">
+                          {pk.title}
+                        </h4>
+                        <p className="text-xs text-foreground/70 mt-1 line-clamp-2">
+                          {pk.tagline}
+                        </p>
+
+                        <div className="mt-4 pt-4 border-t border-foreground/10 space-y-1.5 text-xs text-foreground/80">
+                          {pk.included?.map((it, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <FontAwesomeIcon icon={faCheck} className="h-3 w-3 text-accent shrink-0" />
+                              <span className="line-clamp-1">{it.type} : {it.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-5 pt-0 border-t border-foreground/10 mt-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-foreground/50 uppercase">Tarif combiné</span>
+                        <p className="font-heading text-base font-black text-primary">
+                          {formatPrice(pk.price)} <span className="text-xs font-normal text-foreground/60">/ {pk.priceUnit}</span>
+                        </p>
+                      </div>
+
+                      <Link
+                        to={`/pack/${pk.id}`}
+                        className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
+                      >
+                        Voir la fiche
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* ========================================================================= */}
+      {/* 3. MODAL REÇU / CONCIERGERIE OFFICIEL */}
+      {/* ========================================================================= */}
+      {selectedBookingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl">
+            <button
+              onClick={() => setSelectedBookingModal(null)}
+              className="absolute right-4 top-4 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+            >
+              <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <FontAwesomeIcon icon={faReceipt} className="h-5 w-5 text-accent" />
+              <h3 className="font-heading text-lg font-bold text-foreground">
+                Reçu Officiel Bénin Beyond
               </h3>
+            </div>
+
+            <div className="rounded-2xl bg-muted/40 p-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-foreground/60">Réf. Réservation :</span>
+                <span className="font-mono font-bold text-foreground">{selectedBookingModal.booking_ref}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-foreground/60">Client :</span>
+                <span className="font-semibold text-foreground">{selectedBookingModal.customer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-foreground/60">Téléphone Client :</span>
+                <span className="font-semibold text-foreground">{selectedBookingModal.customer_phone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-foreground/60">Prestation :</span>
+                <span className="font-semibold text-foreground">{selectedBookingModal.listing_title}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-foreground/10 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-foreground/70">Montant Total Brut :</span>
+                <span className="font-bold text-foreground">{formatPrice(selectedBookingModal.gross_amount)}</span>
+              </div>
+              <div className="flex justify-between text-accent font-bold">
+                <span>Commission Bénin Beyond (15%) :</span>
+                <span>+{formatPrice(selectedBookingModal.commission_amount || Math.round(selectedBookingModal.gross_amount * 0.15))}</span>
+              </div>
+              <div className="flex justify-between text-emerald-700 font-bold text-sm pt-1 border-t border-foreground/10">
+                <span>Net Partenaire à reverser (85%) :</span>
+                <span>{formatPrice(selectedBookingModal.net_amount || (selectedBookingModal.gross_amount - Math.round(selectedBookingModal.gross_amount * 0.15)))}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
               <button
-                onClick={handleSimulateNewBooking}
-                className="flex items-center gap-1.5 rounded-full bg-primary/15 border border-primary/30 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition-all"
+                onClick={() => {
+                  window.print();
+                }}
+                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>+ Simuler réservation client</span>
+                Imprimer le Reçu
+              </button>
+              <button
+                onClick={() => setSelectedBookingModal(null)}
+                className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/95 transition-all shadow-md"
+              >
+                Fermer
               </button>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-4">Réf. Commande</th>
-                    <th className="p-4">Client</th>
-                    <th className="p-4">Prestation réservée</th>
-                    <th className="p-4">Période</th>
-                    <th className="p-4">Montant total</th>
-                    <th className="p-4">Statut</th>
-                    <th className="p-4 text-right">Modifier statut</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-foreground/5">
-                  {reservations.map((res) => (
-                    <tr key={res.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-4 font-mono font-bold text-foreground">
-                        {res.id}
-                      </td>
-                      <td className="p-4 font-semibold text-foreground">
-                        {res.client}
-                      </td>
-                      <td className="p-4">
-                        <span className="font-heading text-xs font-bold text-foreground">
-                          {res.itemTitle}
-                        </span>
-                      </td>
-                      <td className="p-4 text-foreground/70">
-                        {res.dates}
-                      </td>
-                      <td className="p-4 font-bold text-emerald-700">
-                        {formatPrice(res.amount)}
-                      </td>
-                      <td className="p-4">
-                        {res.status === 'confirmed' && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
-                            Confirmée & Payée
-                          </span>
-                        )}
-                        {res.status === 'pending' && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold text-amber-700">
-                            En attente de virement
-                          </span>
-                        )}
-                        {res.status === 'completed' && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-2.5 py-1 text-[10px] font-bold text-foreground/70">
-                            Séjour terminé
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <select
-                          value={res.status}
-                          onChange={(e) => updateReservationStatus(res.id, e.target.value)}
-                          className="rounded-lg border border-foreground/15 bg-background px-2.5 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-                        >
-                          <option value="confirmed">Confirmée</option>
-                          <option value="pending">En attente</option>
-                          <option value="completed">Terminée</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 7. TAB CONTENT: Partenaires & Propriétaires */}
-        {activeTab === 'partners' && (
-          <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-foreground/10">
-              <h3 className="font-heading text-base font-bold text-foreground">
-                Annuaire des Propriétaires & Fournisseurs agréés
-              </h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-4">Nom du Partenaire</th>
-                    <th className="p-4">Société / Enseigne</th>
-                    <th className="p-4">Contact</th>
-                    <th className="p-4">Biens actifs</th>
-                    <th className="p-4">Vérification KYC</th>
-                    <th className="p-4">Date d'inscription</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-foreground/5">
-                  {partners.map((p) => (
-                    <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-4 font-bold text-foreground">
-                        {p.name}
-                      </td>
-                      <td className="p-4 text-foreground/80">
-                        {p.company}
-                      </td>
-                      <td className="p-4 text-foreground/60 font-mono">
-                        {p.email}
-                      </td>
-                      <td className="p-4">
-                        <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-bold text-accent-foreground">
-                          {p.listingsCount} annonces
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {p.kycStatus === 'verified' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                            <ShieldCheck className="h-4 w-4" />
-                            Certifié conforme
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
-                            <Clock className="h-4 w-4" />
-                            Dossier en révision
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-foreground/60">
-                        {p.joined}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

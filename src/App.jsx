@@ -29,12 +29,14 @@ function ScrollToTop() {
 export function App() {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
+  const isAuth = location.pathname === '/login' || location.pathname === '/register';
+  const hidePublicChrome = isDashboard || isAuth;
 
   return (
     <AuthProvider>
       <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
         <ScrollToTop />
-        <main className={`flex-1 ${isDashboard ? '' : 'pb-28'}`}>
+        <main className={`flex-1 ${hidePublicChrome ? '' : 'pb-28'}`}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/explore" element={<ExplorePage />} />
@@ -55,8 +57,8 @@ export function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
-        {!isDashboard && <Footer />}
-        {!isDashboard && <Navbar />}
+        {!hidePublicChrome && <Footer />}
+        {!hidePublicChrome && <Navbar />}
       </div>
     </AuthProvider>
   );

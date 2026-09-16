@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight, Bookmark, MapPin, User } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Bookmark, MapPin } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faUser, faBuilding } from '@fortawesome/free-solid-svg-icons';
 
 const DESTINATIONS = [
   {
@@ -199,17 +201,23 @@ export function HeroPinterestCarousel() {
             Bénin Beyond
           </Link>
 
-          {/* Bouton de connexion masqué temporairement à la demande de l'utilisateur
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <Link
+              to="/register"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
+            >
+              <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
+              <span>Espace Hôte</span>
+            </Link>
+
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-black shadow-md hover:bg-accent hover:text-black transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-xs font-bold text-black shadow-md hover:bg-accent hover:text-black transition-all active:scale-95"
             >
-              <User className="h-3.5 w-3.5" />
+              <FontAwesomeIcon icon={faUser} className="h-3 w-3" />
               <span>Connexion</span>
             </Link>
           </div>
-          */}
         </div>
       </div>
 
