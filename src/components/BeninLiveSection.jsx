@@ -34,7 +34,7 @@ const CULTURAL_EVENTS = [
     period: '09 — 10 Janvier',
     location: 'Ouidah · Plage & Temple des Pythons',
     description: 'La plus grande célébration mondiale des arts, musiques rituelles et traditions séculaires sur le littoral d’Ouidah.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/998c78e0f_generated_826b4e25.png',
+    image: 'https://i.pinimg.com/736x/a9/79/63/a9796310554972a7a7fd10c421e538c6.jpg',
     tag: 'Culture & Spiritualité'
   },
   {
@@ -44,7 +44,7 @@ const CULTURAL_EVENTS = [
     period: 'Novembre / Décembre',
     location: 'Nikki · Cour Impériale du Borgou',
     description: 'Somptueuse parade de centaines de cavaliers bariba aux caparaçons brodés, son des trompettes sacrées et hommage au Roi.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png',
+    image: 'https://i.pinimg.com/1200x/90/94/c7/9094c71aa1b36b8d3387bc5880662d70.jpg',
     tag: 'Patrimoine Équestre'
   },
   {
@@ -54,7 +54,7 @@ const CULTURAL_EVENTS = [
     period: 'Décembre — Mai',
     location: 'Parc National de la Pendjari · Atacora',
     description: 'Période royale pour l’observation des éléphants, lions, cobes de Buffon et bivouacs confortables sous la voûte céleste.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/53eb159f6_generated_5c492777.png',
+    image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80',
     tag: 'Faune & Aventure'
   },
   {
@@ -64,7 +64,7 @@ const CULTURAL_EVENTS = [
     period: 'Toute l’année',
     location: 'Abomey · Palais des Rois',
     description: 'Immersion dans l’épopée du Danxomè, contemplation des trônes et statues des souverains restitués dans leurs palais historiques.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png',
+    image: 'https://images.unsplash.com/photo-1578925518470-4def7a0f08bb?auto=format&fit=crop&w=1200&q=80',
     tag: 'Histoire & Mémoire'
   },
   {
@@ -74,7 +74,7 @@ const CULTURAL_EVENTS = [
     period: 'Saison Touristique',
     location: 'Ganvié · Cité lacustre',
     description: 'Joutes nautiques en pirogues d’apparat, danses au fil de l’eau et animation festive du grand marché flottant.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/06b54fa79_generated_43e6e90f.png',
+    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1200&q=80',
     tag: 'Vie sur l’Eau'
   }
 ];

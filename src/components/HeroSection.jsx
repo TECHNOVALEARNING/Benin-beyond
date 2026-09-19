@@ -2,29 +2,27 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 
-const MEDIA_BASE = "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614";
-
 const HERO_PANELS = [
   {
     key: 'stay',
     label: 'Séjourner',
     sub: 'Villas & appartements',
     to: '/explore?type=stay',
-    img: `${MEDIA_BASE}/c5a6a8d83_generated_62656531.png`
+    img: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
   },
   {
     key: 'drive',
     label: 'Conduire',
     sub: 'SUV & berlines',
     to: '/explore?type=drive',
-    img: `${MEDIA_BASE}/786f87a7e_generated_f72ae80f.png`
+    img: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
   },
   {
     key: 'discover',
     label: 'Découvrir',
     sub: 'Expériences & tours',
     to: '/explore?type=discover',
-    img: `${MEDIA_BASE}/06b54fa79_generated_43e6e90f.png`
+    img: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80'
   }
 ];
 

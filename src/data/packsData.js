@@ -15,12 +15,12 @@ export const COMBINED_PACKS = [
       {
         type: "Hébergement",
         title: "Villa Cotonou Riviera (4 Chambres, Piscine privée)",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png"
+        image: "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80"
       },
       {
         type: "Véhicule",
         title: "SUV Toyota Fortuner (7 Places, Automatique 4x4)",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png"
+        image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80"
       }
     ],
     advantages: [
@@ -31,9 +31,9 @@ export const COMBINED_PACKS = [
     ],
     description: "La formule ultime pour séjourner au Bénin dans des conditions d'excellence. Profitez d'une villa de prestige avec piscine privée sur la lagune de Cotonou, combinée à un SUV 4x4 puissant pour vos trajets urbains et vos escapades vers Ouidah et Grand-Popo.",
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png"
+      "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80"
     ]
   },
   {
@@ -52,12 +52,12 @@ export const COMBINED_PACKS = [
       {
         type: "Hébergement",
         title: "Loft Cocotier Ouidah (à 200m de la plage)",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png"
+        image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80"
       },
       {
         type: "Véhicule",
         title: "Berline Hyundai Elantra climatisée",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png"
+        image: "https://images.unsplash.com/photo-1523939706065-fa4ac466210d?auto=format&fit=crop&w=1200&q=80"
       }
     ],
     advantages: [
@@ -68,9 +68,9 @@ export const COMBINED_PACKS = [
     ],
     description: "Une parenthèse ressourçante mêlant repos en bord d'océan, autonomie totale grâce à une berline moderne et parcours mémoriel guidé le long de la Route des Esclaves jusqu'à la Porte du Non-Retour.",
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/998c78e0f_generated_826b4e25.png"
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1523939706065-fa4ac466210d?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1200&q=80"
     ]
   },
   {
@@ -89,12 +89,12 @@ export const COMBINED_PACKS = [
       {
         type: "Hébergement",
         title: "Séjour bivouac safari tout confort sous les étoiles",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/53eb159f6_generated_5c492777.png"
+        image: "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80"
       },
       {
         type: "Véhicule",
         title: "SUV 4x4 préparé piste avec chauffeur-guide",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png"
+        image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80"
       }
     ],
     advantages: [
@@ -105,8 +105,8 @@ export const COMBINED_PACKS = [
     ],
     description: "Le grand voyage au cœur du Bénin sauvage. Partez de Cotonou à bord d'un 4x4 robuste avec ranger expérimenté pour 2 jours complets de safari dans le Parc national de la Pendjari. Rencontre inoubliable avec la faune ouest-africaine.",
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/53eb159f6_generated_5c492777.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png"
+      "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80"
     ]
   },
   {
@@ -125,12 +125,12 @@ export const COMBINED_PACKS = [
       {
         type: "Hébergement",
         title: "Appartement Cotonou Centre (Design & Fibre)",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/6cfb8c5b3_generated_5f9dba90.png"
+        image: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80"
       },
       {
         type: "Véhicule",
         title: "Berline Hyundai Elantra avec chauffeur dédié",
-        image: "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png"
+        image: "https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80"
       }
     ],
     advantages: [
@@ -141,8 +141,8 @@ export const COMBINED_PACKS = [
     ],
     description: "Conçu pour les professionnels en mission ou les voyageurs urbains exigeants. Un appartement raffiné au cœur du Plateau avec une berline et son chauffeur pour tous vos déplacements professionnels à Cotonou et Porto-Novo.",
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/6cfb8c5b3_generated_5f9dba90.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png"
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80"
     ]
   }
 ];

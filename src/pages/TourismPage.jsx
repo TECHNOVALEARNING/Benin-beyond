@@ -15,7 +15,7 @@ const TOURISM_SITES = [
       'Bâtie au XVIIe siècle par le peuple Tofinu cherchant refuge sur les eaux sacrées du lac Nokoué, Ganvié rassemble plus de 30 000 habitants vivant dans de remarquables maisons sur pilotis. Le marché flottant matinal animé par les piroguières, les ruelles aquatiques et les pièges à poissons "acadjas" créent un univers hors du temps.',
     highlights: ['Marché flottant à l’aube', 'Habitations séculaires sur pilotis', 'Artisanat lagonaire & pêche traditionnelle'],
     tips: 'Départ en pirogue depuis l’embarcadère d’Abomey-Calavi (à 25 min de Cotonou). Visite matinale recommandée pour la lumière et l’animation du marché.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/06b54fa79_generated_43e6e90f.png'
+    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'ouidah',
@@ -28,7 +28,7 @@ const TOURISM_SITES = [
       'Dressée face aux déferlantes de l’océan Atlantique, la Porte du Non-Retour est le monument emblématique commémorant les millions d’êtres humains déportés lors de la traite négrière. La célèbre Route des Esclaves s’étire sur 4 kilomètres entre la place Chacha, l’Arbre de l’Oubli et le littoral. Ouidah abrite également le Fort Portugais et le Temple des Pythons.',
     highlights: ['Mémorial monumental face à l’océan', 'Route des Esclaves historique', 'Temple sacré des Pythons & Forêt sacrée de Kpassè'],
     tips: 'Site en accès libre face à la plage. Visite conseillée en fin d’après-midi pour assister au coucher de soleil sur l’Atlantique.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/998c78e0f_generated_826b4e25.png'
+    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'abomey',
@@ -41,7 +41,7 @@ const TOURISM_SITES = [
       'Capitale politique du prestigieux royaume du Danxomè fondé au XVIIe siècle, Abomey abrite l’ensemble monumental des palais royaux classés à l’UNESCO. Les cours intérieures des rois Ghézo et Glèlè conservent des bas-reliefs en terre cuite polychrome d’une valeur inestimable, les trônes royaux et célèbrent la mémoire légendaire des Agoodjié, les redoutables guerrières Amazones du Danxomè.',
     highlights: ['Bas-reliefs en argile polychromes UNESCO', 'Trônes royaux et trésors des souverains', 'Mémoire héroïque des Amazones Agoodjié'],
     tips: 'À 2h30 de route de Cotonou. Visites guidées proposées par les conservateurs du musée historique d’Abomey.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png'
+    image: 'https://images.unsplash.com/photo-1578925518470-4def7a0f08bb?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'pendjari',
@@ -54,7 +54,7 @@ const TOURISM_SITES = [
       'S’étendant sur des centaines de milliers d’hectares au pied des falaises de l’Atacora, la Pendjari est la réserve animalière la plus préservée d’Afrique de l’Ouest. Elle abrite les derniers grands troupeaux d’éléphants, de lions d’Afrique occidentale, de buffles, de cobes de Buffon et d’innombrables rapaces au milieu de paysages de savane arborée grandioses.',
     highlights: ['Safaris fauniques matinaux et au crépuscule', 'Collines et panoramas de l’Atacora', 'Cascades rafraîchissantes de Tanougou et Kota'],
     tips: 'Période idéale d’observation : de Décembre à Mai. Accès recommandé en véhicule tout-terrain 4x4 avec guide ranger.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/53eb159f6_generated_5c492777.png'
+    image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'cotonou',
@@ -67,7 +67,7 @@ const TOURISM_SITES = [
       'Haute de 30 mètres et sculptée dans le bronze, la statue monumentale de l’Amazone domine le boulevard de la Marina face à l’océan. Elle rend un vibrant hommage aux femmes guerrières qui ont forgé la bravoure du pays. Non loin, l’esplanade des Amazones, la Place de l’Étoile Rouge et le mythique marché Dantokpa témoignent du dynamisme urbain et culturel béninois.',
     highlights: ['Statue colossale de l’Amazone (30m)', 'Boulevard paysager face à l’océan', 'Fresques murales et street-art le long du Port'],
     tips: 'Accès libre 24h/24. Magnifiquement illuminée en soirée, parfaite pour une balade crépusculaire au bord de l’eau.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png'
+    image: 'https://images.unsplash.com/photo-1577717903315-1691ae25ab3f?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'porto-novo',
@@ -80,7 +80,7 @@ const TOURISM_SITES = [
       'Porto-Novo dévoile une ambiance paisible et un charme architectural unique hérité des artisans "Agoudas" revenus du Brésil au XIXe siècle. Sa Grande Mosquée au style baroque brésilien inspiré de Salvador de Bahia, le Musée Honmè (ancien palais des rois Toffa) et le Musée ethnographique Alexandre Sènou Adandé offrent une plongée culturelle d’une exceptionnelle richesse.',
     highlights: ['Grande Mosquée afro-brésilienne', 'Palais royal Musée Honmè', 'Jardin des Plantes et de la Nature (JPN)'],
     tips: 'À 35 minutes de Cotonou par l’autoroute côtière. Idéal pour une journée de découverte patrimoniale et artisanale.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/6cfb8c5b3_generated_5f9dba90.png'
+    image: 'https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'grand-popo',
@@ -93,7 +93,7 @@ const TOURISM_SITES = [
       'À la frontière maritime du Togo, Grand-Popo est un havre de paix naturel entre plages de sable blond et lagunes calmes. La Bouche du Roy marque l’embouchure spectaculaire où le fleuve Mono se jette dans l’Atlantique, créant des mangroves préservées abritant des îles aux oiseaux et un sanctuaire de protection des tortues marines.',
     highlights: ['Embouchure naturelle de la Bouche du Roy', 'Navigation douce dans les mangroves', 'Villages de pêcheurs et plages sauvages'],
     tips: 'Excursion en barque motorisée avec les écoguides locaux le long du fleuve Mono. Halte idéale pour se détendre.',
-    image: 'https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png'
+    image: 'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=1200&q=80'
   }
 ];
 

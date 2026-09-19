@@ -22,9 +22,10 @@ export const INITIAL_LISTINGS = [
     map_lat: 6.3654,
     map_lng: 2.4186,
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/6cfb8c5b3_generated_5f9dba90.png"
+      "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600565193348-f74bd3c7ccdf?auto=format&fit=crop&w=1200&q=80"
     ],
     created_date: "2026-08-07T04:42:46.105000",
     updated_date: "2026-08-07T04:43:47.536000"
@@ -52,8 +53,10 @@ export const INITIAL_LISTINGS = [
     map_lat: 6.3725,
     map_lng: 2.3922,
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/6cfb8c5b3_generated_5f9dba90.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png"
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=1200&q=80"
     ],
     created_date: "2026-08-07T04:42:46.105000",
     updated_date: "2026-08-07T04:43:47.536000"
@@ -81,8 +84,10 @@ export const INITIAL_LISTINGS = [
     map_lat: 6.3625,
     map_lng: 2.0819,
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/8d23f1177_generated_fc0ecad1.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/f7eb9d7b5_generated_bd25ef85.png"
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=1200&q=80"
     ],
     created_date: "2026-08-07T04:42:46.105000",
     updated_date: "2026-08-07T04:43:47.536000"
@@ -110,8 +115,10 @@ export const INITIAL_LISTINGS = [
     map_lat: 6.3654,
     map_lng: 2.4186,
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png"
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1549944850-84e00be4203b?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1508974239320-0a029497e820?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80"
     ],
     created_date: "2026-08-07T04:42:46.105000",
     updated_date: "2026-08-07T04:43:47.536000"
@@ -139,8 +146,9 @@ export const INITIAL_LISTINGS = [
     map_lat: 6.3654,
     map_lng: 2.4186,
     gallery: [
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/84aa52bc0_generated_f9756aa3.png",
-      "https://media.base44.com/images/public/6a7561b29fa797d5bba5f614/786f87a7e_generated_f72ae80f.png"
+      "https://images.unsplash.com/photo-1523939706065-fa4ac466210d?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1541348263662-e0c8de4259ba?auto=format&fit=crop&w=1200&q=80"
     ],
     created_date: "2026-08-07T04:42:46.105000",
     updated_date: "2026-08-07T04:43:47.536000"

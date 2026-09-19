@@ -3,10 +3,31 @@ import { INITIAL_LISTINGS } from '../data/initialListings';
 
 const CUSTOM_LISTINGS_KEY = 'benin_beyond_custom_listings';
 
+function sanitizeImage(url, type) {
+  if (!url || typeof url !== 'string' || url.includes('base44.com') || url.includes('_generated_')) {
+    return type === 'drive'
+      ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+      : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80';
+  }
+  return url;
+}
+
 function getCustomListings() {
   try {
     const raw = localStorage.getItem(CUSTOM_LISTINGS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => ({
+      ...item,
+      gallery: (item.gallery && item.gallery.length > 0)
+        ? item.gallery.map((img) => sanitizeImage(img, item.type))
+        : [
+            item.type === 'drive'
+              ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+              : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
+          ]
+    }));
   } catch {
     return [];
   }
