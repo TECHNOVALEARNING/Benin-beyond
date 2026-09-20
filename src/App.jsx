@@ -13,6 +13,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { PartnerDashboardPage } from './pages/PartnerDashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { ClientDashboardPage } from './pages/ClientDashboardPage';
 import { TourismPage } from './pages/TourismPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthProvider } from './context/AuthContext';
@@ -43,6 +44,7 @@ export function App() {
             <Route path="/listing/:id" element={<ListingDetailPage />} />
             <Route path="/packs" element={<PacksPage />} />
             <Route path="/pack/:id" element={<PackDetailPage />} />
+            <Route path="/decouvertes" element={<TourismPage />} />
             <Route path="/tourisme" element={<TourismPage />} />
             <Route path="/decouvrir" element={<TourismPage />} />
             <Route path="/panier" element={<CartPage />} />
@@ -51,6 +53,7 @@ export function App() {
             {/* Authentification & Tableaux de bord */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/dashboard/client" element={<ClientDashboardPage />} />
             <Route path="/dashboard/partner" element={<PartnerDashboardPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
 

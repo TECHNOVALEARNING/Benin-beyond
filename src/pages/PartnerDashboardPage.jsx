@@ -93,6 +93,7 @@ export function PartnerDashboardPage() {
 
   // Publishing form state
   const [formType, setFormType] = useState('stay'); // 'stay' | 'drive'
+  const [formSubcategory, setFormSubcategory] = useState('villa'); // 'villa' | 'hotel'
   const [formTitle, setFormTitle] = useState('');
   const [formLocation, setFormLocation] = useState('Cotonou, Haie Vive');
   const [formPrice, setFormPrice] = useState('');
@@ -100,6 +101,12 @@ export function PartnerDashboardPage() {
   const [formPurpose, setFormPurpose] = useState('location'); // 'location' | 'vente'
   const [formDescription, setFormDescription] = useState('');
   const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+
+  // Hotel & Room Availability states
+  const [availableFrom, setAvailableFrom] = useState('');
+  const [availableTo, setAvailableTo] = useState('');
+  const [roomsCount, setRoomsCount] = useState(1);
+  const [availabilityType, setAvailabilityType] = useState('always'); // 'always' | 'custom_period'
 
   // Custom Photos & Video state
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
@@ -297,23 +304,30 @@ export function PartnerDashboardPage() {
     }
 
     const newListing = addListing({
-      title: formTitle || (formType === 'stay' ? 'Résidence de Standing' : 'Véhicule de Prestige'),
+      title: formTitle || (formType === 'stay' ? (formSubcategory === 'hotel' ? 'Chambre d’Hôtel de Standing' : 'Résidence de Standing') : 'Véhicule de Prestige'),
       type: formType,
+      subcategory: formSubcategory,
       location: formLocation,
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme vérifié par Bénin Beyond.',
-      badge: 'EN ATTENTE DE MODÉRATION',
+      badge: formSubcategory === 'hotel' ? `${roomsCount || 1} chambre(s) dispo` : 'EN ATTENTE DE MODÉRATION',
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
       status: 'pending', // Pending admin audit
       owner_id: user?.id || 'usr_partner_01',
-      owner_name: user?.name || 'Propriétaire Certifié'
+      owner_name: user?.name || 'Propriétaire Certifié',
+      availability: {
+        type: availabilityType,
+        available_from: availableFrom || null,
+        available_to: availableTo || null,
+        rooms_count: parseInt(roomsCount, 10) || 1
+      }
     });
 
     setListings((prev) => [newListing, ...prev]);
-    setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle a été transmise aux modérateurs de Bénin Beyond pour validation de vos photos et de votre vidéo.`);
+    setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle a été transmise aux modérateurs de Bénin Beyond pour validation.`);
 
     // Reset form
     setFormTitle('');
@@ -322,6 +336,9 @@ export function PartnerDashboardPage() {
     setUploadedPhotos([]);
     setUploadedVideo(null);
     setFeaturedPhotoIndex(0);
+    setAvailableFrom('');
+    setAvailableTo('');
+    setRoomsCount(1);
 
     setTimeout(() => {
       setCurrentSection('listings');
@@ -1063,8 +1080,13 @@ export function PartnerDashboardPage() {
                       />
                       <div className="absolute left-3 top-3 flex items-center gap-1.5">
                         <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-accent uppercase backdrop-blur-sm border border-white/10">
-                          {item.type === 'stay' ? 'Logement' : 'Véhicule'}
+                          {item.type === 'stay' ? (item.subcategory === 'hotel' ? 'Hôtel' : 'Logement') : 'Véhicule'}
                         </span>
+                        {item.availability?.available_from && (
+                          <span className="rounded-full bg-blue-600/90 text-white px-2 py-0.5 text-[9px] font-bold shadow">
+                            Dispo {item.availability.available_from.slice(5)} au {item.availability.available_to?.slice(5)}
+                          </span>
+                        )}
                         {item.video_url && (
                           <span className="rounded-full bg-accent text-black px-2 py-0.5 text-[9px] font-bold shadow flex items-center gap-1">
                             <FontAwesomeIcon icon={faVideo} className="text-[8px]" />
@@ -1284,6 +1306,41 @@ export function PartnerDashboardPage() {
                       </div>
                     </button>
                   </div>
+
+                  {/* 1b. Type d'hébergement : Villa vs Hôtel */}
+                  {formType === 'stay' && (
+                    <div className="mt-3 rounded-2xl border border-foreground/10 bg-background/60 p-3 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-foreground/75 mr-1">Catégorie :</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormSubcategory('villa');
+                          setFormSpecs('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          formSubcategory === 'villa'
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'bg-muted text-foreground/70 hover:bg-muted/80'
+                        }`}
+                      >
+                        🏡 Villa / Résidence privée
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormSubcategory('hotel');
+                          setFormSpecs('Chambre Deluxe, Climatisation, Petit-déjeuner inclus, Service d\'étage');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          formSubcategory === 'hotel'
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'bg-muted text-foreground/70 hover:bg-muted/80'
+                        }`}
+                      >
+                        🏨 Hôtel & Chambre d'hôtel
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Titre & Localisation */}
@@ -1295,7 +1352,13 @@ export function PartnerDashboardPage() {
                     <input
                       type="text"
                       required
-                      placeholder={formType === 'stay' ? 'ex: Villa Royale Cotonou Lagune' : 'ex: SUV Toyota Fortuner 7 Places VIP'}
+                      placeholder={
+                        formType === 'stay'
+                          ? formSubcategory === 'hotel'
+                            ? 'ex: Chambre Deluxe Vue Lagune — Hôtel Riviera'
+                            : 'ex: Villa Royale Cotonou Lagune'
+                          : 'ex: SUV Toyota Fortuner 7 Places VIP'
+                      }
                       value={formTitle}
                       onChange={(e) => setFormTitle(e.target.value)}
                       className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
@@ -1316,6 +1379,64 @@ export function PartnerDashboardPage() {
                     />
                   </div>
                 </div>
+
+                {/* Disponibilité & Calendrier pour les Hôtels */}
+                {formType === 'stay' && formSubcategory === 'hotel' && (
+                  <div className="rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={faCalendarCheck} className="h-3.5 w-3.5" />
+                        <span>Disponibilité & Calendrier des Chambres d'Hôtel</span>
+                      </span>
+                      <span className="text-[10px] text-accent font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
+                        Module Hôtelier
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-foreground/70">
+                      Renseignez la période d'ouverture et le nombre de chambres disponibles de ce type.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Chambres dispo de ce type *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="200"
+                          value={roomsCount}
+                          onChange={(e) => setRoomsCount(e.target.value)}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Disponible à partir du
+                        </label>
+                        <input
+                          type="date"
+                          value={availableFrom}
+                          onChange={(e) => setAvailableFrom(e.target.value)}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Disponible jusqu'au
+                        </label>
+                        <input
+                          type="date"
+                          value={availableTo}
+                          onChange={(e) => setAvailableTo(e.target.value)}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 3. Tarification & Commission */}
                 <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">

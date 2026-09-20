@@ -46,7 +46,7 @@ export function LoginPage() {
         } else if (res.user.role === 'owner') {
           navigate('/dashboard/partner');
         } else {
-          navigate('/');
+          navigate('/dashboard/client');
         }
       }, 600);
     }

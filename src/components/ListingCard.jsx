@@ -52,6 +52,15 @@ export function ListingCard({ listing, featured = false, className = '' }) {
           </div>
         )}
 
+        {/* Badge Disponibilité Hôtel */}
+        {listing.availability?.available_from && (
+          <div className="absolute left-3 bottom-3 z-10">
+            <span className="inline-flex items-center rounded-md bg-black/75 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white border border-white/15 shadow-sm">
+              Dispo : {listing.availability.available_from.slice(5)} au {listing.availability.available_to?.slice(5) || '...'}
+            </span>
+          </div>
+        )}
+
         {/* Badge Prix Terracotta en bas à droite de l'image */}
         <div className="absolute bottom-3 right-3 z-10 transition-transform duration-300 group-hover:scale-105">
           <div className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-md backdrop-blur-sm">

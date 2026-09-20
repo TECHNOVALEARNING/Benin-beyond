@@ -71,12 +71,12 @@ export function Footer() {
               </li>
               <li>
                 <Link to="/explore?type=drive" className="hover:text-accent transition-colors">
-                  Conduire
+                  Véhicules
                 </Link>
               </li>
               <li>
-                <Link to="/tourisme" className="hover:text-accent transition-colors">
-                  Tourisme
+                <Link to="/decouvertes" className="hover:text-accent transition-colors">
+                  Découvertes
                 </Link>
               </li>
               <li>

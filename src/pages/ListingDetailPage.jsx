@@ -276,6 +276,24 @@ export function ListingDetailPage() {
               </div>
             </div>
 
+            {/* Disponibilité Spécifique de la Chambre d'Hôtel */}
+            {listing.availability?.available_from && (
+              <div className="mt-4 rounded-xl bg-accent/15 border border-accent/30 p-3 text-xs text-foreground">
+                <p className="font-bold text-accent uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>Période de disponibilité hôtelière</span>
+                </p>
+                <p className="mt-1 font-semibold text-foreground">
+                  Du {new Date(listing.availability.available_from).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} au {new Date(listing.availability.available_to || Date.now()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+                {listing.availability.rooms_count > 0 && (
+                  <p className="text-[11px] text-foreground/70 mt-0.5">
+                    {listing.availability.rooms_count} chambre(s) restante(s) pour cette période
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Date Pickers */}
             <div className="mt-5 space-y-4">
               {isDaily && (

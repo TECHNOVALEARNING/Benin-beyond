@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Compass, Landmark, Mountain, Sparkles, ArrowUpRight, BedDouble, Car, Info } from 'lucide-react';
+import { MapPin, Compass, Landmark, Mountain, Sparkles, ArrowUpRight, BedDouble, Car, Info, UtensilsCrossed } from 'lucide-react';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 const TOURISM_SITES = [
@@ -31,6 +31,19 @@ const TOURISM_SITES = [
     image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80'
   },
   {
+    id: 'jardin-canala',
+    category: 'restaurants',
+    title: 'Le Jardin de Canala — Gastronomie & Jardin Tropical',
+    badge: 'Table Recommandée',
+    location: 'Cotonou · Quartier Haie Vive',
+    tagline: 'Saveurs Locales & Fusion Contemporaine',
+    description:
+      'Véritable oasis végétale en plein cœur de Cotonou, Le Jardin de Canala sublime le terroir béninois : mérou grillé au feu de bois, agouti en sauce graine, aloco doré et cocktails aux fruits de la côte. Une ambiance feutrée idéale pour vos dîners d’affaires ou escapades gourmandes.',
+    highlights: ['Poissons frais de l’océan et arrivages du port', 'Jardin ombragé & cocktails signatures', 'Accueil chaleureux et carte raffinée'],
+    tips: 'Réservation recommandée en soirée et le week-end. Établissement situé à 10 minutes de l’aéroport.',
+    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
+  },
+  {
     id: 'abomey',
     category: 'monuments',
     title: 'Abomey — Les Palais Royaux du Danxomè',
@@ -42,6 +55,19 @@ const TOURISM_SITES = [
     highlights: ['Bas-reliefs en argile polychromes UNESCO', 'Trônes royaux et trésors des souverains', 'Mémoire héroïque des Amazones Agoodjié'],
     tips: 'À 2h30 de route de Cotonou. Visites guidées proposées par les conservateurs du musée historique d’Abomey.',
     image: 'https://images.unsplash.com/photo-1578925518470-4def7a0f08bb?auto=format&fit=crop&w=1200&q=80'
+  },
+  {
+    id: 'maman-bene',
+    category: 'restaurants',
+    title: 'Chez Maman Béné — Terroir Authentique Littoral',
+    badge: 'Authenticité & Fraîcheur',
+    location: 'Ouidah · Route des Pêches',
+    tagline: 'Les Trésors Culinaires du Littoral Océanique',
+    description:
+      'Institution incontournable de la côte d’Ouidah, Chez Maman Béné propose une cuisine béninoise généreuse et savoureuse : langoustes grillées, capitaine sauce tomate pimentée, crabes de lagune et pâte noire amèvo cuisinée selon les secrets des grands-mères.',
+    highlights: ['Langoustes et gambas braisées à la minute', 'Cadre paillote les pieds dans le sable', 'Hospitalité béninoise légendaire'],
+    tips: 'Parfait pour un déjeuner convivial après la visite de la Porte du Non-Retour.',
+    image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
   },
   {
     id: 'pendjari',
@@ -98,9 +124,10 @@ const TOURISM_SITES = [
 ];
 
 const CATEGORIES = [
-  { key: 'all', label: 'Tous les trésors', icon: Compass },
+  { key: 'all', label: 'Toutes les découvertes', icon: Compass },
   { key: 'monuments', label: 'Monuments & Histoire', icon: Landmark },
-  { key: 'nature', label: 'Paysages & Réserves', icon: Mountain }
+  { key: 'nature', label: 'Paysages & Réserves', icon: Mountain },
+  { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: UtensilsCrossed }
 ];
 
 export function TourismPage() {
@@ -119,24 +146,24 @@ export function TourismPage() {
         
         <div className="relative z-10 mx-auto max-w-8xl px-6 md:px-12">
           <ScrollReveal delay={0} y={20}>
-            <div className="inline-flex items-center gap-2 mb-6">
-
-            </div>
+            <span className="caption text-accent font-semibold tracking-widest text-xs uppercase mb-3 inline-block">
+              Découvertes & Patrimoine
+            </span>
             
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight max-w-4xl leading-tight">
-              Monuments, Paysages & Trésors Historiques à Visiter
+              Découvertes du Bénin — Trésors, Gastronomie & Culture
             </h1>
 
             <p className="mt-6 max-w-3xl text-base sm:text-lg text-secondary-foreground/80 leading-relaxed">
-              Le Bénin est une terre d'histoire vivante, de sanctuaires naturels préservés et de cités lacustres millénaires. 
-              Ce guide a été conçu pour les voyageurs et curieux du monde entier afin de vous présenter les lieux incontournables à explorer lors de votre venue.
+              Le Bénin est une terre d'histoire vivante, de sanctuaires naturels préservés, de saveurs culinaires envoûtantes et de cités lacustres millénaires. 
+              Explorez les monuments incontournables, les parcs nationaux et les meilleures tables gastronomiques recommandées.
             </p>
 
-            {/* Note informative de gratuité d'accès */}
+            {/* Note informative */}
             <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs sm:text-sm text-secondary-foreground/90 backdrop-blur-sm">
               <Info className="h-4 w-4 text-accent shrink-0" />
               <span>
-                Les sites patrimoniaux et monuments présentés ci-dessous sont des repères culturels pour enrichir votre séjour.
+                Monuments d'histoire, réserves naturelles et restaurants locaux partenaires certifiés par Bénin Beyond.
               </span>
             </div>
           </ScrollReveal>

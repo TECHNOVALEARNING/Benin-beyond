@@ -9,7 +9,7 @@ import { getListings } from '../services/listingService';
 const FILTER_TABS = [
   { key: 'all', label: 'Tout' },
   { key: 'stay', label: 'Séjourner' },
-  { key: 'drive', label: 'Conduire' }
+  { key: 'drive', label: 'Véhicules' }
 ];
 
 export function ExplorePage() {
@@ -166,8 +166,19 @@ export function ExplorePage() {
             ))}
           </div>
         ) : filteredListings.length === 0 ? (
-          <div className="py-24 text-center text-foreground/50">
-            Aucun résultat. Affinez votre recherche.
+          <div className="py-20 text-center rounded-3xl border border-dashed border-foreground/15 bg-card/50 p-8 max-w-xl mx-auto backdrop-blur-sm">
+            <h3 className="font-heading text-lg font-bold text-foreground">Catalogue prêt pour de nouvelles annonces</h3>
+            <p className="mt-2 text-xs text-foreground/60 leading-relaxed">
+              Aucun bien ou véhicule ne correspond à vos filtres actuels. Vous êtes hôtelier, propriétaire ou loueur au Bénin ? Publiez directement vos disponibilités sur Bénin Beyond.
+            </p>
+            <div className="mt-5 flex justify-center gap-3">
+              <a
+                href="/register"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+              >
+                <span>Publier une annonce</span>
+              </a>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">

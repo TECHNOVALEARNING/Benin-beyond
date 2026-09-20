@@ -176,9 +176,9 @@ export function CheckoutPage() {
                 <Printer className="h-4 w-4" strokeWidth={1.5} />
                 <span>Imprimer le récapitulatif</span>
               </button>
-              <Link to="/" className="flex-1">
+              <Link to="/dashboard/client" className="flex-1">
                 <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all">
-                  Retour à l'accueil
+                  Accéder à mon espace voyageur
                 </button>
               </Link>
             </div>

@@ -87,6 +87,24 @@ export function HomePage() {
                   />
                 ))}
               </div>
+            ) : getByType(sec.type).length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-foreground/15 bg-card/60 p-8 text-center backdrop-blur-sm">
+                <p className="text-sm font-semibold text-foreground/80">
+                  {sec.type === 'stay' ? 'Villas, hôtels et appartements en cours d’intégration' : 'Véhicules et SUV en cours de référencement'}
+                </p>
+                <p className="text-xs text-foreground/50 mt-1 max-w-md mx-auto">
+                  Vous êtes hôtelier, propriétaire ou loueur au Bénin ? Rejoignez le réseau officiel Bénin Beyond pour publier vos disponibilités.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 px-4 py-1.5 text-xs font-semibold transition-all"
+                  >
+                    <span>Devenir partenaire certifié</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {getByType(sec.type)

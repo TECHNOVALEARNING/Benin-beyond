@@ -62,7 +62,7 @@ export function RegisterPage() {
         if (accountType === 'owner') {
           navigate('/dashboard/partner');
         } else {
-          navigate('/');
+          navigate('/dashboard/client');
         }
       }, 700);
     }

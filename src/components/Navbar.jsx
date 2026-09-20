@@ -14,8 +14,8 @@ import { useCart } from '../context/CartContext';
 const NAV_ITEMS = [
   { to: '/', label: 'Accueil', faIcon: faHouse },
   { to: '/explore?type=stay', label: 'Séjourner', faIcon: faBed, match: 'stay' },
-  { to: '/explore?type=drive', label: 'Conduire', faIcon: faCar, match: 'drive' },
-  { to: '/tourisme', label: 'Tourisme', faIcon: faCompass, isTourisme: true },
+  { to: '/explore?type=drive', label: 'Véhicules', faIcon: faCar, match: 'drive' },
+  { to: '/decouvertes', label: 'Découvertes', faIcon: faCompass, isDecouvertes: true },
   { to: '/packs', label: 'Packs', faIcon: faLayerGroup, isPack: true },
   { to: '/panier', label: 'Panier', faIcon: faBagShopping, cart: true }
 ];
@@ -30,11 +30,10 @@ export function Navbar() {
     <nav className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-2 w-[calc(100%-1rem)] max-w-xl">
       <div className="glass-bar flex items-center justify-between rounded-full border border-foreground/10 px-2 py-2 shadow-2xl shadow-foreground/10">
         {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
           const isActive = item.isPack
             ? location.pathname === '/packs' || location.pathname.startsWith('/pack/')
-            : item.isTourisme
-            ? location.pathname === '/tourisme' || location.pathname === '/decouvrir'
+            : item.isDecouvertes
+            ? location.pathname === '/decouvertes' || location.pathname === '/tourisme' || location.pathname === '/decouvrir'
             : item.match
             ? location.pathname === '/explore' && currentType === item.match
             : location.pathname === item.to && !currentType;
