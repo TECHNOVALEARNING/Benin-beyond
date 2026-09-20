@@ -15,7 +15,7 @@ import {
   Sparkles,
   ChevronRight
 } from 'lucide-react';
-import { COMBINED_PACKS } from '../data/packsData';
+import { getPacks } from '../services/packService';
 import { formatPrice } from '../data/initialListings';
 import { useCart } from '../context/CartContext';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -25,7 +25,19 @@ export function PackDetailPage() {
   const navigate = useNavigate();
   const { addItem } = useCart();
 
-  const pack = COMBINED_PACKS.find((p) => p.id === id);
+  const [pack, setPack] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPack() {
+      setLoading(true);
+      const allPacks = await getPacks();
+      const found = allPacks.find((p) => p.id === id);
+      setPack(found || null);
+      setLoading(false);
+    }
+    fetchPack();
+  }, [id]);
 
   const [selectedImage, setSelectedImage] = useState(0);
   const [startDate, setStartDate] = useState(() => {

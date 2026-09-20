@@ -1,4 +1,8 @@
-export const COMBINED_PACKS = [
+// Initial baseline catalog starts completely fresh and empty ("Comme neuf")
+// Packs are created exclusively by the Super-Administrator from the Admin Cockpit.
+export const COMBINED_PACKS = [];
+
+export const SAMPLE_DEMO_PACKS = [
   {
     id: "pack-riviera-4x4",
     title: "Pack Riviera & Évasion 4x4",

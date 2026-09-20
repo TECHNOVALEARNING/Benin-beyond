@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faCompass,
@@ -18,9 +18,12 @@ import { ScrollReveal } from '../components/ScrollReveal';
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register } = useAuth();
 
-  const [accountType, setAccountType] = useState('owner'); // default to owner to emphasize user's new request
+  const searchParams = new URLSearchParams(location.search);
+  const initialType = searchParams.get('type') === 'owner' ? 'owner' : 'client';
+  const [accountType, setAccountType] = useState(initialType);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');

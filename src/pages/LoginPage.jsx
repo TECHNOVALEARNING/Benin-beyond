@@ -19,7 +19,6 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState('client');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -35,20 +34,24 @@ export function LoginPage() {
       return;
     }
 
-    const res = login(email, password, selectedRole);
+    const res = login(email, password);
     if (res.success) {
-      setSuccessMsg('Connexion réussie ! Redirection en cours...');
-      setTimeout(() => {
-        if (from) {
-          navigate(from);
-        } else if (res.user.role === 'admin') {
-          navigate('/admin');
-        } else if (res.user.role === 'owner') {
-          navigate('/dashboard/partner');
-        } else {
-          navigate('/dashboard/client');
-        }
-      }, 600);
+      if (res.user.role === 'admin') {
+        setSuccessMsg('Compte Administrateur authentifié. Redirection vers la Tour de Contrôle...');
+        setTimeout(() => navigate('/admin'), 600);
+      } else if (res.user.role === 'owner') {
+        setSuccessMsg('Compte Partenaire identifié. Redirection vers votre tableau de bord...');
+        setTimeout(() => navigate('/dashboard/partner'), 600);
+      } else {
+        setSuccessMsg('Connexion réussie ! Accès à votre espace voyageur...');
+        setTimeout(() => {
+          if (from) {
+            navigate(from);
+          } else {
+            navigate('/dashboard/client');
+          }
+        }, 600);
+      }
     }
   };
 
@@ -95,48 +98,6 @@ export function LoginPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Role Selection Tabs */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground/80 mb-2">
-                  Profil de connexion
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-muted/60 p-1 border border-foreground/5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('client')}
-                    className={`rounded-lg py-1.5 font-medium transition-all ${
-                      selectedRole === 'client'
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-foreground/60 hover:text-foreground'
-                    }`}
-                  >
-                    Voyageur
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('owner')}
-                    className={`rounded-lg py-1.5 font-medium transition-all ${
-                      selectedRole === 'owner'
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-foreground/60 hover:text-foreground'
-                    }`}
-                  >
-                    Propriétaire
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('admin')}
-                    className={`rounded-lg py-1.5 font-medium transition-all ${
-                      selectedRole === 'admin'
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-foreground/60 hover:text-foreground'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                </div>
-              </div>
-
               {/* Email */}
               <div>
                 <label className="block text-xs font-medium text-foreground/80 mb-1.5">
@@ -195,14 +156,25 @@ export function LoginPage() {
             </form>
 
             {/* Switch to Register */}
-            <div className="mt-6 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
-              <span>Vous n'avez pas encore de compte ? </span>
-              <Link
-                to="/register"
-                className="font-semibold text-primary hover:underline"
-              >
-                Créer un compte
-              </Link>
+            <div className="mt-6 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
+              <div>
+                <span>Vous êtes nouveau voyageur ? </span>
+                <Link
+                  to="/register?type=client"
+                  className="font-semibold text-primary hover:underline"
+                >
+                  Créer un compte voyageur
+                </Link>
+              </div>
+              <div>
+                <span>Propriétaire, Hôtelier ou Loueur auto ? </span>
+                <Link
+                  to="/register?type=owner"
+                  className="font-semibold text-accent hover:underline"
+                >
+                  Devenir Partenaire
+                </Link>
+              </div>
             </div>
           </div>
         </ScrollReveal>

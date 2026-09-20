@@ -32,6 +32,28 @@ export const DEMO_USERS = {
   }
 };
 
+const REGISTERED_USERS_KEY = 'benin_beyond_registered_users';
+
+function getRegisteredUsers() {
+  try {
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRegisteredUser(newUser) {
+  try {
+    const list = getRegisteredUsers();
+    const filtered = list.filter((u) => u.email.toLowerCase() !== newUser.email.toLowerCase());
+    filtered.push(newUser);
+    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Failed to save registered user:', e);
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
@@ -56,25 +78,57 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  const login = (email, password, role = 'client') => {
-    // Normal login or demo lookup
-    const demoMatch = Object.values(DEMO_USERS).find(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
-    );
+  const login = (email, password, optionalRole = null) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
 
+    // 1. Détection automatique et exclusive de l'Administrateur par son email unique
+    const isAdminEmail =
+      cleanEmail === 'admin@beninbeyond.bj' ||
+      cleanEmail === 'admin@beninbeyond.com' ||
+      cleanEmail === 'direction@beninbeyond.bj' ||
+      cleanEmail.startsWith('admin@');
+
+    if (isAdminEmail) {
+      const adminUser = {
+        ...DEMO_USERS.admin,
+        email: cleanEmail,
+        name: cleanEmail === 'admin@beninbeyond.bj' ? DEMO_USERS.admin.name : `Admin (${cleanEmail.split('@')[0]})`
+      };
+      setUser(adminUser);
+      return { success: true, user: adminUser };
+    }
+
+    // 2. Vérification des comptes de démonstration prédéfinis
+    const demoMatch = Object.values(DEMO_USERS).find(
+      (u) => u.email.toLowerCase() === cleanEmail
+    );
     if (demoMatch) {
       setUser(demoMatch);
       return { success: true, user: demoMatch };
     }
 
+    // 3. Recherche dans les comptes enregistrés sur la plateforme
+    const registeredList = getRegisteredUsers();
+    const savedUser = registeredList.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (savedUser) {
+      setUser(savedUser);
+      return { success: true, user: savedUser };
+    }
+
+    // 4. Nouvel utilisateur se connectant directement : rôle automatique (propriétaire si spécifié, sinon voyageur/client)
+    const determinedRole = optionalRole || 'client';
     const newUser = {
       id: `usr_${Date.now()}`,
-      name: email.split('@')[0],
-      email,
-      role: role || 'client',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'
+      name: email.split('@')[0].replace(/[._]/g, ' '),
+      email: cleanEmail,
+      role: determinedRole,
+      company: determinedRole === 'owner' ? 'Partenaire Hébergeur / Auto' : undefined,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+      createdAt: new Date().toISOString()
     };
 
+    saveRegisteredUser(newUser);
     setUser(newUser);
     return { success: true, user: newUser };
   };
@@ -86,16 +140,26 @@ export function AuthProvider({ children }) {
   };
 
   const register = ({ name, email, role = 'client', company = '' }) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    // Protection : si l'utilisateur s'inscrit avec l'email admin
+    const isAdminEmail =
+      cleanEmail === 'admin@beninbeyond.bj' ||
+      cleanEmail === 'admin@beninbeyond.com' ||
+      cleanEmail.startsWith('admin@');
+
     const newUser = {
       id: `usr_${Date.now()}`,
-      name: name || email.split('@')[0],
-      email,
-      role,
-      company: role === 'owner' ? company || 'Partenaire Immobilier / Auto' : undefined,
+      name: name || email.split('@')[0].replace(/[._]/g, ' '),
+      email: cleanEmail,
+      role: isAdminEmail ? 'admin' : (role || 'client'),
+      company: role === 'owner' ? (company || 'Partenaire Hébergement & Mobilité') : undefined,
       verified: role === 'owner' ? false : true,
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
       createdAt: new Date().toISOString()
     };
+
+    saveRegisteredUser(newUser);
     setUser(newUser);
     return { success: true, user: newUser };
   };

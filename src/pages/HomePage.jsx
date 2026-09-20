@@ -6,8 +6,7 @@ import { BeninLiveSection } from '../components/BeninLiveSection';
 import { SectionHeader } from '../components/SectionHeader';
 import { ListingCard } from '../components/ListingCard';
 import { getListings } from '../services/listingService';
-
-import { COMBINED_PACKS } from '../data/packsData';
+import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
 import { ScrollReveal } from '../components/ScrollReveal';
 
@@ -26,24 +25,25 @@ const SECTIONS = [
 
 export function HomePage() {
   const [listings, setListings] = useState([]);
+  const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-    getListings()
-      .then((data) => {
-        if (mounted) setListings(data);
-      })
-      .catch(() => {
-        if (mounted) setListings([]);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+    async function loadData() {
+      try {
+        const [data, packsData] = await Promise.all([
+          getListings(),
+          getPacks()
+        ]);
+        setListings(data || []);
+        setPacks(packsData || []);
+      } catch (err) {
+        console.error('Erreur chargement listings/packs:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
   const getByType = (type) => listings.filter((item) => item.type === type);
@@ -141,17 +141,40 @@ export function HomePage() {
           />
         </ScrollReveal>
 
-        <div className="mt-8 grid gap-8 md:grid-cols-2">
-          {COMBINED_PACKS.slice(0, 2).map((pack, idx) => (
-            <ScrollReveal
-              key={pack.id}
-              delay={idx * 150}
-              className="h-full"
-            >
-              <PackCard pack={pack} />
-            </ScrollReveal>
-          ))}
-        </div>
+        {packs.length === 0 ? (
+          <ScrollReveal delay={100} y={15} className="mt-8">
+            <div className="rounded-3xl border border-dashed border-foreground/15 bg-card/60 p-8 sm:p-10 text-center">
+              <p className="text-xs uppercase tracking-widest text-accent font-bold">Exclusivité Bénin Beyond</p>
+              <h3 className="font-heading text-lg font-bold text-foreground mt-1">
+                Packs Signature en cours d'élaboration
+              </h3>
+              <p className="text-xs sm:text-sm text-foreground/60 max-w-xl mx-auto mt-2 leading-relaxed">
+                Notre administration prépare de nouvelles offres d'exception réunissant nos plus belles villas et véhicules tout-terrain VIP.
+              </p>
+              <div className="mt-5">
+                <Link
+                  to="/packs"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition-all"
+                >
+                  <span>Consulter l'espace Formules</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          </ScrollReveal>
+        ) : (
+          <div className="mt-8 grid gap-8 md:grid-cols-2">
+            {packs.slice(0, 2).map((pack, idx) => (
+              <ScrollReveal
+                key={pack.id}
+                delay={idx * 150}
+                className="h-full"
+              >
+                <PackCard pack={pack} />
+              </ScrollReveal>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Note: Section 'L'héritage comme expérience' has been completely removed as requested */}

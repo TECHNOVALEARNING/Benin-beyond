@@ -50,7 +50,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
-import { COMBINED_PACKS } from '../data/packsData';
+import { getPacks, addPack, deletePack } from '../services/packService';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 const SAMPLE_INSPIRATION_PHOTOS = {
@@ -161,7 +161,7 @@ export function AdminDashboardPage() {
   const [bookings, setBookings] = useState([]);
   const [partners, setPartners] = useState(INITIAL_PARTNERS);
   const [payouts, setPayouts] = useState(INITIAL_PAYOUT_REQUESTS);
-  const [packs, setPacks] = useState(COMBINED_PACKS);
+  const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -182,6 +182,10 @@ export function AdminDashboardPage() {
 
   // Host & Direct Property Creation states inside Admin Cockpit
   const [formType, setFormType] = useState('stay'); // 'stay' | 'drive'
+  const [formSubcategory, setFormSubcategory] = useState('villa'); // 'villa' | 'hotel'
+  const [availableFrom, setAvailableFrom] = useState('');
+  const [availableTo, setAvailableTo] = useState('');
+  const [roomsCount, setRoomsCount] = useState(1);
   const [formTitle, setFormTitle] = useState('');
   const [formLocation, setFormLocation] = useState('Cotonou, Haie Vive');
   const [formPrice, setFormPrice] = useState('');
@@ -190,6 +194,22 @@ export function AdminDashboardPage() {
   const [formDescription, setFormDescription] = useState('');
   const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
   const [adminInstantPublish, setAdminInstantPublish] = useState(true); // Direct online as Super-Admin
+
+  // Pack Creation Modal & Form States (Super-Admin Exclusive)
+  const [showNewPackModal, setShowNewPackModal] = useState(false);
+  const [packTitle, setPackTitle] = useState('');
+  const [packTagline, setPackTagline] = useState('');
+  const [packPrice, setPackPrice] = useState('');
+  const [packRegularPrice, setPackRegularPrice] = useState('');
+  const [packPriceUnit, setPackPriceUnit] = useState('jour');
+  const [packLocation, setPackLocation] = useState('Cotonou & Littoral');
+  const [packBadge, setPackBadge] = useState('Offre Privilège');
+  const [packStayTitle, setPackStayTitle] = useState('');
+  const [packStayImage, setPackStayImage] = useState('');
+  const [packDriveTitle, setPackDriveTitle] = useState('');
+  const [packDriveImage, setPackDriveImage] = useState('');
+  const [packAdvantages, setPackAdvantages] = useState('Prise en charge aéroport VIP\nPlein de carburant offert au départ\nConciergerie dédiée 24/7\nKilométrage illimité');
+  const [packDescription, setPackDescription] = useState('');
 
   // Custom Photos & Video state
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
@@ -207,16 +227,87 @@ export function AdminDashboardPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [allListings, allBookings] = await Promise.all([
+      const [allListings, allBookings, allPacks] = await Promise.all([
         getListings(),
-        getBookings()
+        getBookings(),
+        getPacks()
       ]);
       setListings(allListings);
       setBookings(allBookings);
+      setPacks(allPacks || []);
     } catch (err) {
       console.error('Erreur chargement admin:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreatePack = async (e) => {
+    e.preventDefault();
+    if (!packTitle || !packPrice) {
+      showToast('Veuillez renseigner le titre et le tarif du pack.');
+      return;
+    }
+
+    const priceNum = parseInt(packPrice, 10) || 100000;
+    const regPriceNum = parseInt(packRegularPrice, 10) || Math.round(priceNum * 1.15);
+
+    const newPackObj = {
+      id: `pack-${Date.now()}`,
+      title: packTitle,
+      tagline: packTagline || 'Hébergement d’exception + Véhicule VIP avec conciergerie',
+      price: priceNum,
+      regularPrice: regPriceNum,
+      priceUnit: packPriceUnit,
+      savings: Math.max(0, regPriceNum - priceNum),
+      location: packLocation,
+      badge: packBadge || 'Offre Privilège',
+      rating: 5.0,
+      reviewsCount: 1,
+      included: [
+        {
+          type: 'Hébergement',
+          title: packStayTitle || 'Villa Royale ou Suite de Prestige',
+          image: packStayImage || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
+        },
+        {
+          type: 'Véhicule',
+          title: packDriveTitle || 'SUV 4x4 ou Berline avec Chauffeur Dédié',
+          image: packDriveImage || 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+        }
+      ],
+      advantages: packAdvantages.split('\n').map((s) => s.trim()).filter(Boolean),
+      description: packDescription || 'Formule combinée exclusive créée et garantie par la Direction Bénin Beyond.',
+      gallery: [
+        packStayImage || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80',
+        packDriveImage || 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+      ]
+    };
+
+    await addPack(newPackObj);
+    const updated = await getPacks();
+    setPacks(updated);
+    setShowNewPackModal(false);
+    showToast(`Pack "${packTitle}" créé et publié en ligne !`);
+
+    // Reset pack form
+    setPackTitle('');
+    setPackTagline('');
+    setPackPrice('');
+    setPackRegularPrice('');
+    setPackStayTitle('');
+    setPackStayImage('');
+    setPackDriveTitle('');
+    setPackDriveImage('');
+    setPackDescription('');
+  };
+
+  const handleDeletePack = async (packId, title) => {
+    if (window.confirm(`Confirmez-vous la suppression définitive du pack "${title}" ?`)) {
+      await deletePack(packId);
+      const updated = await getPacks();
+      setPacks(updated);
+      showToast(`Pack "${title}" supprimé.`);
     }
   };
 
@@ -331,6 +422,13 @@ export function AdminDashboardPage() {
     const newListing = addListing({
       title: formTitle || (formType === 'stay' ? 'Résidence de Standing Bénin Beyond' : 'Véhicule de Prestige Bénin Beyond'),
       type: formType,
+      subcategory: formType === 'stay' ? formSubcategory : undefined,
+      rooms_count: formType === 'stay' && formSubcategory === 'hotel' ? Number(roomsCount) : undefined,
+      availability: formType === 'stay' && formSubcategory === 'hotel' ? {
+        available_from: availableFrom || null,
+        available_to: availableTo || null,
+        rooms_count: Number(roomsCount)
+      } : undefined,
       location: formLocation,
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
@@ -1690,82 +1788,353 @@ export function AdminDashboardPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* SECTION 6: FORMULES & PACKS SIGNATURE */}
+          {/* SECTION 6: FORMULES & PACKS SIGNATURE (EXCLUSIVITÉ SUPER-ADMIN) */}
           {/* ========================================================================= */}
           {currentSection === 'packs' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <h3 className="font-heading text-base font-bold text-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-[10px] font-bold text-accent uppercase">
+                      Exclusivité Direction
+                    </span>
+                    <span className="text-xs text-foreground/50">
+                      {packs.length} pack{packs.length > 1 ? 's' : ''} en ligne
+                    </span>
+                  </div>
+                  <h3 className="font-heading text-lg font-bold text-foreground mt-1">
                     Gestion des Formules & Packs Signature
                   </h3>
                   <p className="text-xs text-foreground/60 mt-0.5">
-                    Offres combinées réunissant hébergement, véhicule avec chauffeur et expériences
+                    Seul le Super-Administrateur peut composer et publier des offres tout-en-un réunissant villa, véhicule VIP et chauffeur
                   </p>
                 </div>
+
                 <button
-                  onClick={() => showToast('Création de pack bientôt disponible dans la prochaine version.')}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                  onClick={() => setShowNewPackModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
                 >
-                  + Créer un nouveau Pack
+                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                  <span>+ Créer un nouveau Pack</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {packs.map((pk) => (
-                  <div
-                    key={pk.id}
-                    className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="relative h-44 w-full overflow-hidden">
-                        <img
-                          src={pk.included?.[0]?.image || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=600&q=80'}
-                          alt={pk.title}
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="absolute top-3 left-3 rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-[10px] font-bold text-accent uppercase">
-                          {pk.location}
-                        </div>
-                      </div>
-
-                      <div className="p-5">
-                        <h4 className="font-heading text-base font-bold text-foreground">
-                          {pk.title}
-                        </h4>
-                        <p className="text-xs text-foreground/70 mt-1 line-clamp-2">
-                          {pk.tagline}
-                        </p>
-
-                        <div className="mt-4 pt-4 border-t border-foreground/10 space-y-1.5 text-xs text-foreground/80">
-                          {pk.included?.map((it, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <FontAwesomeIcon icon={faCheck} className="h-3 w-3 text-accent shrink-0" />
-                              <span className="line-clamp-1">{it.type} : {it.title}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-5 pt-0 border-t border-foreground/10 mt-4 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-foreground/50 uppercase">Tarif combiné</span>
-                        <p className="font-heading text-base font-black text-primary">
-                          {formatPrice(pk.price)} <span className="text-xs font-normal text-foreground/60">/ {pk.priceUnit}</span>
-                        </p>
-                      </div>
-
-                      <Link
-                        to={`/pack/${pk.id}`}
-                        className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
-                      >
-                        Voir la fiche
-                      </Link>
-                    </div>
+              {/* Empty state when 0 packs */}
+              {packs.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-10 text-center max-w-xl mx-auto space-y-4">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/20 text-accent font-bold">
+                    <FontAwesomeIcon icon={faLayerGroup} className="h-6 w-6" />
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <h4 className="font-heading text-base font-bold text-foreground">
+                      Aucun pack combiné pour le moment
+                    </h4>
+                    <p className="text-xs text-foreground/60 mt-1 leading-relaxed">
+                      Le catalogue démarre à zéro comme neuf. Cliquez ci-dessous pour concevoir votre première offre signature combinant résidence privée et mobilité.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowNewPackModal(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                    <span>Créer le Premier Pack Signature</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {packs.map((pk) => (
+                    <div
+                      key={pk.id}
+                      className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm flex flex-col justify-between hover:border-foreground/25 transition-all"
+                    >
+                      <div>
+                        <div className="relative h-44 w-full overflow-hidden bg-muted">
+                          <img
+                            src={pk.included?.[0]?.image || pk.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=600&q=80'}
+                            alt={pk.title}
+                            className="h-full w-full object-cover"
+                          />
+                          <div className="absolute top-3 left-3 rounded-full bg-black/70 backdrop-blur-md px-3 py-1 text-[10px] font-bold text-accent uppercase">
+                            {pk.location}
+                          </div>
+                          {pk.badge && (
+                            <div className="absolute top-3 right-3 rounded-full bg-primary/90 px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                              {pk.badge}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-5">
+                          <h4 className="font-heading text-base font-bold text-foreground">
+                            {pk.title}
+                          </h4>
+                          <p className="text-xs text-foreground/70 mt-1 line-clamp-2">
+                            {pk.tagline}
+                          </p>
+
+                          <div className="mt-4 pt-4 border-t border-foreground/10 space-y-2 text-xs text-foreground/80">
+                            {pk.included?.map((it, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <FontAwesomeIcon icon={faCheck} className="h-3 w-3 text-accent shrink-0" />
+                                <span className="line-clamp-1"><strong>{it.type} :</strong> {it.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-5 pt-0 border-t border-foreground/10 mt-4 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] text-foreground/50 uppercase">Tarif combiné</span>
+                          <p className="font-heading text-base font-black text-primary">
+                            {formatPrice(pk.price)} <span className="text-xs font-normal text-foreground/60">/ {pk.priceUnit || 'jour'}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/pack/${pk.id}`}
+                            className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
+                          >
+                            Voir
+                          </Link>
+                          <button
+                            onClick={() => handleDeletePack(pk.id, pk.title)}
+                            className="rounded-xl border border-destructive/20 bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors"
+                            title="Supprimer ce pack"
+                          >
+                            <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Modal de Création de Pack Exclusif Admin */}
+              {showNewPackModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+                  <div className="relative w-full max-w-2xl rounded-3xl bg-card border border-foreground/15 p-6 sm:p-8 shadow-2xl my-8">
+                    <div className="flex items-center justify-between pb-4 border-b border-foreground/10">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Formule Tout-en-un</span>
+                        <h3 className="font-heading text-lg font-bold text-foreground">
+                          Créer un Pack Signature Bénin Beyond
+                        </h3>
+                      </div>
+                      <button
+                        onClick={() => setShowNewPackModal(false)}
+                        className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground"
+                      >
+                        <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleCreatePack} className="mt-6 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                      {/* Titre & Accroche */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Titre du Pack *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="ex: Pack Riviera & Évasion 4x4"
+                            value={packTitle}
+                            onChange={(e) => setPackTitle(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Accroche commerciale
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="ex: Villa d'exception + SUV 7 places tout terrain"
+                            value={packTagline}
+                            onChange={(e) => setPackTagline(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Tarification & Localisation */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Tarif remisé (FCFA) *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            placeholder="115000"
+                            value={packPrice}
+                            onChange={(e) => setPackPrice(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Tarif normal barré (FCFA)
+                          </label>
+                          <input
+                            type="number"
+                            placeholder="130000"
+                            value={packRegularPrice}
+                            onChange={(e) => setPackRegularPrice(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Unité de tarification
+                          </label>
+                          <select
+                            value={packPriceUnit}
+                            onChange={(e) => setPackPriceUnit(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                          >
+                            <option value="jour">Par jour</option>
+                            <option value="forfait">Forfait total</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Localisation
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="ex: Cotonou & Littoral"
+                            value={packLocation}
+                            onChange={(e) => setPackLocation(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                            Badge
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="ex: Offre Privilège, Coup de Cœur..."
+                            value={packBadge}
+                            onChange={(e) => setPackBadge(e.target.value)}
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Hébergement Inclus */}
+                      <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-foreground block">
+                          1. Hébergement Inclus dans le Pack
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] text-foreground/70 block mb-1">Titre de la villa ou suite</label>
+                            <input
+                              type="text"
+                              placeholder="ex: Villa Cotonou Riviera (4 Chambres)"
+                              value={packStayTitle}
+                              onChange={(e) => setPackStayTitle(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-foreground/70 block mb-1">URL photo de l'hébergement</label>
+                            <input
+                              type="text"
+                              placeholder="https://images.unsplash.com/photo-..."
+                              value={packStayImage}
+                              onChange={(e) => setPackStayImage(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Véhicule Inclus */}
+                      <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-foreground block">
+                          2. Véhicule Inclus dans le Pack
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] text-foreground/70 block mb-1">Modèle du véhicule</label>
+                            <input
+                              type="text"
+                              placeholder="ex: SUV Toyota Fortuner 7 Places VIP"
+                              value={packDriveTitle}
+                              onChange={(e) => setPackDriveTitle(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-foreground/70 block mb-1">URL photo du véhicule</label>
+                            <input
+                              type="text"
+                              placeholder="https://images.unsplash.com/photo-..."
+                              value={packDriveImage}
+                              onChange={(e) => setPackDriveImage(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Avantages & Description */}
+                      <div>
+                        <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          Avantages clés (un par ligne)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={packAdvantages}
+                          onChange={(e) => setPackAdvantages(e.target.value)}
+                          placeholder="Prise en charge aéroport VIP&#10;Plein de carburant offert&#10;Conciergerie 24/7"
+                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          Description détaillée du pack
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={packDescription}
+                          onChange={(e) => setPackDescription(e.target.value)}
+                          placeholder="Décrivez l'expérience unique proposée aux voyageurs..."
+                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPackModal(false)}
+                          className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="submit"
+                          className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                        >
+                          Publier le Pack en Ligne
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1928,6 +2297,88 @@ export function AdminDashboardPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* 1b. Sous-catégorie Hébergement & Disponibilités Hôtel */}
+                {formType === 'stay' && (
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-foreground/10 space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground/80 block mb-2">
+                        Type d'établissement
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setFormSubcategory('villa')}
+                          className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all ${
+                            formSubcategory === 'villa'
+                              ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                              : 'border-foreground/15 bg-card text-foreground/70'
+                          }`}
+                        >
+                          <div className="font-bold">Villa / Loft Privé</div>
+                          <div className="text-[10px] text-foreground/50 mt-0.5">Location exclusive d'un bien entier</div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFormSubcategory('hotel')}
+                          className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all ${
+                            formSubcategory === 'hotel'
+                              ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                              : 'border-foreground/15 bg-card text-foreground/70'
+                          }`}
+                        >
+                          <div className="font-bold">Chambre d'Hôtel / Suite</div>
+                          <div className="text-[10px] text-foreground/50 mt-0.5">Établissement avec chambres & dates de dispo</div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {formSubcategory === 'hotel' && (
+                      <div className="pt-3 border-t border-foreground/10 space-y-3">
+                        <span className="text-xs font-bold text-accent uppercase tracking-wider block">
+                          Disponibilités & Stock Hôtelier
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                              Stock de chambres
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={roomsCount}
+                              onChange={(e) => setRoomsCount(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                              Disponible à partir du
+                            </label>
+                            <input
+                              type="date"
+                              value={availableFrom}
+                              onChange={(e) => setAvailableFrom(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                              Disponible jusqu'au
+                            </label>
+                            <input
+                              type="date"
+                              value={availableTo}
+                              onChange={(e) => setAvailableTo(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 2. Titre & Localisation */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

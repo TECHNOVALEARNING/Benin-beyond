@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
-import { Layers, ShieldCheck, Sparkles, PhoneCall, CheckCircle2 } from 'lucide-react';
-import { COMBINED_PACKS } from '../data/packsData';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Layers, ShieldCheck, Sparkles, PhoneCall, CheckCircle2, ArrowRight, House, Car } from 'lucide-react';
+import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function PacksPage() {
+  const [packs, setPacks] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
 
-  const filteredPacks = COMBINED_PACKS.filter((p) => {
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const data = await getPacks();
+      setPacks(data || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const filteredPacks = packs.filter((p) => {
     if (filter === 'all') return true;
-    if (filter === 'cotonou') return p.location.toLowerCase().includes('cotonou');
-    if (filter === 'littoral') return p.location.toLowerCase().includes('ouidah') || p.location.toLowerCase().includes('littoral');
-    if (filter === 'safari') return p.location.toLowerCase().includes('pendjari');
+    if (filter === 'cotonou') return p.location?.toLowerCase().includes('cotonou');
+    if (filter === 'littoral') return p.location?.toLowerCase().includes('ouidah') || p.location?.toLowerCase().includes('littoral');
+    if (filter === 'safari') return p.location?.toLowerCase().includes('pendjari');
     return true;
   });
 
@@ -73,62 +86,102 @@ export function PacksPage() {
         </ScrollReveal>
       </div>
 
-      {/* 3. Filter Pills */}
-      <ScrollReveal delay={50} y={15} className="mt-8 flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-            filter === 'all'
-              ? 'bg-foreground text-background'
-              : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
-          }`}
-        >
-          Tous les packs ({COMBINED_PACKS.length})
-        </button>
-        <button
-          onClick={() => setFilter('cotonou')}
-          className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-            filter === 'cotonou'
-              ? 'bg-foreground text-background'
-              : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
-          }`}
-        >
-          Cotonou & Littoral
-        </button>
-        <button
-          onClick={() => setFilter('littoral')}
-          className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-            filter === 'littoral'
-              ? 'bg-foreground text-background'
-              : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
-          }`}
-        >
-          Ouidah & Océan
-        </button>
-        <button
-          onClick={() => setFilter('safari')}
-          className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-            filter === 'safari'
-              ? 'bg-foreground text-background'
-              : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
-          }`}
-        >
-          Safari & Grand Nord
-        </button>
-      </ScrollReveal>
+      {/* 3. Empty State or Packs Grid */}
+      {loading ? (
+        <div className="mt-16 text-center py-12 text-sm text-foreground/50">
+          Chargement des formules exclusives...
+        </div>
+      ) : packs.length === 0 ? (
+        <ScrollReveal delay={100} y={20} className="mt-12">
+          <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-8 sm:p-12 text-center max-w-2xl mx-auto shadow-sm">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
+              <Layers className="h-7 w-7" />
+            </div>
+            <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
+              Formules Signature en Préparation
+            </h3>
+            <p className="mt-2 text-xs sm:text-sm text-foreground/70 leading-relaxed">
+              L'administration Bénin Beyond configure actuellement des packs combinant nos meilleures résidences privées et véhicules d'exception. En attendant, composez votre séjour sur mesure en explorant notre catalogue.
+            </p>
 
-      {/* 4. Packs Grid */}
-      <div className="mt-8 grid gap-8 md:grid-cols-2">
-        {filteredPacks.map((pack, idx) => (
-          <ScrollReveal
-            key={pack.id}
-            delay={(idx % 2) * 120}
-            className="h-full"
-          >
-            <PackCard pack={pack} />
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to="/residences"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:bg-primary/90 transition-all shadow-md"
+              >
+                <House className="h-3.5 w-3.5" />
+                <span>Explorer les Hébergements</span>
+              </Link>
+              <Link
+                to="/explore?type=drive"
+                className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+              >
+                <Car className="h-3.5 w-3.5" />
+                <span>Explorer les Véhicules</span>
+              </Link>
+            </div>
+          </div>
+        </ScrollReveal>
+      ) : (
+        <>
+          {/* Filter Pills */}
+          <ScrollReveal delay={50} y={15} className="mt-8 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                filter === 'all'
+                  ? 'bg-foreground text-background'
+                  : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
+              }`}
+            >
+              Tous les packs ({packs.length})
+            </button>
+            <button
+              onClick={() => setFilter('cotonou')}
+              className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                filter === 'cotonou'
+                  ? 'bg-foreground text-background'
+                  : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
+              }`}
+            >
+              Cotonou & Littoral
+            </button>
+            <button
+              onClick={() => setFilter('littoral')}
+              className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                filter === 'littoral'
+                  ? 'bg-foreground text-background'
+                  : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
+              }`}
+            >
+              Ouidah & Océan
+            </button>
+            <button
+              onClick={() => setFilter('safari')}
+              className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                filter === 'safari'
+                  ? 'bg-foreground text-background'
+                  : 'border border-foreground/15 bg-card text-foreground hover:bg-muted'
+              }`}
+            >
+              Safari & Grand Nord
+            </button>
           </ScrollReveal>
-        ))}
-      </div>
+
+          {/* Packs Grid */}
+          <div className="mt-8 grid gap-8 md:grid-cols-2">
+            {filteredPacks.map((pack, idx) => (
+              <ScrollReveal
+                key={pack.id}
+                delay={(idx % 2) * 120}
+                className="h-full"
+              >
+                <PackCard pack={pack} />
+              </ScrollReveal>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
