@@ -235,7 +235,7 @@ RETURNS BOOLEAN AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
+    WHERE id = auth.uid() AND (role = 'admin' OR lower(email) = 'isidoretoudonou@gmail.com')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -322,9 +322,17 @@ DECLARE
   assigned_role TEXT;
   assigned_company TEXT;
   assigned_type TEXT;
+  assigned_name TEXT;
 BEGIN
-  -- Récupère les métadonnées passées lors de supabase.auth.signUp()
-  assigned_role := COALESCE(new.raw_user_meta_data->>'role', 'client');
+  -- Détection automatique et stricte du Super-Administrateur par son email unique
+  IF lower(new.email) = 'isidoretoudonou@gmail.com' THEN
+    assigned_role := 'admin';
+    assigned_name := 'Isidore Toudonou';
+  ELSE
+    assigned_role := COALESCE(new.raw_user_meta_data->>'role', 'client');
+    assigned_name := COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
+  END IF;
+
   assigned_company := new.raw_user_meta_data->>'company';
   assigned_type := new.raw_user_meta_data->>'partner_type';
 
@@ -335,16 +343,18 @@ BEGIN
     role,
     company_name,
     partner_type,
+    verified,
     created_at,
     updated_at
   )
   VALUES (
     new.id,
     new.email,
-    COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    assigned_name,
     assigned_role,
     assigned_company,
     assigned_type,
+    (assigned_role = 'admin'),
     NOW(),
     NOW()
   )
@@ -352,6 +362,8 @@ BEGIN
   SET
     email = EXCLUDED.email,
     full_name = EXCLUDED.full_name,
+    role = CASE WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN 'admin' ELSE public.profiles.role END,
+    verified = CASE WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN TRUE ELSE public.profiles.verified END,
     updated_at = NOW();
 
   RETURN new;
@@ -365,7 +377,14 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ==============================================================================
--- 10. INSTRUCTION POUR DÉFINIR L'ADMINISTRATEUR (À EXÉCUTER UNE FOIS L'EMAIL CONNU)
--- Exemple d'exécution :
--- UPDATE public.profiles SET role = 'admin' WHERE email = 'votre_email_admin@domaine.com';
+-- 10. ATTRIBUTION DU RÔLE SUPER-ADMINISTRATEUR UNIQUE (ISIDORE TOUDONOU)
+-- Exécutez cette requête dans l'Éditeur SQL Supabase pour conférer immédiatement
+-- tous les privilèges Super-Admin au compte officiel de la Direction :
 -- ==============================================================================
+UPDATE public.profiles 
+SET 
+  role = 'admin', 
+  verified = TRUE,
+  full_name = 'Isidore Toudonou'
+WHERE lower(email) = 'isidoretoudonou@gmail.com';
+

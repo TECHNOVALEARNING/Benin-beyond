@@ -6,12 +6,12 @@ const STORAGE_KEY = 'benin_beyond_user';
 
 export const DEMO_USERS = {
   admin: {
-    id: 'usr_admin_01',
-    name: 'Gilles A. (Super Admin)',
-    email: 'admin@beninbeyond.bj',
+    id: 'usr_admin_isidore',
+    name: 'Isidore Toudonou',
+    email: 'isidoretoudonou@gmail.com',
     role: 'admin',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    title: 'Directeur Plateforme & Modération'
+    title: 'Super-Administrateur & Direction Générale'
   },
   owner: {
     id: 'usr_owner_01',
@@ -65,13 +65,13 @@ export function AuthProvider({ children }) {
   });
 
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return Boolean(user && user.email?.includes('beninbeyond.bj'));
+    return Boolean(user && (user.email?.includes('beninbeyond.bj') || user.email === 'isidoretoudonou@gmail.com'));
   });
 
   useEffect(() => {
     if (user) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      setIsDemoMode(Boolean(user.email?.includes('beninbeyond.bj')));
+      setIsDemoMode(Boolean(user.email?.includes('beninbeyond.bj') || user.email === 'isidoretoudonou@gmail.com'));
     } else {
       localStorage.removeItem(STORAGE_KEY);
       setIsDemoMode(false);
@@ -84,17 +84,16 @@ export function AuthProvider({ children }) {
 
     // 1. Détection automatique et exclusive de l'Administrateur par son email unique
     const isAdminEmail =
+      cleanEmail === 'isidoretoudonou@gmail.com' ||
       (adminEnvEmail && cleanEmail === adminEnvEmail) ||
       cleanEmail === 'admin@beninbeyond.bj' ||
-      cleanEmail === 'admin@beninbeyond.com' ||
-      cleanEmail === 'direction@beninbeyond.bj' ||
       cleanEmail.startsWith('admin@');
 
     if (isAdminEmail) {
       const adminUser = {
         ...DEMO_USERS.admin,
         email: cleanEmail,
-        name: cleanEmail === 'admin@beninbeyond.bj' ? DEMO_USERS.admin.name : `Admin (${cleanEmail.split('@')[0]})`
+        name: cleanEmail === 'isidoretoudonou@gmail.com' ? 'Isidore Toudonou' : (cleanEmail === 'admin@beninbeyond.bj' ? DEMO_USERS.admin.name : `Admin (${cleanEmail.split('@')[0]})`)
       };
       setUser(adminUser);
       return { success: true, user: adminUser };
@@ -146,6 +145,7 @@ export function AuthProvider({ children }) {
 
     // Protection : si l'utilisateur s'inscrit avec l'email admin
     const isAdminEmail =
+      cleanEmail === 'isidoretoudonou@gmail.com' ||
       cleanEmail === 'admin@beninbeyond.bj' ||
       cleanEmail === 'admin@beninbeyond.com' ||
       cleanEmail.startsWith('admin@');
