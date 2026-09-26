@@ -1,68 +1,371 @@
 -- ==============================================================================
--- BENIN BEYOND — SUPABASE DATABASE SCHEMA
+-- BÉNIN BEYOND — PRODUCTION SUPABASE DATABASE SCHEMA
+-- Plateforme d'Hébergements de Prestige, Mobilité VIP & Découvertes au Bénin
 -- ==============================================================================
 
--- 1. Table des annonces (Listings)
+-- Active l'extension pgcrypto pour la génération d'UUID sécurisés
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ==============================================================================
+-- 1. TABLE DES PROFILS UTILISATEURS (PROFILES)
+-- Reliée à auth.users de Supabase avec rôles stricts (Client, Partenaire, Admin)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  phone TEXT,
+  role TEXT NOT NULL DEFAULT 'client' CHECK (role IN ('client', 'partner', 'admin')),
+  
+  -- Sous-type d'activité pour les partenaires (Sociétés, Hôtels, Restaurants, Loueurs)
+  partner_type TEXT CHECK (partner_type IN ('hotel', 'villa', 'vehicle', 'restaurant', 'agency')),
+  company_name TEXT,
+  tax_id TEXT, -- Numéro IFU au Bénin
+  
+  -- Audit & Conformité KYC
+  kyc_status TEXT NOT NULL DEFAULT 'pending' CHECK (kyc_status IN ('pending', 'verified', 'rejected')),
+  kyc_doc_type TEXT, -- 'Titre Foncier', 'Carte Grise', 'Registre de Commerce (RCCM)'
+  kyc_doc_url TEXT,
+  
+  avatar_url TEXT DEFAULT 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+  verified BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 2. TABLE DES ANNONCES & BIENS (LISTINGS)
+-- Hébergements (Villas & Hôtels avec dispo), Véhicules VIP et Restaurants/Découvertes
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.listings (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT ('lst_' || replace(gen_random_uuid()::text, '-', '')),
+  owner_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  
+  -- Catégories principales
   type TEXT NOT NULL CHECK (type IN ('stay', 'drive', 'discover')),
+  
+  -- Sous-catégories spécifiques demandées
+  subcategory TEXT NOT NULL DEFAULT 'villa' CHECK (
+    subcategory IN ('villa', 'hotel', 'apartment', 'car', 'restaurant', 'experience')
+  ),
+  
   title TEXT NOT NULL,
-  price NUMERIC NOT NULL,
-  price_unit TEXT NOT NULL, -- 'nuit', 'jour', 'personne', 'forfait'
+  location TEXT NOT NULL,
+  price NUMERIC NOT NULL CHECK (price >= 0),
+  price_unit TEXT NOT NULL DEFAULT 'nuit' CHECK (
+    price_unit IN ('nuit', 'jour', 'repas', 'forfait', 'personne', 'vente totale')
+  ),
+  
+  -- Paramètres de disponibilité pour Hôtels & Établissements
+  rooms_count INTEGER DEFAULT 1 CHECK (rooms_count >= 1),
+  available_from DATE,
+  available_to DATE,
+  
+  -- Statuts de modération
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'rejected', 'suspended')),
+  rejection_reason TEXT,
+  
   badge TEXT,
   featured BOOLEAN DEFAULT FALSE,
-  location TEXT NOT NULL,
   summary TEXT,
   description TEXT,
   specs JSONB DEFAULT '[]'::jsonb,
   amenities JSONB DEFAULT '[]'::jsonb,
-  host JSONB DEFAULT '{}'::jsonb,
-  rating NUMERIC DEFAULT 5.0,
-  reviews_count INTEGER DEFAULT 0,
+  gallery JSONB DEFAULT '[]'::jsonb,
+  video_url TEXT,
+  
+  rating NUMERIC DEFAULT 5.0 CHECK (rating >= 0 AND rating <= 5),
+  reviews_count INTEGER DEFAULT 0 CHECK (reviews_count >= 0),
+  
   map_lat DOUBLE PRECISION,
   map_lng DOUBLE PRECISION,
-  gallery JSONB DEFAULT '[]'::jsonb,
+  
   created_date TIMESTAMPTZ DEFAULT NOW(),
   updated_date TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Table des réservations (Bookings)
+-- ==============================================================================
+-- 3. TABLE DES PACKS COMBINÉS (PACKS)
+-- Formules Tout-en-un exclusives créées et pilotées par le Super-Administrateur
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.packs (
+  id TEXT PRIMARY KEY DEFAULT ('pack_' || replace(gen_random_uuid()::text, '-', '')),
+  title TEXT NOT NULL,
+  tagline TEXT,
+  price NUMERIC NOT NULL CHECK (price >= 0),
+  regular_price NUMERIC CHECK (regular_price >= price),
+  price_unit TEXT NOT NULL DEFAULT 'jour',
+  savings NUMERIC GENERATED ALWAYS AS (COALESCE(regular_price, price) - price) STORED,
+  
+  location TEXT NOT NULL,
+  badge TEXT DEFAULT 'Offre Privilège',
+  
+  -- Détails combinés (Hébergement + Véhicule VIP)
+  included JSONB NOT NULL DEFAULT '[]'::jsonb,
+  advantages JSONB DEFAULT '[]'::jsonb,
+  description TEXT,
+  gallery JSONB DEFAULT '[]'::jsonb,
+  
+  rating NUMERIC DEFAULT 5.0,
+  reviews_count INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 4. TABLE DES RÉSERVATIONS (BOOKINGS)
+-- Historique des achats généré automatiquement lors de la commande du voyageur
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.bookings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  booking_ref TEXT UNIQUE NOT NULL, -- e.g. BB-849201
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_ref TEXT UNIQUE NOT NULL, -- Format : BB-XXXXXX
+  client_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  
   customer_name TEXT NOT NULL,
   customer_email TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
+  
   items JSONB NOT NULL DEFAULT '[]'::jsonb,
   protection_options JSONB DEFAULT '{}'::jsonb,
-  payment_method TEXT NOT NULL, -- 'momo', 'card', 'wallet'
-  subtotal NUMERIC NOT NULL,
+  
+  subtotal NUMERIC NOT NULL CHECK (subtotal >= 0),
   options_total NUMERIC NOT NULL DEFAULT 0,
-  total_amount NUMERIC NOT NULL,
-  status TEXT DEFAULT 'confirmed' CHECK (status IN ('pending', 'confirmed', 'cancelled')),
+  total_amount NUMERIC NOT NULL CHECK (total_amount >= 0),
+  
+  -- Modèle économique plateforme Bénin Beyond (Commission & Payout)
+  commission_rate NUMERIC DEFAULT 0.15, -- 15% de commission standard
+  commission_amount NUMERIC NOT NULL DEFAULT 0,
+  partner_payout_amount NUMERIC NOT NULL DEFAULT 0,
+  
+  status TEXT NOT NULL DEFAULT 'confirmed' CHECK (
+    status IN ('pending', 'confirmed', 'completed', 'cancelled')
+  ),
+  payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (
+    payment_status IN ('unpaid', 'paid', 'refunded')
+  ),
+  
+  check_in DATE,
+  check_out DATE,
+  guests_count INTEGER DEFAULT 1,
+  special_requests TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 5. TABLE DES TRANSACTIONS & PAIEMENTS (PAYMENTS)
+-- Suivi direct des flux financiers (FedaPay, Mobile Money MTN/Moov, Carte)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_id UUID NOT NULL REFERENCES public.bookings(id) ON DELETE CASCADE,
+  transaction_ref TEXT UNIQUE NOT NULL, -- Référence FedaPay ou passerelle de paiement
+  
+  customer_email TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK (amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'XOF',
+  
+  payment_method TEXT NOT NULL CHECK (
+    payment_method IN ('fedapay', 'mtn_momo', 'moov_money', 'card', 'cash')
+  ),
+  payment_provider TEXT DEFAULT 'fedapay',
+  provider_tx_id TEXT,
+  
+  status TEXT NOT NULL DEFAULT 'completed' CHECK (
+    status IN ('pending', 'completed', 'failed', 'refunded')
+  ),
+  paid_at TIMESTAMPTZ DEFAULT NOW(),
+  metadata JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index pour la recherche et le tri rapide
+-- ==============================================================================
+-- 6. TABLE DES REVERSEMENTS PARTENAIRES (PAYOUTS)
+-- Trésorerie reversée aux propriétaires, hôteliers et loueurs de véhicules
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.payouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  partner_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  booking_id UUID REFERENCES public.bookings(id) ON DELETE SET NULL,
+  
+  amount NUMERIC NOT NULL CHECK (amount > 0),
+  method TEXT NOT NULL CHECK (method IN ('mtn_momo', 'moov_money', 'bank_transfer', 'cash')),
+  recipient_phone_or_account TEXT NOT NULL,
+  
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (
+    status IN ('pending', 'processing', 'completed', 'rejected')
+  ),
+  processed_by UUID REFERENCES public.profiles(id),
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 7. INDEX POUR ACCÉLÉRER LES RECHERCHES ET LES REQUÊTES
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 CREATE INDEX IF NOT EXISTS idx_listings_type ON public.listings(type);
+CREATE INDEX IF NOT EXISTS idx_listings_subcategory ON public.listings(subcategory);
+CREATE INDEX IF NOT EXISTS idx_listings_status ON public.listings(status);
 CREATE INDEX IF NOT EXISTS idx_listings_price ON public.listings(price);
-CREATE INDEX IF NOT EXISTS idx_listings_featured ON public.listings(featured);
+CREATE INDEX IF NOT EXISTS idx_listings_owner ON public.listings(owner_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_ref ON public.bookings(booking_ref);
+CREATE INDEX IF NOT EXISTS idx_bookings_email ON public.bookings(customer_email);
+CREATE INDEX IF NOT EXISTS idx_bookings_client ON public.bookings(client_id);
+CREATE INDEX IF NOT EXISTS idx_payments_booking ON public.payments(booking_id);
+CREATE INDEX IF NOT EXISTS idx_payments_tx_ref ON public.payments(transaction_ref);
 
--- RLS (Row Level Security)
+-- ==============================================================================
+-- 8. ROW LEVEL SECURITY (RLS) & FONCTIONS D'AUTORISATION
+-- ==============================================================================
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.packs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payouts ENABLE ROW LEVEL SECURITY;
 
--- Politiques de lecture publique pour les annonces
-CREATE POLICY "Public read listings"
-  ON public.listings FOR SELECT
+-- Helper : Vérifier si l'utilisateur connecté est Administrateur
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Politiques RLS pour PROFILES
+CREATE POLICY "Public profile view"
+  ON public.profiles FOR SELECT
   USING (true);
 
--- Politiques d'insertion et lecture pour les réservations
-CREATE POLICY "Public insert bookings"
+CREATE POLICY "Users can update own profile"
+  ON public.profiles FOR UPDATE
+  USING (auth.uid() = id OR public.is_admin());
+
+-- Politiques RLS pour LISTINGS
+CREATE POLICY "Public can view active listings"
+  ON public.listings FOR SELECT
+  USING (status = 'active' OR auth.uid() = owner_id OR public.is_admin());
+
+CREATE POLICY "Partners and admins can insert listings"
+  ON public.listings FOR INSERT
+  WITH CHECK (auth.uid() = owner_id OR public.is_admin());
+
+CREATE POLICY "Partners and admins can update own listings"
+  ON public.listings FOR UPDATE
+  USING (auth.uid() = owner_id OR public.is_admin());
+
+CREATE POLICY "Admins can delete listings"
+  ON public.listings FOR DELETE
+  USING (public.is_admin() OR auth.uid() = owner_id);
+
+-- Politiques RLS pour PACKS
+CREATE POLICY "Public can view active packs"
+  ON public.packs FOR SELECT
+  USING (is_active = true OR public.is_admin());
+
+CREATE POLICY "Admins can manage packs"
+  ON public.packs FOR ALL
+  USING (public.is_admin());
+
+-- Politiques RLS pour BOOKINGS
+CREATE POLICY "Clients can view own bookings"
+  ON public.bookings FOR SELECT
+  USING (
+    customer_email = auth.jwt() ->> 'email'
+    OR client_id = auth.uid()
+    OR public.is_admin()
+  );
+
+CREATE POLICY "Public checkout can insert bookings"
   ON public.bookings FOR INSERT
   WITH CHECK (true);
 
-CREATE POLICY "Public read own booking"
-  ON public.bookings FOR SELECT
-  USING (true);
+CREATE POLICY "Admins can manage bookings"
+  ON public.bookings FOR ALL
+  USING (public.is_admin());
+
+-- Politiques RLS pour PAYMENTS
+CREATE POLICY "Clients can view own payments"
+  ON public.payments FOR SELECT
+  USING (
+    customer_email = auth.jwt() ->> 'email'
+    OR public.is_admin()
+  );
+
+CREATE POLICY "System can record payments"
+  ON public.payments FOR INSERT
+  WITH CHECK (true);
+
+-- Politiques RLS pour PAYOUTS
+CREATE POLICY "Partners can view own payouts"
+  ON public.payouts FOR SELECT
+  USING (partner_id = auth.uid() OR public.is_admin());
+
+CREATE POLICY "Admins can manage payouts"
+  ON public.payouts FOR ALL
+  USING (public.is_admin());
+
+-- ==============================================================================
+-- 9. TRIGGER DE CRÉATION AUTOMATIQUE DU PROFIL LORS DE L'INSCRIPTION
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  assigned_role TEXT;
+  assigned_company TEXT;
+  assigned_type TEXT;
+BEGIN
+  -- Récupère les métadonnées passées lors de supabase.auth.signUp()
+  assigned_role := COALESCE(new.raw_user_meta_data->>'role', 'client');
+  assigned_company := new.raw_user_meta_data->>'company';
+  assigned_type := new.raw_user_meta_data->>'partner_type';
+
+  INSERT INTO public.profiles (
+    id,
+    email,
+    full_name,
+    role,
+    company_name,
+    partner_type,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    assigned_role,
+    assigned_company,
+    assigned_type,
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    email = EXCLUDED.email,
+    full_name = EXCLUDED.full_name,
+    updated_at = NOW();
+
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Déclencheur sur la table auth.users
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ==============================================================================
+-- 10. INSTRUCTION POUR DÉFINIR L'ADMINISTRATEUR (À EXÉCUTER UNE FOIS L'EMAIL CONNU)
+-- Exemple d'exécution :
+-- UPDATE public.profiles SET role = 'admin' WHERE email = 'votre_email_admin@domaine.com';
+-- ==============================================================================

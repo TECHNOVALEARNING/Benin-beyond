@@ -80,9 +80,11 @@ export function AuthProvider({ children }) {
 
   const login = (email, password, optionalRole = null) => {
     const cleanEmail = (email || '').trim().toLowerCase();
+    const adminEnvEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
 
     // 1. Détection automatique et exclusive de l'Administrateur par son email unique
     const isAdminEmail =
+      (adminEnvEmail && cleanEmail === adminEnvEmail) ||
       cleanEmail === 'admin@beninbeyond.bj' ||
       cleanEmail === 'admin@beninbeyond.com' ||
       cleanEmail === 'direction@beninbeyond.bj' ||
@@ -164,6 +166,40 @@ export function AuthProvider({ children }) {
     return { success: true, user: newUser };
   };
 
+  // Création / Activation automatique du compte Voyageur au moment de la commande
+  const registerOrLoginClient = ({ name, email, phone }) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) return null;
+
+    const registeredList = getRegisteredUsers();
+    let existing = registeredList.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (existing) {
+      existing = {
+        ...existing,
+        name: existing.name || name || cleanEmail.split('@')[0],
+        phone: phone || existing.phone || ''
+      };
+      saveRegisteredUser(existing);
+      setUser(existing);
+      return existing;
+    }
+
+    const newClient = {
+      id: `usr_client_${Date.now()}`,
+      name: name || cleanEmail.split('@')[0].replace(/[._]/g, ' '),
+      email: cleanEmail,
+      phone: phone || '',
+      role: 'client',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+      createdAt: new Date().toISOString()
+    };
+
+    saveRegisteredUser(newClient);
+    setUser(newClient);
+    return newClient;
+  };
+
   const logout = () => {
     setUser(null);
   };
@@ -178,6 +214,7 @@ export function AuthProvider({ children }) {
         login,
         loginAsDemo,
         register,
+        registerOrLoginClient,
         logout
       }}
     >

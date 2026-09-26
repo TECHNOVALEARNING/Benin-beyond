@@ -211,9 +211,21 @@ export function RegisterPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-foreground/80 mb-1.5">
-                      Types de biens que vous souhaitez proposer
+                      Catégorie de votre établissement / activité
                     </label>
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleAssetType('hotel')}
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+                          assetTypes.includes('hotel')
+                            ? 'bg-primary/20 border-primary text-primary'
+                            : 'border-foreground/10 text-foreground/60 hover:text-foreground'
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-primary" />
+                        <span>Hôtel / Établissement Hôtelier</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => toggleAssetType('stay')}
@@ -224,7 +236,7 @@ export function RegisterPage() {
                         }`}
                       >
                         <FontAwesomeIcon icon={faHouse} className="h-3 w-3 text-primary" />
-                        <span>Logements (Villas & Appartements)</span>
+                        <span>Villa & Appartement Privé</span>
                       </button>
                       <button
                         type="button"
@@ -236,11 +248,35 @@ export function RegisterPage() {
                         }`}
                       >
                         <FontAwesomeIcon icon={faCar} className="h-3 w-3 text-accent" />
-                        <span>Véhicules (Location ou Vente)</span>
+                        <span>Véhicules & Flotte VIP</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleAssetType('restaurant')}
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium border transition-all ${
+                          assetTypes.includes('restaurant')
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-700'
+                            : 'border-foreground/10 text-foreground/60 hover:text-foreground'
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={faCompass} className="h-3 w-3 text-amber-600" />
+                        <span>Restaurant & Gastronomie</span>
                       </button>
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* Traveler Frictionless Advice */}
+              {accountType === 'client' && (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-foreground/75 leading-relaxed">
+                  <p className="font-semibold text-primary mb-1">
+                    💡 Bon à savoir pour les voyageurs :
+                  </p>
+                  <p>
+                    Vous n'avez pas besoin de créer un compte à l'avance. Dès votre première réservation (villa, hôtel ou véhicule), votre espace client et vos vouchers officiels seront automatiquement générés avec votre adresse e-mail !
+                  </p>
+                </div>
               )}
 
               {/* Password */}

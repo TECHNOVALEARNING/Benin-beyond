@@ -10,6 +10,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { createBooking } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -39,14 +40,15 @@ const PAYMENT_METHODS = [
 
 export function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
+  const { user, registerOrLoginClient } = useAuth();
 
   const [activeStep, setActiveStep] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('momo');
   const [customer, setCustomer] = useState({
-    name: '',
-    email: '',
-    phone: ''
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
@@ -79,11 +81,21 @@ export function CheckoutPage() {
 
     setIsSubmitting(true);
     const bookingRef = `BB-${Math.floor(Math.random() * 900000 + 100000)}`;
+    const clientEmail = (customer.email || 'voyageur@beninbeyond.bj').trim().toLowerCase();
+
+    // Activation automatique du compte Voyageur au moment de l'achat
+    if (registerOrLoginClient) {
+      registerOrLoginClient({
+        name: customer.name,
+        email: clientEmail,
+        phone: customer.phone
+      });
+    }
 
     const payload = {
       booking_ref: bookingRef,
       customer_name: customer.name,
-      customer_email: customer.email || 'voyageur@beninbeyond.bj',
+      customer_email: clientEmail,
       customer_phone: customer.phone,
       items: items,
       protection_options: selectedOptions,
@@ -129,8 +141,11 @@ export function CheckoutPage() {
             </div>
             <h1 className="section-title mt-5 text-3xl">Réservation confirmée</h1>
             <p className="mt-2 text-sm text-secondary-foreground/75">
-              Un itinéraire de voyage a été envoyé à {confirmedBooking.customer_email || customer.email || 'votre adresse'}.
+              Votre itinéraire et votre voucher officiel sont enregistrés pour <strong>{confirmedBooking.customer_email || customer.email}</strong>.
             </p>
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs text-accent font-medium">
+              <span>✓ Compte Voyageur créé & actif pour cet email</span>
+            </div>
           </div>
 
           {/* Details Body */}
