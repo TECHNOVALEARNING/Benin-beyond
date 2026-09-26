@@ -188,7 +188,7 @@ export function AdminDashboardPage() {
     setLoading(true);
     try {
       const [allListings, allBookings, allPacks, allEvents, allUsers] = await Promise.all([
-        getListings(),
+        getListings({ includePending: true }),
         getBookings(),
         getPacks(),
         getEvents(),

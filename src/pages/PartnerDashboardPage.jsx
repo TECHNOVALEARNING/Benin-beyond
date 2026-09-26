@@ -142,7 +142,7 @@ export function PartnerDashboardPage() {
     setLoading(true);
     try {
       const [allListings, allBookings] = await Promise.all([
-        getListings(),
+        getListings({ includePending: true }),
         getBookings()
       ]);
       setListings(allListings);
@@ -420,8 +420,17 @@ export function PartnerDashboardPage() {
                 {user?.name || 'Partenaire Hôte'}
               </p>
               <p className="text-[11px] text-secondary-foreground/70 truncate flex items-center gap-1">
-                <FontAwesomeIcon icon={faCircleCheck} className="text-accent text-[10px]" />
-                <span>Propriétaire vérifié</span>
+                {user?.verified ? (
+                  <>
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-[10px]" />
+                    <span className="text-emerald-400 font-semibold">KYC Validé (Certifié)</span>
+                  </>
+                ) : (
+                  <>
+                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-[10px]" />
+                    <span className="text-amber-400 font-semibold">Audit KYC en attente</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -543,6 +552,21 @@ export function PartnerDashboardPage() {
           {currentSection === 'overview' && (
             <div className="space-y-8">
               
+              {/* KYC Status Notice Banner */}
+              {!user?.verified && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 flex items-start gap-3.5 shadow-sm">
+                  <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                    <FontAwesomeIcon icon={faClock} className="h-4 w-4" />
+                  </div>
+                  <div className="text-xs flex-1">
+                    <p className="font-bold text-sm text-foreground">Compte Propriétaire en cours d'audit KYC</p>
+                    <p className="mt-1 text-foreground/70 leading-relaxed">
+                      Bienvenue sur Bénin Beyond ! Vous pouvez dès à présent créer et enregistrer vos annonces d'hébergement ou de véhicule. Vos annonces seront automatiquement transmises à l'administration et deviendront visibles publiquement sur la plateforme dès que votre profil sera certifié par la direction.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Top Financial & Operational Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 

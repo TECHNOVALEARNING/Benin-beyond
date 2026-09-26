@@ -41,8 +41,10 @@ function saveCustomListings(listings) {
   }
 }
 
-export async function getListings() {
+export async function getListings(options = {}) {
+  const { includePending = false } = options;
   const custom = getCustomListings();
+  let all = [];
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -52,18 +54,31 @@ export async function getListings() {
         .order('created_date', { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return [...custom, ...data].filter((item) => item.type === 'stay' || item.type === 'drive');
+        all = [...custom, ...data];
+      } else {
+        all = [...custom, ...INITIAL_LISTINGS];
       }
       if (error) {
         console.warn('Supabase listings fetch error, falling back to local dataset:', error.message);
       }
     } catch (err) {
       console.warn('Network or Supabase query exception:', err);
+      all = [...custom, ...INITIAL_LISTINGS];
     }
+  } else {
+    all = [...custom, ...INITIAL_LISTINGS];
   }
 
-  // Fallback to custom + initial listings (strictly stay & drive)
-  return [...custom, ...INITIAL_LISTINGS].filter((item) => item.type === 'stay' || item.type === 'drive');
+  // Filtrer les biens de prestige (stay & drive)
+  const valid = all.filter((item) => item.type === 'stay' || item.type === 'drive');
+
+  // Si appel public (includePending: false), masquer impérativement les annonces en attente ou rejetées
+  if (!includePending) {
+    return valid.filter((item) => item.status === 'active' || !item.status);
+  }
+
+  // Si appel d'administration ou partenaire, renvoyer tout pour la modération
+  return valid;
 }
 
 export async function getListingById(id) {
