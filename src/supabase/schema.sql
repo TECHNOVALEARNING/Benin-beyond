@@ -29,9 +29,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   
   avatar_url TEXT DEFAULT 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
   verified BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Assure la colonne is_active pour les tables existantes
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
 -- ==============================================================================
 -- 2. TABLE DES ANNONCES & BIENS (LISTINGS)

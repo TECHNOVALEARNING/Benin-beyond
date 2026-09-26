@@ -53,6 +53,7 @@ import { getListings, deleteListing, updateListingStatus, addListing } from '../
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
+import { getUsers, updateUser, toggleUserStatus, deleteUser } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 
@@ -74,7 +75,7 @@ export function AdminDashboardPage() {
   const { user, logout } = useAuth();
 
   // Navigation State
-  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'finances' | 'packs' | 'events'
+  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'users' | 'finances' | 'packs' | 'events'
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Data states (100% données réelles)
@@ -84,8 +85,22 @@ export function AdminDashboardPage() {
   const [payouts, setPayouts] = useState([]);
   const [packs, setPacks] = useState([]);
   const [events, setEvents] = useState([]);
+  const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Users Management State & Filters
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('all'); // 'all' | 'client' | 'owner' | 'admin'
+  const [userStatusFilter, setUserStatusFilter] = useState('all'); // 'all' | 'active' | 'suspended'
+  const [editingUser, setEditingUser] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [userFormName, setUserFormName] = useState('');
+  const [userFormEmail, setUserFormEmail] = useState('');
+  const [userFormPhone, setUserFormPhone] = useState('');
+  const [userFormRole, setUserFormRole] = useState('client');
+  const [userFormCompany, setUserFormCompany] = useState('');
+  const [userFormIsActive, setUserFormIsActive] = useState(true);
 
   // Events Management Modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -172,71 +187,45 @@ export function AdminDashboardPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [allListings, allBookings, allPacks, allEvents] = await Promise.all([
+      const [allListings, allBookings, allPacks, allEvents, allUsers] = await Promise.all([
         getListings(),
         getBookings(),
         getPacks(),
-        getEvents()
+        getEvents(),
+        getUsers()
       ]);
       setListings(allListings || []);
       setBookings(allBookings || []);
       setPacks(allPacks || []);
       setEvents(allEvents || []);
+      setUsersList(allUsers || []);
 
-      // Récupération des partenaires réels
+      // Récupération des partenaires réels depuis le registre unifié
+      const ownerUsers = (allUsers || []).filter((u) => u.role === 'owner' || u.role === 'partner');
+      setPartners(ownerUsers.map((p) => ({
+        id: p.id,
+        name: p.name || p.email.split('@')[0],
+        company: p.company || 'Partenaire Bénin Beyond',
+        email: p.email,
+        phone: p.phone || 'Non renseigné',
+        listingsCount: (allListings || []).filter((l) => l.owner_id === p.id || l.owner_email === p.email).length,
+        kycStatus: p.verified ? 'verified' : 'pending',
+        docType: 'Dossier Conforme',
+        joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
+        balance: 0
+      })));
+
       if (isSupabaseConfigured && supabase) {
         try {
-          const { data: profs } = await supabase
-            .from('profiles')
-            .select('*')
-            .in('role', ['owner', 'partner']);
-          
-          if (profs && profs.length > 0) {
-            setPartners(profs.map((p) => ({
-              id: p.id,
-              name: p.full_name || p.email.split('@')[0],
-              company: p.company_name || 'Partenaire Bénin Beyond',
-              email: p.email,
-              phone: p.phone || 'Non renseigné',
-              listingsCount: (allListings || []).filter((l) => l.owner_id === p.id).length,
-              kycStatus: p.kyc_status || 'verified',
-              docType: p.kyc_doc_type || 'Dossier Conforme',
-              joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
-              balance: 0
-            })));
-          } else {
-            setPartners([]);
-          }
-
           const { data: pData } = await supabase
             .from('payouts')
             .select('*')
             .order('created_at', { ascending: false });
           setPayouts(pData || []);
-        } catch (e) {
-          console.warn('Erreur chargement profils/payouts:', e);
-          setPartners([]);
+        } catch {
           setPayouts([]);
         }
       } else {
-        try {
-          const regUsers = JSON.parse(localStorage.getItem('benin_beyond_registered_users') || '[]');
-          const ownerUsers = regUsers.filter((u) => u.role === 'owner' || u.role === 'partner');
-          setPartners(ownerUsers.map((u) => ({
-            id: u.id,
-            name: u.name,
-            company: u.company || 'Partenaire Local',
-            email: u.email,
-            phone: u.phone || 'Non renseigné',
-            listingsCount: (allListings || []).filter((l) => l.owner_id === u.id).length,
-            kycStatus: u.verified ? 'verified' : 'pending',
-            docType: 'Dossier Partenaire',
-            joined: 'Récemment',
-            balance: 0
-          })));
-        } catch {
-          setPartners([]);
-        }
         setPayouts([]);
       }
     } catch (err) {
@@ -313,6 +302,68 @@ export function AdminDashboardPage() {
       const updated = await getEvents();
       setEvents(updated);
       showToast(`Événement "${title}" supprimé.`);
+    }
+  };
+
+  // User Management Handlers (Super-Admin)
+  const handleOpenEditUser = (targetUser) => {
+    setEditingUser(targetUser);
+    setUserFormName(targetUser.name || '');
+    setUserFormEmail(targetUser.email || '');
+    setUserFormPhone(targetUser.phone !== 'Non renseigné' ? (targetUser.phone || '') : '');
+    setUserFormRole(targetUser.role || 'client');
+    setUserFormCompany(targetUser.company || '');
+    setUserFormIsActive(targetUser.is_active !== false);
+    setShowUserModal(true);
+  };
+
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      await updateUser(editingUser.id, {
+        email: userFormEmail,
+        name: userFormName,
+        phone: userFormPhone || 'Non renseigné',
+        role: userFormRole,
+        company: userFormCompany,
+        is_active: userFormIsActive
+      });
+      showToast(`Utilisateur "${userFormName}" mis à jour avec succès !`);
+      const updated = await getUsers();
+      setUsersList(updated);
+      setShowUserModal(false);
+    } catch (err) {
+      showToast(err.message || 'Erreur lors de la modification');
+    }
+  };
+
+  const handleToggleUserActive = async (targetUser) => {
+    try {
+      const willBeActive = targetUser.is_active === false;
+      const actionName = willBeActive ? 'réactiver' : 'désactiver temporairement';
+      if (window.confirm(`Confirmez-vous vouloir ${actionName} le compte de "${targetUser.name}" (${targetUser.email}) ?`)) {
+        await toggleUserStatus(targetUser.id, targetUser.is_active, targetUser.email);
+        showToast(`Compte de ${targetUser.name} ${willBeActive ? 'réactivé' : 'désactivé'}.`);
+        const updated = await getUsers();
+        setUsersList(updated);
+      }
+    } catch (err) {
+      showToast(err.message || 'Erreur action utilisateur');
+    }
+  };
+
+  const handleDeleteUserRecord = async (targetUser) => {
+    try {
+      if (window.confirm(`ATTENTION : Supprimer définitivement le compte de "${targetUser.name}" (${targetUser.email}) ? Cette action est irréversible.`)) {
+        await deleteUser(targetUser.id, targetUser.email);
+        showToast(`Utilisateur "${targetUser.name}" supprimé.`);
+        const updated = await getUsers();
+        setUsersList(updated);
+      }
+    } catch (err) {
+      showToast(err.message || 'Erreur suppression utilisateur');
     }
   };
 
@@ -711,6 +762,40 @@ export function AdminDashboardPage() {
     });
   }, [bookings, bookingFilter, bookingSearch]);
 
+  // Filtered users & metrics
+  const filteredUsers = useMemo(() => {
+    return usersList.filter((u) => {
+      const q = userSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.company?.toLowerCase().includes(q) ||
+        u.phone?.toLowerCase().includes(q);
+
+      const matchRole =
+        userRoleFilter === 'all' ||
+        (userRoleFilter === 'client' && u.role === 'client') ||
+        (userRoleFilter === 'owner' && (u.role === 'owner' || u.role === 'partner')) ||
+        (userRoleFilter === 'admin' && u.role === 'admin');
+
+      const matchStatus =
+        userStatusFilter === 'all' ||
+        (userStatusFilter === 'active' && u.is_active !== false) ||
+        (userStatusFilter === 'suspended' && u.is_active === false);
+
+      return matchSearch && matchRole && matchStatus;
+    });
+  }, [usersList, userSearch, userRoleFilter, userStatusFilter]);
+
+  const userMetrics = useMemo(() => {
+    const total = usersList.length;
+    const clients = usersList.filter((u) => u.role === 'client' && u.is_active !== false).length;
+    const owners = usersList.filter((u) => (u.role === 'owner' || u.role === 'partner') && u.is_active !== false).length;
+    const suspended = usersList.filter((u) => u.is_active === false).length;
+    return { total, clients, owners, suspended };
+  }, [usersList]);
+
   const navGroups = [
     {
       title: 'SUPERVISION & GOUVERNANCE',
@@ -733,9 +818,16 @@ export function AdminDashboardPage() {
         {
           key: 'partners',
           label: 'Hôtes & Partenaires',
-          icon: faUsers,
+          icon: faBuilding,
           badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null,
           badgeColor: 'bg-rose-500/25 text-rose-300 border-rose-500/40'
+        },
+        {
+          key: 'users',
+          label: 'Gestion Utilisateurs',
+          icon: faUsers,
+          badge: usersList.length > 0 ? `${usersList.length} comptes` : null,
+          badgeColor: 'bg-primary/20 text-primary border-primary/30'
         },
         { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
         { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup },
@@ -1787,6 +1879,249 @@ export function AdminDashboardPage() {
                             </td>
                           </tr>
                         ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS */}
+          {/* ========================================================================= */}
+          {currentSection === 'users' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
+                    <FontAwesomeIcon icon={faUsers} className="h-3 w-3" />
+                    Répertoire & Gouvernance
+                  </div>
+                  <h2 className="font-heading text-2xl font-black text-foreground">
+                    Gestion des Utilisateurs
+                  </h2>
+                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
+                    Pilotez tous les comptes de la plateforme (voyageurs, hôtes propriétaires et administrateurs). 
+                    Vous pouvez modifier les informations d'un utilisateur, suspendre ou réactiver son accès, ou supprimer un profil obsolète.
+                  </p>
+                </div>
+              </div>
+
+              {/* Stat Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
+                    Total Utilisateurs
+                  </span>
+                  <p className="font-heading text-2xl font-black text-foreground">{userMetrics.total}</p>
+                  <p className="text-[10px] text-foreground/50 mt-0.5">Comptes enregistrés</p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
+                    Clients Voyageurs
+                  </span>
+                  <p className="font-heading text-2xl font-black text-emerald-700">{userMetrics.clients}</p>
+                  <p className="text-[10px] text-emerald-600/70 mt-0.5">Comptes actifs</p>
+                </div>
+
+                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent-foreground block mb-1">
+                    Hôtes & Partenaires
+                  </span>
+                  <p className="font-heading text-2xl font-black text-accent-foreground">{userMetrics.owners}</p>
+                  <p className="text-[10px] text-accent-foreground/70 mt-0.5">Gestionnaires d'annonces</p>
+                </div>
+
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 block mb-1">
+                    Comptes Suspendus
+                  </span>
+                  <p className="font-heading text-2xl font-black text-rose-600">{userMetrics.suspended}</p>
+                  <p className="text-[10px] text-rose-500/70 mt-0.5">Accès désactivé</p>
+                </div>
+              </div>
+
+              {/* Filters & Search Toolbar */}
+              <div className="rounded-2xl border border-foreground/10 bg-card p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
+                <div className="relative w-full md:w-80">
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/40 h-3.5 w-3.5" />
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Rechercher par nom, email, société..."
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-background border border-foreground/15 text-xs text-foreground placeholder:text-foreground/40 focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  {/* Role filter */}
+                  <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
+                    {[
+                      { key: 'all', label: 'Tous' },
+                      { key: 'client', label: 'Clients' },
+                      { key: 'owner', label: 'Propriétaires' },
+                      { key: 'admin', label: 'Admins' }
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setUserRoleFilter(tab.key)}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                          userRoleFilter === tab.key ? 'bg-card text-foreground shadow-sm' : 'text-foreground/60 hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Status filter */}
+                  <select
+                    value={userStatusFilter}
+                    onChange={(e) => setUserStatusFilter(e.target.value)}
+                    className="rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none"
+                  >
+                    <option value="all">Tous les statuts</option>
+                    <option value="active">✓ Actifs uniquement</option>
+                    <option value="suspended">✕ Suspendus uniquement</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Users Table */}
+              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4">Utilisateur</th>
+                        <th className="p-4">Rôle</th>
+                        <th className="p-4">Société / Enseigne</th>
+                        <th className="p-4">Téléphone</th>
+                        <th className="p-4">Statut Compte</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
+                            Aucun utilisateur trouvé avec ces critères de recherche.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredUsers.map((u) => {
+                          const isSuperAdmin = u.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com';
+                          const isActive = u.is_active !== false;
+
+                          return (
+                            <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                    {u.name?.[0] || u.email?.[0] || 'U'}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-foreground flex items-center gap-1.5">
+                                      <span>{u.name}</span>
+                                      {isSuperAdmin && (
+                                        <span className="text-[9px] rounded-full bg-accent/25 text-accent border border-accent/40 px-1.5 py-0.2 font-black uppercase">
+                                          Super-Admin
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-[11px] text-foreground/50">{u.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="p-4">
+                                {u.role === 'admin' ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-accent/20 text-accent-foreground border border-accent/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                                    <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5" />
+                                    Administrateur
+                                  </span>
+                                ) : u.role === 'owner' || u.role === 'partner' ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 text-[10px] font-bold uppercase">
+                                    <FontAwesomeIcon icon={faBuilding} className="h-2.5 w-2.5" />
+                                    Propriétaire / Hôte
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-muted text-foreground/70 px-2.5 py-0.5 text-[10px] font-semibold">
+                                    Voyageur Client
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-4 text-foreground/80">
+                                {u.company || <span className="text-foreground/40 italic">Particulier</span>}
+                              </td>
+
+                              <td className="p-4 text-foreground/80">
+                                {u.phone}
+                              </td>
+
+                              <td className="p-4">
+                                {isActive ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    Actif
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                    Suspendu / Désactivé
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* Toggle Active / Suspended */}
+                                  {!isSuperAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleUserActive(u)}
+                                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all shadow-sm ${
+                                        isActive
+                                          ? 'border border-amber-500/30 text-amber-700 hover:bg-amber-500/10'
+                                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                      }`}
+                                      title={isActive ? "Suspendre l'accès de cet utilisateur" : "Réactiver l'accès"}
+                                    >
+                                      {isActive ? 'Désactiver' : 'Réactiver'}
+                                    </button>
+                                  )}
+
+                                  {/* Edit User Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditUser(u)}
+                                    className="p-1.5 rounded-lg border border-foreground/15 text-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                                    title="Modifier les informations"
+                                  >
+                                    <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
+                                  </button>
+
+                                  {/* Delete User Button (Protected for Super-Admin) */}
+                                  {!isSuperAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUserRecord(u)}
+                                      className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 transition-colors"
+                                      title="Supprimer définitivement ce compte"
+                                    >
+                                      <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -3695,6 +4030,153 @@ export function AdminDashboardPage() {
                   className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
                 >
                   {editingEvent ? 'Enregistrer les Modifications' : 'Publier en Ligne'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL ÉDITION UTILISATEUR */}
+      {/* ========================================================================= */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl border border-foreground/10 bg-background p-6 shadow-2xl relative my-8">
+            <div className="flex items-center justify-between border-b border-foreground/10 pb-4 mb-4">
+              <div>
+                <h3 className="text-base font-black text-foreground">
+                  Modifier l'Utilisateur
+                </h3>
+                <p className="text-xs text-foreground/60">
+                  Ajustez le profil, le rôle ou le statut d'activation du compte
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUserModal(false)}
+                className="h-8 w-8 rounded-full border border-foreground/15 flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Nom Complet *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={userFormName}
+                  onChange={(e) => setUserFormName(e.target.value)}
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Adresse Email (Identifiant)
+                </label>
+                <input
+                  type="email"
+                  disabled
+                  value={userFormEmail}
+                  className="w-full rounded-xl border border-foreground/10 bg-muted/50 px-3.5 py-2.5 text-xs text-foreground/60 cursor-not-allowed"
+                />
+                <span className="text-[10px] text-foreground/40 mt-1 block">L'email sert d'identifiant unique sécurisé de connexion.</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Téléphone
+                  </label>
+                  <input
+                    type="tel"
+                    value={userFormPhone}
+                    onChange={(e) => setUserFormPhone(e.target.value)}
+                    placeholder="+229 97 00 00 00"
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Rôle sur la Plateforme
+                  </label>
+                  <select
+                    value={userFormRole}
+                    onChange={(e) => setUserFormRole(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  >
+                    <option value="client">Voyageur (Client)</option>
+                    <option value="owner">Propriétaire / Hôte / Loueur</option>
+                    <option value="admin">Administrateur</option>
+                  </select>
+                </div>
+              </div>
+
+              {(userFormRole === 'owner' || userFormRole === 'partner') && (
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Société / Nom de la structure hôte
+                  </label>
+                  <input
+                    type="text"
+                    value={userFormCompany}
+                    onChange={(e) => setUserFormCompany(e.target.value)}
+                    placeholder="Ex: Villa Royale Ouidah SARL"
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="rounded-xl border border-foreground/10 bg-muted/20 p-4">
+                <label className="text-xs font-bold text-foreground block mb-1.5">
+                  Statut d'Activation du Compte
+                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="userActiveRadio"
+                      checked={userFormIsActive === true}
+                      onChange={() => setUserFormIsActive(true)}
+                      className="text-primary focus:ring-primary"
+                    />
+                    <span className="font-semibold text-emerald-600">Actif (Accès autorisé)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="userActiveRadio"
+                      checked={userFormIsActive === false}
+                      onChange={() => setUserFormIsActive(false)}
+                      className="text-primary focus:ring-primary"
+                    />
+                    <span className="font-semibold text-rose-600">Suspendu (Désactivé)</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-foreground/50 mt-2">
+                  Un compte suspendu ne peut plus se connecter à la plateforme, mais toutes ses données restent archivées.
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-foreground/10 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUserModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
+                >
+                  Enregistrer les Modifications
                 </button>
               </div>
             </form>

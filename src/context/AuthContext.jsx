@@ -257,12 +257,15 @@ export function AuthProvider({ children }) {
       intendedCompany ||
       (assignedRole === 'owner' ? 'Partenaire Hébergement & Mobilité' : undefined);
 
+    const isActive = cleanEmail === SUPER_ADMIN_EMAIL ? true : (profile?.is_active !== false && existingLocalUser?.is_active !== false);
+
     const finalUser = {
       id: authUser.id,
       email: cleanEmail,
       name: resolvedName,
       role: assignedRole,
       company: resolvedCompany,
+      is_active: isActive,
       avatar:
         profile?.avatar_url ||
         existingLocalUser?.avatar ||
@@ -350,6 +353,9 @@ export function AuthProvider({ children }) {
     const registeredList = getRegisteredUsers();
     const savedUser = registeredList.find((u) => u.email.toLowerCase() === cleanEmail);
     if (savedUser) {
+      if (savedUser.is_active === false && cleanEmail !== SUPER_ADMIN_EMAIL) {
+        return { success: false, error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction." };
+      }
       const sanitizedUser = {
         ...savedUser,
         role: resolveUserRole(savedUser.email, savedUser.role)
