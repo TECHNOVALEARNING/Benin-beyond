@@ -52,6 +52,16 @@ export function ClientDashboardPage() {
   const [profileSaved, setProfileSaved] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/dashboard/client' } } });
+    } else if (user.role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (user.role === 'owner' || user.role === 'partner') {
+      navigate('/dashboard/partner', { replace: true });
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
     let mounted = true;
     setLoading(true);
 

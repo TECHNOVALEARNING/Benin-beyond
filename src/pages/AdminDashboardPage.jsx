@@ -221,6 +221,18 @@ export function AdminDashboardPage() {
   const [publishSuccess, setPublishSuccess] = useState('');
 
   useEffect(() => {
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/admin' } } });
+    } else if (user.role !== 'admin') {
+      if (user.role === 'owner' || user.role === 'partner') {
+        navigate('/dashboard/partner', { replace: true });
+      } else {
+        navigate('/dashboard/client', { replace: true });
+      }
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
     loadAllData();
   }, []);
 

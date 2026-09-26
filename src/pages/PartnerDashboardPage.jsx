@@ -125,6 +125,16 @@ export function PartnerDashboardPage() {
   const [payoutSuccess, setPayoutSuccess] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/dashboard/partner' } } });
+    } else if (user.role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (user.role === 'client') {
+      navigate('/dashboard/client', { replace: true });
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
     loadAllData();
   }, []);
 
