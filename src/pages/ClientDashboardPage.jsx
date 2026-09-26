@@ -38,7 +38,7 @@ import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function ClientDashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, upgradeToOwner } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('bookings'); // 'bookings' | 'profile' | 'discoveries'
@@ -119,6 +119,18 @@ export function ClientDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={async () => {
+                await upgradeToOwner();
+                navigate('/dashboard/partner', { replace: true });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 border border-accent/40 px-3.5 py-1.5 text-xs font-bold text-accent hover:bg-accent hover:text-black transition-all shadow-sm active:scale-95"
+              title="Accéder ou basculer vers votre Espace Propriétaire / Partenaire"
+            >
+              <FontAwesomeIcon icon={faHouse} className="h-3 w-3" />
+              <span>Espace Propriétaire</span>
+            </button>
+
             <Link
               to="/explore"
               className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-4 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25 transition-all"

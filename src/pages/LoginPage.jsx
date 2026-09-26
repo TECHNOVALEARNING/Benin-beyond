@@ -83,7 +83,20 @@ export function LoginPage() {
     setError('');
     setLoadingGoogle(true);
     try {
-      const res = await loginWithGoogle();
+      const cleanEmail = email.trim().toLowerCase();
+      let hintRole = null;
+      let hintCompany = '';
+      if (cleanEmail) {
+        try {
+          const registered = JSON.parse(localStorage.getItem('benin_beyond_registered_users') || '[]');
+          const found = registered.find((u) => u.email.toLowerCase() === cleanEmail);
+          if (found) {
+            hintRole = found.role;
+            hintCompany = found.company;
+          }
+        } catch {}
+      }
+      const res = await loginWithGoogle(hintRole, hintCompany);
       if (res?.success && res.user) {
         if (res.user.role === 'admin') {
           navigate('/admin', { replace: true });

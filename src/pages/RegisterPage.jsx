@@ -104,7 +104,7 @@ export function RegisterPage() {
     setError('');
     setLoadingGoogle(true);
     try {
-      const res = await loginWithGoogle();
+      const res = await loginWithGoogle(accountType, company);
       if (res?.success && res.user) {
         if (res.user.role === 'admin') {
           navigate('/admin', { replace: true });

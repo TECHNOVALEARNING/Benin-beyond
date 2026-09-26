@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   phone TEXT,
-  role TEXT NOT NULL DEFAULT 'client' CHECK (role IN ('client', 'partner', 'admin')),
+  role TEXT NOT NULL DEFAULT 'client' CHECK (role IN ('client', 'owner', 'partner', 'admin')),
   
   -- Sous-type d'activité pour les partenaires (Sociétés, Hôtels, Restaurants, Loueurs)
   partner_type TEXT CHECK (partner_type IN ('hotel', 'villa', 'vehicle', 'restaurant', 'agency')),
@@ -323,18 +323,37 @@ DECLARE
   assigned_company TEXT;
   assigned_type TEXT;
   assigned_name TEXT;
+  existing_profile RECORD;
 BEGIN
-  -- Détection automatique et stricte du Super-Administrateur par son email unique
+  -- 1. Détection prioritaire du Super-Administrateur par son email officiel
   IF lower(new.email) = 'isidoretoudonou@gmail.com' THEN
     assigned_role := 'admin';
     assigned_name := 'Isidore Toudonou';
   ELSE
-    assigned_role := COALESCE(new.raw_user_meta_data->>'role', 'client');
-    assigned_name := COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
+    -- 2. Vérifier si un profil existe déjà pour cet email dans public.profiles
+    SELECT * INTO existing_profile
+    FROM public.profiles
+    WHERE lower(email) = lower(new.email)
+    LIMIT 1;
+
+    -- Si le compte était déjà propriétaire, partenaire ou admin, NE JAMAIS LE RÉTROGRADER
+    IF existing_profile.id IS NOT NULL AND existing_profile.role IN ('owner', 'partner', 'admin') THEN
+      assigned_role := existing_profile.role;
+      assigned_name := COALESCE(existing_profile.full_name, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
+      assigned_company := COALESCE(existing_profile.company_name, new.raw_user_meta_data->>'company');
+      assigned_type := COALESCE(existing_profile.partner_type, new.raw_user_meta_data->>'partner_type');
+    ELSE
+      assigned_role := COALESCE(new.raw_user_meta_data->>'role', 'client');
+      assigned_name := COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
+      assigned_company := new.raw_user_meta_data->>'company';
+      assigned_type := new.raw_user_meta_data->>'partner_type';
+    END IF;
   END IF;
 
-  assigned_company := new.raw_user_meta_data->>'company';
-  assigned_type := new.raw_user_meta_data->>'partner_type';
+  -- Harmonisation des rôles
+  IF assigned_role = 'owner' THEN
+    assigned_role := 'partner';
+  END IF;
 
   INSERT INTO public.profiles (
     id,
@@ -361,9 +380,18 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET
     email = EXCLUDED.email,
-    full_name = EXCLUDED.full_name,
-    role = CASE WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN 'admin' ELSE public.profiles.role END,
-    verified = CASE WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN TRUE ELSE public.profiles.verified END,
+    full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name),
+    role = CASE 
+      WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN 'admin'
+      WHEN public.profiles.role IN ('partner', 'owner', 'admin') THEN public.profiles.role
+      ELSE EXCLUDED.role 
+    END,
+    company_name = COALESCE(public.profiles.company_name, EXCLUDED.company_name),
+    partner_type = COALESCE(public.profiles.partner_type, EXCLUDED.partner_type),
+    verified = CASE 
+      WHEN lower(EXCLUDED.email) = 'isidoretoudonou@gmail.com' THEN TRUE 
+      ELSE public.profiles.verified 
+    END,
     updated_at = NOW();
 
   RETURN new;

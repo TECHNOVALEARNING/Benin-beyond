@@ -48,10 +48,31 @@ export function resolveUserRole(email, rawRole = null) {
   ) {
     return 'admin';
   }
+
+  // 1. Rôle explicite propriétaire ou partenaire
   if (rawRole === 'owner' || rawRole === 'partner') {
     return 'owner';
   }
-  return 'client';
+
+  // 2. Si l'utilisateur est déjà enregistré localement comme propriétaire
+  try {
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    const found = list.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+    if (found && (found.role === 'owner' || found.role === 'partner')) {
+      return 'owner';
+    }
+  } catch {}
+
+  // 3. Intention de rôle OAuth (ex: clic Google depuis Espace Hôte ou inscription partenaire)
+  try {
+    const intendedRole = localStorage.getItem('benin_beyond_oauth_intended_role');
+    if (intendedRole === 'owner' || intendedRole === 'partner') {
+      return 'owner';
+    }
+  } catch {}
+
+  return rawRole === 'admin' ? 'admin' : (rawRole || 'client');
 }
 
 function getRegisteredUsers() {
@@ -164,38 +185,115 @@ export function AuthProvider({ children }) {
     let profile = null;
 
     try {
-      const { data } = await supabase
+      // 1. Chercher d'abord par ID Supabase
+      let { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
+
+      // 2. Si non trouvé par ID ou si rôle 'client', chercher par email (compte pré-existant ou OAuth Google)
+      if ((!data || data.role === 'client') && cleanEmail) {
+        const { data: byEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        if (byEmail) {
+          data = { ...data, ...byEmail };
+        }
+      }
       profile = data;
     } catch (e) {
       console.warn('Erreur synchronisation profil Supabase:', e);
     }
 
-    const assignedRole = resolveUserRole(cleanEmail, profile?.role);
+    // 3. Récupérer intention OAuth si initiée depuis /register ou /login
+    const intendedRole = localStorage.getItem('benin_beyond_oauth_intended_role');
+    const intendedCompany = localStorage.getItem('benin_beyond_oauth_intended_company');
+    localStorage.removeItem('benin_beyond_oauth_intended_role');
+    localStorage.removeItem('benin_beyond_oauth_intended_company');
+
+    // 4. Utilisateur local enregistré
+    const registeredList = getRegisteredUsers();
+    const existingLocalUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+    // 5. Vérifier si l'utilisateur possède déjà des annonces créées
+    let hasListings = false;
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { count } = await supabase
+          .from('listings')
+          .select('*', { count: 'exact', head: true })
+          .or(`owner_id.eq.${authUser.id},owner_email.eq.${cleanEmail}`);
+        if (count && count > 0) hasListings = true;
+      }
+    } catch {}
+
+    // Détermination stricte du rôle :
+    // Un propriétaire/partenaire ne doit JAMAIS être rétrogradé en client
+    let candidateRole = profile?.role;
+    if (!candidateRole || candidateRole === 'client') {
+      if (intendedRole === 'owner' || intendedRole === 'partner') {
+        candidateRole = 'owner';
+      } else if (existingLocalUser?.role === 'owner' || existingLocalUser?.role === 'partner') {
+        candidateRole = 'owner';
+      } else if (hasListings) {
+        candidateRole = 'owner';
+      }
+    }
+
+    const assignedRole = resolveUserRole(cleanEmail, candidateRole);
     const resolvedName =
       profile?.full_name ||
+      existingLocalUser?.name ||
       authUser.user_metadata?.full_name ||
       authUser.user_metadata?.name ||
       (cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : cleanEmail.split('@')[0].replace(/[._]/g, ' '));
+
+    const resolvedCompany =
+      profile?.company_name ||
+      existingLocalUser?.company ||
+      intendedCompany ||
+      (assignedRole === 'owner' ? 'Partenaire Hébergement & Mobilité' : undefined);
 
     const finalUser = {
       id: authUser.id,
       email: cleanEmail,
       name: resolvedName,
       role: assignedRole,
-      company: profile?.company_name || (assignedRole === 'owner' ? 'Partenaire Hébergement & Mobilité' : undefined),
+      company: resolvedCompany,
       avatar:
         profile?.avatar_url ||
+        existingLocalUser?.avatar ||
         authUser.user_metadata?.avatar_url ||
+        authUser.user_metadata?.picture ||
         (assignedRole === 'admin'
           ? DEMO_USERS.admin.avatar
           : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'),
-      verified: assignedRole === 'admin' ? true : Boolean(profile?.verified),
-      provider: authUser.app_metadata?.provider || 'supabase'
+      verified: assignedRole === 'admin' ? true : Boolean(profile?.verified || existingLocalUser?.verified),
+      provider: authUser.app_metadata?.provider || 'google'
     };
+
+    // Mettre à jour Supabase profiles pour persister définitivement le rôle
+    if (isSupabaseConfigured && supabase && (assignedRole === 'owner' || assignedRole === 'admin')) {
+      try {
+        const dbRole = assignedRole === 'admin' ? 'admin' : 'partner';
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: authUser.id,
+            email: cleanEmail,
+            full_name: resolvedName,
+            role: dbRole,
+            company_name: resolvedCompany || 'Partenaire Hébergeur & Mobilité',
+            verified: assignedRole === 'admin' ? true : Boolean(profile?.verified || existingLocalUser?.verified),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'email' });
+      } catch (err) {
+        console.warn('Synchro rôle Supabase profiles:', err);
+      }
+    }
 
     saveRegisteredUser(finalUser);
     setUser(finalUser);
@@ -279,9 +377,20 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Connexion OAuth avec Google
+   * Connexion OAuth avec Google (avec préservation stricte du rôle et du compte)
    */
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (intendedRole = null, company = '') => {
+    if (intendedRole) {
+      try {
+        localStorage.setItem('benin_beyond_oauth_intended_role', intendedRole);
+        if (company) {
+          localStorage.setItem('benin_beyond_oauth_intended_company', company);
+        }
+      } catch (e) {
+        console.warn('Erreur stockage intention rôle OAuth:', e);
+      }
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -291,27 +400,29 @@ export function AuthProvider({ children }) {
           }
         });
         if (error) {
-          // Si le provider Google n'a pas encore été configuré dans Supabase Cloud
           console.warn('Supabase Google OAuth non configuré ou erreur:', error.message);
-          return fallbackGoogleLogin(error.message);
+          return fallbackGoogleLogin(error.message, intendedRole, company);
         }
         return { success: true, data };
       } catch (err) {
         console.error('Erreur Supabase Google OAuth:', err);
-        return fallbackGoogleLogin(err.message);
+        return fallbackGoogleLogin(err.message, intendedRole, company);
       }
     } else {
-      return fallbackGoogleLogin();
+      return fallbackGoogleLogin('', intendedRole, company);
     }
   };
 
-  // Relevé de secours Google immédiat (permet de tester l'expérience Google en 1 clic)
-  const fallbackGoogleLogin = (reason = '') => {
+  // Relevé de secours Google immédiat
+  const fallbackGoogleLogin = (reason = '', hintRole = null, hintCompany = '') => {
+    const intendedRole = hintRole || localStorage.getItem('benin_beyond_oauth_intended_role') || 'client';
+    const cleanRole = intendedRole === 'owner' || intendedRole === 'partner' ? 'owner' : 'client';
     const demoGoogleUser = {
       id: `usr_google_${Date.now()}`,
-      name: 'Voyageur Google VIP',
-      email: 'client.google@gmail.com',
-      role: 'client',
+      name: cleanRole === 'owner' ? 'Propriétaire Partenaire Google' : 'Voyageur Google VIP',
+      email: cleanRole === 'owner' ? 'partenaire.google@beninbeyond.bj' : 'client.google@gmail.com',
+      role: cleanRole,
+      company: cleanRole === 'owner' ? (hintCompany || 'Résidences & Flotte Bénin') : undefined,
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
       provider: 'google',
       verified: true,
@@ -428,6 +539,41 @@ export function AuthProvider({ children }) {
   };
 
   /**
+   * Bascule / activation immédiate du rôle Propriétaire / Partenaire
+   */
+  const upgradeToOwner = async (companyName = '') => {
+    if (!user) return null;
+    const cleanEmail = (user.email || '').toLowerCase().trim();
+    if (cleanEmail === SUPER_ADMIN_EMAIL || user.role === 'admin') return user;
+
+    const updatedUser = {
+      ...user,
+      role: 'owner',
+      company: companyName || user.company || 'Partenaire Hébergement & Mobilité'
+    };
+
+    saveRegisteredUser(updatedUser);
+    setUser(updatedUser);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            role: 'partner',
+            company_name: updatedUser.company,
+            updated_at: new Date().toISOString()
+          })
+          .ilike('email', cleanEmail);
+      } catch (e) {
+        console.warn('Erreur upgradeToOwner Supabase:', e);
+      }
+    }
+
+    return updatedUser;
+  };
+
+  /**
    * Déconnexion complète
    */
   const logout = async () => {
@@ -454,6 +600,7 @@ export function AuthProvider({ children }) {
         loginAsDemo,
         register,
         registerOrLoginClient,
+        upgradeToOwner,
         logout
       }}
     >
