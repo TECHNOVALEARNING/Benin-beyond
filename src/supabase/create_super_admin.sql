@@ -71,7 +71,7 @@ BEGIN
       created_at,
       updated_at
     ) VALUES (
-      new_admin_id::text,
+      new_admin_id,
       new_admin_id::text,
       new_admin_id,
       jsonb_build_object('sub', new_admin_id::text, 'email', admin_email),
