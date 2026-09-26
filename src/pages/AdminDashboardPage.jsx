@@ -792,14 +792,15 @@ export function AdminDashboardPage() {
         }`}
       >
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {/* Logo & Close button on Mobile */}
+          {/* Logo & Superviseur status in one unified, airy header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="font-heading text-xl font-bold tracking-tight text-white">
+            <Link to="/" className="flex items-center gap-2.5 group" title="Retourner à l'accueil du site">
+              <span className="font-heading text-xl font-bold tracking-tight text-white group-hover:text-accent transition-colors">
                 Bénin Beyond
               </span>
-              <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent uppercase">
-                Admin Cockpit
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[10px] font-bold text-accent uppercase tracking-wider">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Superviseur
               </span>
             </Link>
             <button
@@ -808,22 +809,6 @@ export function AdminDashboardPage() {
             >
               <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
             </button>
-          </div>
-
-          {/* Admin Profile Card */}
-          <div className="p-3.5 mx-4 my-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3 shrink-0 shadow-sm">
-            <div className="h-10 w-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center font-heading font-bold text-accent shrink-0">
-              <FontAwesomeIcon icon={faCrown} className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-white truncate">
-                {user?.name || 'Direction Plateforme'}
-              </p>
-              <div className="flex items-center gap-1.5 text-[11px] text-accent">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Superviseur Général</span>
-              </div>
-            </div>
           </div>
 
           {/* Navigation Groups */}
@@ -920,25 +905,14 @@ export function AdminDashboardPage() {
           </nav>
         </div>
 
-        {/* Sidebar Footer Links (Strictly Pinned at the Bottom - Direct & Clean) */}
-        <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
-          <Link
-            to="/"
-            className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs text-secondary-foreground/80 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <FontAwesomeIcon icon={faHouse} className="h-3.5 w-3.5 text-accent" />
-              <span>Voir le site public</span>
-            </div>
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-secondary-foreground/40" />
-          </Link>
-
+        {/* Sidebar Footer (Déconnexion directe & épurée) */}
+        <div className="p-4 border-t border-secondary-foreground/10 shrink-0 bg-secondary">
           <button
             onClick={() => {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 transition-colors"
+            className="w-full flex items-center justify-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>

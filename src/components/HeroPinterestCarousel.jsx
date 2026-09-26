@@ -174,16 +174,7 @@ export function HeroPinterestCarousel() {
       <div className="relative z-20 mx-auto flex h-full max-w-8xl flex-col justify-end px-6 pb-16 pt-24 md:px-12 lg:pb-20">
         
         <div className="w-full max-w-2xl text-white">
-          <div>
-            <span
-              key={`tagline-${currentIndex}`}
-              className="inline-block rounded-full bg-accent/20 px-3.5 py-1 text-accent font-semibold tracking-widest text-[11px] uppercase backdrop-blur-md border border-accent/30 animate-fadeIn mb-2"
-            >
-              {activeDest.tagline}
-            </span>
-          </div>
-
-          <div className="mt-2 overflow-visible">
+          <div className="overflow-visible">
             <h1
               key={`title-${currentIndex}`}
               className="font-heading text-4xl sm:text-5xl md:text-6xl font-extrabold uppercase tracking-normal text-white animate-slideUp leading-tight drop-shadow-lg"
