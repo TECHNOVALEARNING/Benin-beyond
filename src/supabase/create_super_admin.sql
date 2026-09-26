@@ -96,6 +96,7 @@ BEGIN
     partner_type,
     kyc_status,
     verified,
+    is_active,
     avatar_url,
     created_at,
     updated_at
@@ -109,6 +110,7 @@ BEGIN
     NULL,
     'verified',
     TRUE,
+    TRUE,
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
     NOW(),
     NOW()
@@ -121,6 +123,7 @@ BEGIN
     company_name = 'Bénin Beyond Direction',
     kyc_status = 'verified',
     verified = TRUE,
+    is_active = TRUE,
     updated_at = NOW();
 
   RAISE NOTICE 'Succès : Le compte Super-Admin % a été créé/mis à jour avec le rôle admin !', admin_email;
