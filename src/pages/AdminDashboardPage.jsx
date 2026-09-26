@@ -44,13 +44,16 @@ import {
   faCirclePlus,
   faUpload,
   faImage,
-  faPlus
+  faPlus,
+  faPen
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
+import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
+import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 const SAMPLE_INSPIRATION_PHOTOS = {
@@ -66,104 +69,34 @@ const SAMPLE_INSPIRATION_PHOTOS = {
   ]
 };
 
-const INITIAL_PARTNERS = [
-  {
-    id: 'part_01',
-    name: 'Patrice Hounkpati',
-    company: 'Littoral Prestige Assets',
-    email: 'proprietaire@beninbeyond.bj',
-    phone: '+229 97 22 45 10',
-    listingsCount: 4,
-    kycStatus: 'verified', // 'verified' | 'pending' | 'rejected'
-    docType: 'Titre Foncier + CNI Béninoise',
-    joined: 'Août 2026',
-    balance: 850000
-  },
-  {
-    id: 'part_02',
-    name: 'Armel Dossou',
-    company: 'Cotonou VIP Rental & Fleet',
-    email: 'armel.d@rentcar-benin.com',
-    phone: '+229 96 11 00 22',
-    listingsCount: 3,
-    kycStatus: 'verified',
-    docType: 'Cartes Grises + RC Commerce',
-    joined: 'Juillet 2026',
-    balance: 420000
-  },
-  {
-    id: 'part_03',
-    name: 'Claire Ahouandjinou',
-    company: 'Ouidah Heritage Lodges',
-    email: 'claire@ouidah-lodges.bj',
-    phone: '+229 95 80 30 15',
-    listingsCount: 2,
-    kycStatus: 'pending',
-    docType: 'Attestation d’Hébergeur Touristique',
-    joined: 'Septembre 2026',
-    balance: 290000
-  },
-  {
-    id: 'part_04',
-    name: 'Désiré Tokpo',
-    company: 'Ganvié Ecotour & Pirogues VIP',
-    email: 'desire@ganvie-tours.bj',
-    phone: '+229 90 40 88 12',
-    listingsCount: 2,
-    kycStatus: 'verified',
-    docType: 'Agrément Ministère du Tourisme',
-    joined: 'Août 2026',
-    balance: 180000
-  }
-];
-
-const INITIAL_PAYOUT_REQUESTS = [
-  {
-    id: 'PO-401',
-    partnerName: 'Patrice Hounkpati',
-    company: 'Littoral Prestige Assets',
-    amount: 550000,
-    method: 'MTN Mobile Money',
-    recipient: '+229 97 22 45 10',
-    date: '15 Sept 2026, 11:20',
-    status: 'pending' // 'pending' | 'approved' | 'rejected'
-  },
-  {
-    id: 'PO-402',
-    partnerName: 'Armel Dossou',
-    company: 'Cotonou VIP Rental',
-    amount: 320000,
-    method: 'Celtiis Cash',
-    recipient: '+229 40 11 22 33',
-    date: '14 Sept 2026, 16:45',
-    status: 'approved'
-  }
-];
-
-const MONTHLY_STATS = [
-  { month: 'Mai', gmv: 4200000, commission: 630000 },
-  { month: 'Juin', gmv: 6800000, commission: 1020000 },
-  { month: 'Juillet', gmv: 9400000, commission: 1410000 },
-  { month: 'Août', gmv: 12500000, commission: 1875000 },
-  { month: 'Septembre', gmv: 14850000, commission: 2227500 }
-];
-
 export function AdminDashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
   // Navigation State
-  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'finances' | 'packs'
+  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'finances' | 'packs' | 'events'
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Data states
+  // Data states (100% données réelles)
   const [listings, setListings] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [partners, setPartners] = useState(INITIAL_PARTNERS);
-  const [payouts, setPayouts] = useState(INITIAL_PAYOUT_REQUESTS);
+  const [partners, setPartners] = useState([]);
+  const [payouts, setPayouts] = useState([]);
   const [packs, setPacks] = useState([]);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Events Management Modal state
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [evtTitle, setEvtTitle] = useState('');
+  const [evtBadge, setEvtBadge] = useState('Festival International');
+  const [evtPeriod, setEvtPeriod] = useState('');
+  const [evtLocation, setEvtLocation] = useState('Ouidah');
+  const [evtDescription, setEvtDescription] = useState('');
+  const [evtImage, setEvtImage] = useState('');
+  const [evtTag, setEvtTag] = useState('Culture & Spiritualité');
 
   // Modals & Details
   const [selectedBookingModal, setSelectedBookingModal] = useState(null);
@@ -239,18 +172,147 @@ export function AdminDashboardPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [allListings, allBookings, allPacks] = await Promise.all([
+      const [allListings, allBookings, allPacks, allEvents] = await Promise.all([
         getListings(),
         getBookings(),
-        getPacks()
+        getPacks(),
+        getEvents()
       ]);
-      setListings(allListings);
-      setBookings(allBookings);
+      setListings(allListings || []);
+      setBookings(allBookings || []);
       setPacks(allPacks || []);
+      setEvents(allEvents || []);
+
+      // Récupération des partenaires réels
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('role', ['owner', 'partner']);
+          
+          if (profs && profs.length > 0) {
+            setPartners(profs.map((p) => ({
+              id: p.id,
+              name: p.full_name || p.email.split('@')[0],
+              company: p.company_name || 'Partenaire Bénin Beyond',
+              email: p.email,
+              phone: p.phone || 'Non renseigné',
+              listingsCount: (allListings || []).filter((l) => l.owner_id === p.id).length,
+              kycStatus: p.kyc_status || 'verified',
+              docType: p.kyc_doc_type || 'Dossier Conforme',
+              joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
+              balance: 0
+            })));
+          } else {
+            setPartners([]);
+          }
+
+          const { data: pData } = await supabase
+            .from('payouts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          setPayouts(pData || []);
+        } catch (e) {
+          console.warn('Erreur chargement profils/payouts:', e);
+          setPartners([]);
+          setPayouts([]);
+        }
+      } else {
+        try {
+          const regUsers = JSON.parse(localStorage.getItem('benin_beyond_registered_users') || '[]');
+          const ownerUsers = regUsers.filter((u) => u.role === 'owner' || u.role === 'partner');
+          setPartners(ownerUsers.map((u) => ({
+            id: u.id,
+            name: u.name,
+            company: u.company || 'Partenaire Local',
+            email: u.email,
+            phone: u.phone || 'Non renseigné',
+            listingsCount: (allListings || []).filter((l) => l.owner_id === u.id).length,
+            kycStatus: u.verified ? 'verified' : 'pending',
+            docType: 'Dossier Partenaire',
+            joined: 'Récemment',
+            balance: 0
+          })));
+        } catch {
+          setPartners([]);
+        }
+        setPayouts([]);
+      }
     } catch (err) {
       console.error('Erreur chargement admin:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Event Handlers for Cultural Events CRUD
+  const handleOpenCreateEvent = () => {
+    setEditingEvent(null);
+    setEvtTitle('');
+    setEvtBadge('Festival International');
+    setEvtPeriod('');
+    setEvtLocation('Ouidah');
+    setEvtDescription('');
+    setEvtImage('https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80');
+    setEvtTag('Culture & Spiritualité');
+    setShowEventModal(true);
+  };
+
+  const handleOpenEditEvent = (evt) => {
+    setEditingEvent(evt);
+    setEvtTitle(evt.title || '');
+    setEvtBadge(evt.badge || '');
+    setEvtPeriod(evt.period || '');
+    setEvtLocation(evt.location || '');
+    setEvtDescription(evt.description || '');
+    setEvtImage(evt.image || '');
+    setEvtTag(evt.tag || '');
+    setShowEventModal(true);
+  };
+
+  const handleSaveEvent = async (e) => {
+    e.preventDefault();
+    if (!evtTitle || !evtPeriod || !evtLocation) {
+      showToast('Veuillez renseigner le titre, la période et le lieu.');
+      return;
+    }
+
+    if (editingEvent) {
+      await updateEvent(editingEvent.id, {
+        title: evtTitle,
+        badge: evtBadge,
+        period: evtPeriod,
+        location: evtLocation,
+        description: evtDescription,
+        image: evtImage,
+        tag: evtTag
+      });
+      showToast(`Événement "${evtTitle}" mis à jour avec succès !`);
+    } else {
+      await addEvent({
+        title: evtTitle,
+        badge: evtBadge,
+        period: evtPeriod,
+        location: evtLocation,
+        description: evtDescription,
+        image: evtImage,
+        tag: evtTag
+      });
+      showToast(`Nouvel événement "${evtTitle}" publié en direct !`);
+    }
+
+    const updated = await getEvents();
+    setEvents(updated);
+    setShowEventModal(false);
+  };
+
+  const handleDeleteEvent = async (id, title) => {
+    if (window.confirm(`Supprimer définitivement l'événement "${title}" ?`)) {
+      await deleteEvent(id);
+      const updated = await getEvents();
+      setEvents(updated);
+      showToast(`Événement "${title}" supprimé.`);
     }
   };
 
@@ -466,21 +528,21 @@ export function AdminDashboardPage() {
     setUploadedVideo(null);
   };
 
-  // Financial calculations
+  // Financial calculations 100% réelles
   const platformMetrics = useMemo(() => {
-    const totalGmv = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || 0), 0) || 14850000;
-    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || 0) * 0.15)), 0) || 2227500;
+    const totalGmv = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0), 0);
+    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0) * 0.15)), 0);
     const totalDisbursed = totalGmv - totalCommissions;
     const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
     const pendingPayoutsCount = payouts.filter((p) => p.status === 'pending').length;
-    const pendingKycCount = partners.filter((p) => p.kycStatus === 'pending').length;
+    const pendingKycCount = partners.filter((p) => p.kycStatus === 'pending' || p.kyc_status === 'pending').length;
     const pendingListingsCount = listings.filter((l) => l.status === 'pending').length;
 
     return {
       gmv: totalGmv,
       commissions: totalCommissions,
       disbursed: totalDisbursed,
-      activeListings: listings.length,
+      activeListings: listings.filter((l) => l.status === 'active' || !l.status).length,
       partnersCount: partners.length,
       pendingBookingsCount,
       pendingPayoutsCount,
@@ -488,6 +550,26 @@ export function AdminDashboardPage() {
       pendingListingsCount
     };
   }, [bookings, listings, partners, payouts]);
+
+  // Statistiques mensuelles réelles
+  const monthlyStats = useMemo(() => {
+    if (bookings.length === 0) {
+      return [];
+    }
+    const monthsMap = {};
+    bookings.forEach((b) => {
+      const d = b.created_at ? new Date(b.created_at) : new Date();
+      const monthName = d.toLocaleDateString('fr-FR', { month: 'short' });
+      if (!monthsMap[monthName]) {
+        monthsMap[monthName] = { month: monthName, gmv: 0, commission: 0 };
+      }
+      const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
+      const comm = Number(b.commission_amount) || Math.round(gmv * 0.15);
+      monthsMap[monthName].gmv += gmv;
+      monthsMap[monthName].commission += comm;
+    });
+    return Object.values(monthsMap);
+  }, [bookings]);
 
   // Actions
   const handleToggleListingStatus = (id) => {
@@ -656,7 +738,14 @@ export function AdminDashboardPage() {
           badgeColor: 'bg-rose-500/25 text-rose-300 border-rose-500/40'
         },
         { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
-        { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup }
+        { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup },
+        {
+          key: 'events',
+          label: 'Événements & Agenda',
+          icon: faCalendarCheck,
+          badge: events.length > 0 ? `${events.length} publiés` : null,
+          badgeColor: 'bg-primary/20 text-primary border-primary/30'
+        }
       ]
     },
     {
@@ -946,9 +1035,8 @@ export function AdminDashboardPage() {
                   <p className="font-heading text-2xl font-black text-foreground">
                     {formatPrice(platformMetrics.gmv)}
                   </p>
-                  <p className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-                    <FontAwesomeIcon icon={faArrowTrendUp} className="h-3 w-3" />
-                    <span>+24.5% vs mois précédent</span>
+                  <p className="text-[11px] text-foreground/60 font-medium mt-1">
+                    {bookings.length} réservation{bookings.length > 1 ? 's' : ''} enregistrée{bookings.length > 1 ? 's' : ''}
                   </p>
                 </div>
 
@@ -1004,21 +1092,21 @@ export function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Monthly Trend Visual Bar Chart */}
+              {/* Monthly Trend Visual Bar Chart (Données 100% réelles) */}
               <div className="rounded-3xl border border-foreground/10 bg-card p-6 md:p-8 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                   <div>
                     <h3 className="font-heading text-base font-bold text-foreground">
-                      Croissance Mensuelle du Volume d'Affaires & Commissions
+                      Activité & Volume d'Affaires Mensuel
                     </h3>
                     <p className="text-xs text-foreground/60 mt-0.5">
-                      Progression continue des transactions sur le littoral béninois
+                      Statistiques réelles calculées à partir des réservations effectives
                     </p>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="h-3 w-3 rounded-md bg-primary" />
-                      <span className="text-foreground/70 font-medium">GMV Total</span>
+                      <span className="text-foreground/70 font-medium">GMV Réel</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="h-3 w-3 rounded-md bg-accent" />
@@ -1027,27 +1115,38 @@ export function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-3 sm:gap-6 items-end pt-8 pb-2 border-b border-foreground/10 h-64">
-                  {MONTHLY_STATS.map((stat, idx) => {
-                    const heightPercent = Math.min(100, Math.round((stat.gmv / 15000000) * 100));
-                    return (
-                      <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end">
-                        <span className="text-[10px] font-bold text-foreground/60 hidden sm:block">
-                          {Math.round(stat.gmv / 1000000 * 10) / 10}M
-                        </span>
-                        <div className="w-full max-w-[50px] bg-muted/60 rounded-xl overflow-hidden flex flex-col justify-end p-1 relative h-full">
-                          <div
-                            className="w-full bg-primary rounded-lg transition-all duration-500"
-                            style={{ height: `${heightPercent}%` }}
-                          />
+                {monthlyStats.length === 0 ? (
+                  <div className="h-44 rounded-2xl bg-muted/20 border border-dashed border-foreground/15 flex flex-col items-center justify-center p-6 text-center">
+                    <FontAwesomeIcon icon={faChartPie} className="h-8 w-8 text-foreground/30 mb-2" />
+                    <p className="text-sm font-semibold text-foreground">Aucune transaction enregistrée pour l'instant</p>
+                    <p className="text-xs text-foreground/60 mt-1 max-w-md">
+                      Les graphiques et barres d'activité se mettront à jour en direct dès la première réservation effectuée par un voyageur.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 items-end pt-8 pb-2 border-b border-foreground/10 h-64">
+                    {monthlyStats.map((stat, idx) => {
+                      const maxGmv = Math.max(...monthlyStats.map((s) => s.gmv), 1);
+                      const heightPercent = Math.max(10, Math.min(100, Math.round((stat.gmv / maxGmv) * 100)));
+                      return (
+                        <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end">
+                          <span className="text-[10px] font-bold text-foreground/60 hidden sm:block">
+                            {formatPrice(stat.gmv)}
+                          </span>
+                          <div className="w-full max-w-[50px] bg-muted/60 rounded-xl overflow-hidden flex flex-col justify-end p-1 relative h-full">
+                            <div
+                              className="w-full bg-primary rounded-lg transition-all duration-500"
+                              style={{ height: `${heightPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-foreground/80">
+                            {stat.month}
+                          </span>
                         </div>
-                        <span className="text-xs font-semibold text-foreground/80">
-                          {stat.month}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Quick Action Cards Grid */}
@@ -1579,55 +1678,61 @@ export function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {payouts.map((po) => (
-                    <div
-                      key={po.id}
-                      className="rounded-2xl border border-foreground/10 bg-background/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-foreground">{po.partnerName}</span>
-                          <span className="text-xs text-foreground/60">({po.company})</span>
-                        </div>
-                        <p className="text-xs text-foreground/70 mt-1">
-                          Canal : <strong className="text-primary">{po.method}</strong> • Bénéficiaire : <span className="font-mono">{po.recipient}</span>
-                        </p>
-                        <p className="text-[11px] text-foreground/40 mt-0.5">
-                          Date demande : {po.date}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-heading text-base font-black text-foreground">
-                            {formatPrice(po.amount)}
-                          </p>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                            po.status === 'approved' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
-                          }`}>
-                            {po.status === 'approved' ? '✓ Virement Exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente validation'}
-                          </span>
-                        </div>
-
-                        {po.status === 'pending' && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleApprovePayout(po.id)}
-                              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
-                            >
-                              Approuver
-                            </button>
-                            <button
-                              onClick={() => handleRejectPayout(po.id)}
-                              className="rounded-xl border border-rose-500/30 hover:bg-rose-50 text-rose-600 px-3 py-1.5 text-xs font-bold transition-all"
-                            >
-                              Refuser
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                  {payouts.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
+                      Aucune demande de reversement en attente.
                     </div>
-                  ))}
+                  ) : (
+                    payouts.map((po) => (
+                      <div
+                        key={po.id}
+                        className="rounded-2xl border border-foreground/10 bg-background/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-foreground">{po.partnerName}</span>
+                            <span className="text-xs text-foreground/60">({po.company})</span>
+                          </div>
+                          <p className="text-xs text-foreground/70 mt-1">
+                            Canal : <strong className="text-primary">{po.method}</strong> • Bénéficiaire : <span className="font-mono">{po.recipient}</span>
+                          </p>
+                          <p className="text-[11px] text-foreground/40 mt-0.5">
+                            Date demande : {po.date}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="font-heading text-base font-black text-foreground">
+                              {formatPrice(po.amount)}
+                            </p>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                              po.status === 'approved' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
+                            }`}>
+                              {po.status === 'approved' ? '✓ Virement Exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente validation'}
+                            </span>
+                          </div>
+
+                          {po.status === 'pending' && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleApprovePayout(po.id)}
+                                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                              >
+                                Approuver
+                              </button>
+                              <button
+                                onClick={() => handleRejectPayout(po.id)}
+                                className="rounded-xl border border-rose-500/30 hover:bg-rose-50 text-rose-600 px-3 py-1.5 text-xs font-bold transition-all"
+                              >
+                                Refuser
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1657,50 +1762,58 @@ export function AdminDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/5">
-                      {partners.map((p) => (
-                        <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                          <td className="p-4 font-bold text-foreground">
-                            {p.name}
-                          </td>
-                          <td className="p-4 text-foreground/80">
-                            {p.company}
-                          </td>
-                          <td className="p-4">
-                            <p className="text-foreground/80">{p.phone}</p>
-                            <p className="text-[11px] text-foreground/50">{p.email}</p>
-                          </td>
-                          <td className="p-4 text-foreground/70 font-medium">
-                            {p.docType}
-                          </td>
-                          <td className="p-4">
-                            {p.kycStatus === 'verified' ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-                                Certifié Conforme
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
-                                Audit en attente
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4 text-right">
-                            {p.kycStatus === 'pending' ? (
-                              <button
-                                onClick={() => handleVerifyPartnerKyc(p.id)}
-                                className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm"
-                              >
-                                Valider KYC
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-foreground/40 font-semibold">
-                                Validé
-                              </span>
-                            )}
+                      {partners.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
+                            Aucun partenaire inscrit pour le moment. Les nouveaux propriétaires et loueurs apparaîtront automatiquement ici lors de leur inscription.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        partners.map((p) => (
+                          <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="p-4 font-bold text-foreground">
+                              {p.name}
+                            </td>
+                            <td className="p-4 text-foreground/80">
+                              {p.company}
+                            </td>
+                            <td className="p-4">
+                              <p className="text-foreground/80">{p.phone}</p>
+                              <p className="text-[11px] text-foreground/50">{p.email}</p>
+                            </td>
+                            <td className="p-4 text-foreground/70 font-medium">
+                              {p.docType}
+                            </td>
+                            <td className="p-4">
+                              {p.kycStatus === 'verified' ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
+                                  Certifié Conforme
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                                  Audit en attente
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 text-right">
+                              {p.kycStatus === 'pending' ? (
+                                <button
+                                  onClick={() => handleVerifyPartnerKyc(p.id)}
+                                  className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-white hover:bg-primary/90 transition-colors shadow-sm"
+                                >
+                                  Valider KYC
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-foreground/40 font-semibold">
+                                  Validé
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2145,6 +2258,149 @@ export function AdminDashboardPage() {
                       </div>
                     </form>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION: ÉVÉNEMENTS & AGENDA CULTUREL DU BÉNIN */}
+          {/* ========================================================================= */}
+          {currentSection === 'events' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
+                    <FontAwesomeIcon icon={faCalendarCheck} className="h-3 w-3" />
+                    Bénin Live & Agenda
+                  </div>
+                  <h2 className="font-heading text-2xl font-black text-foreground">
+                    Gestion des Événements Culturels
+                  </h2>
+                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
+                    Ajoutez, modifiez ou retirez les célébrations et festivals affichés sur la page d'accueil de Bénin Beyond. 
+                    Si le catalogue compte <strong>plus de 3 événements</strong>, un carrousel rotatif automatique avec transition fluide s'active pour les visiteurs.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateEvent}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 shrink-0"
+                >
+                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                  Ajouter un Événement
+                </button>
+              </div>
+
+              {/* Status info banner */}
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <p className="text-foreground/80">
+                    <strong className="text-foreground">{events.length} événement{events.length > 1 ? 's' : ''}</strong> en ligne.{' '}
+                    {events.length > 3 ? (
+                      <span className="text-primary font-semibold">
+                        ✓ Switcher carrousel automatique actif sur la page d'accueil (&gt; 3 événements).
+                      </span>
+                    ) : (
+                      <span className="text-foreground/60">
+                        (Affichage en grille statique jusqu'à 3 événements. Ajoutez-en un 4ème pour activer le carrousel rotatif).
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Events Cards Grid */}
+              {events.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card/40">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-foreground/40">
+                    <FontAwesomeIcon icon={faCalendarCheck} className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Aucun événement culturel configuré
+                  </h3>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/60">
+                    Mettez en avant le Vodun Days, la Gani, le Festival Masques ou d'autres temps forts touristiques du Bénin.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateEvent}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                    Créer le premier événement
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {events.map((evt) => (
+                    <div
+                      key={evt.id}
+                      className="group relative rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-xl hover:border-primary/30 transition-all flex flex-col"
+                    >
+                      {/* Image Header with Badge */}
+                      <div className="relative h-48 w-full overflow-hidden bg-muted">
+                        <img
+                          src={evt.image}
+                          alt={evt.title}
+                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                          <span className="rounded-full bg-accent/90 backdrop-blur px-2.5 py-1 text-[10px] font-black uppercase text-black tracking-wider shadow">
+                            {evt.badge || 'Événement'}
+                          </span>
+                          <span className="rounded-full bg-black/60 backdrop-blur border border-white/20 px-2 py-0.5 text-[10px] font-medium text-white/90">
+                            {evt.tag || 'Culture'}
+                          </span>
+                        </div>
+                        <div className="absolute bottom-3 left-3 right-3 text-white">
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent mb-0.5">
+                            <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                            <span>{evt.period}</span>
+                          </div>
+                          <h3 className="font-heading text-lg font-bold text-white line-clamp-1">
+                            {evt.title}
+                          </h3>
+                        </div>
+                      </div>
+
+                      {/* Content Body */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs text-foreground/70">
+                            <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="font-semibold">{evt.location}</span>
+                          </div>
+                          <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
+                            {evt.description}
+                          </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="pt-3 border-t border-foreground/10 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditEvent(evt)}
+                            className="flex-1 rounded-xl border border-foreground/15 hover:border-primary hover:bg-primary/5 py-2 text-xs font-semibold text-foreground hover:text-primary transition-colors flex items-center justify-center gap-2"
+                          >
+                            <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteEvent(evt.id, evt.title)}
+                            className="rounded-xl border border-rose-500/20 hover:bg-rose-500/10 p-2 text-xs font-semibold text-rose-500 transition-colors"
+                            title="Supprimer l'événement"
+                          >
+                            <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -3313,6 +3569,161 @@ export function AdminDashboardPage() {
                 Confirmer le Refus
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL CRÉATION / MODIFICATION ÉVÉNEMENT CULTUREL */}
+      {/* ========================================================================= */}
+      {showEventModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-xl rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between border-b border-foreground/10 pb-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                  {editingEvent ? 'Mise à jour' : 'Nouvel Événement'}
+                </span>
+                <h3 className="font-heading text-lg font-bold text-foreground">
+                  {editingEvent ? `Modifier "${editingEvent.title}"` : 'Ajouter un Événement Culturel'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEventModal(false)}
+                className="rounded-full p-2 text-foreground/50 hover:bg-muted hover:text-foreground"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvent} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Titre de l'Événement *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={evtTitle}
+                  onChange={(e) => setEvtTitle(e.target.value)}
+                  placeholder="Ex : Vodun Days 2026, Fête de la Gani, Festival Masques..."
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Badge d'Accroche
+                  </label>
+                  <input
+                    type="text"
+                    value={evtBadge}
+                    onChange={(e) => setEvtBadge(e.target.value)}
+                    placeholder="Ex : Festival International, Célébration Royale..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Thématique / Catégorie
+                  </label>
+                  <input
+                    type="text"
+                    value={evtTag}
+                    onChange={(e) => setEvtTag(e.target.value)}
+                    placeholder="Ex : Culture & Spiritualité, Arts Contemporains..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Période / Dates *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={evtPeriod}
+                    onChange={(e) => setEvtPeriod(e.target.value)}
+                    placeholder="Ex : 9 - 11 Janvier 2026, Novembre 2026..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Lieu / Ville *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={evtLocation}
+                    onChange={(e) => setEvtLocation(e.target.value)}
+                    placeholder="Ex : Ouidah, Nikki, Cotonou, Grand-Popo..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  URL de l'image représentative
+                </label>
+                <input
+                  type="url"
+                  value={evtImage}
+                  onChange={(e) => setEvtImage(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+                {evtImage && (
+                  <div className="mt-2 h-28 w-full rounded-xl overflow-hidden border border-foreground/10 bg-muted">
+                    <img
+                      src={evtImage}
+                      alt="Aperçu"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80';
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Description détaillée du temps fort
+                </label>
+                <textarea
+                  rows={3}
+                  value={evtDescription}
+                  onChange={(e) => setEvtDescription(e.target.value)}
+                  placeholder="Racontez la portée spirituelle, artistique ou culturelle de l'événement pour les voyageurs..."
+                  className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-foreground/10 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEventModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
+                >
+                  {editingEvent ? 'Enregistrer les Modifications' : 'Publier en Ligne'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

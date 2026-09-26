@@ -388,3 +388,35 @@ SET
   full_name = 'Isidore Toudonou'
 WHERE lower(email) = 'isidoretoudonou@gmail.com';
 
+-- ==============================================================================
+-- 11. TABLE DES ÉVÉNEMENTS CULTURELS (AGENDA DU BÉNIN)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.events (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  badge TEXT DEFAULT 'Événement Culturel',
+  period TEXT NOT NULL,
+  location TEXT NOT NULL,
+  description TEXT,
+  image TEXT,
+  tag TEXT DEFAULT 'Culture',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Activation de Row Level Security
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+
+-- Politiques RLS pour events
+DROP POLICY IF EXISTS "Les événements sont consultables par tous" ON public.events;
+CREATE POLICY "Les événements sont consultables par tous"
+  ON public.events FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Les administrateurs peuvent gérer les événements" ON public.events;
+CREATE POLICY "Les administrateurs peuvent gérer les événements"
+  ON public.events FOR ALL
+  USING (public.is_admin());
+
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sun,
   Moon,
@@ -15,68 +15,17 @@ import {
   Wind,
   Droplets,
   Thermometer,
-  Radio
+  Radio,
+  Sparkles
 } from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
+import { getEvents } from '../services/eventService';
 
 const BENIN_CITIES = [
   { id: 'cotonou', name: 'Cotonou', region: 'Littoral', lat: 6.3654, lon: 2.4186 },
   { id: 'ouidah', name: 'Ouidah', region: 'Cité Mémorielle', lat: 6.3625, lon: 2.0819 },
   { id: 'natitingou', name: 'Pendjari / Nord', region: 'Atacora & Faune', lat: 10.3042, lon: 1.3796 },
   { id: 'portonovo', name: 'Porto-Novo', region: 'Capitale', lat: 6.4969, lon: 2.6283 }
-];
-
-const CULTURAL_EVENTS = [
-  {
-    id: 'vodun-days',
-    title: 'Vodun Days',
-    badge: 'Festival International',
-    period: '09 — 10 Janvier',
-    location: 'Ouidah · Plage & Temple des Pythons',
-    description: 'La plus grande célébration mondiale des arts, musiques rituelles et traditions séculaires sur le littoral d’Ouidah.',
-    image: 'https://i.pinimg.com/736x/a9/79/63/a9796310554972a7a7fd10c421e538c6.jpg',
-    tag: 'Culture & Spiritualité'
-  },
-  {
-    id: 'gaani',
-    title: 'Fête de la Gaani',
-    badge: 'Célébration Royale',
-    period: 'Novembre / Décembre',
-    location: 'Nikki · Cour Impériale du Borgou',
-    description: 'Somptueuse parade de centaines de cavaliers bariba aux caparaçons brodés, son des trompettes sacrées et hommage au Roi.',
-    image: 'https://i.pinimg.com/1200x/90/94/c7/9094c71aa1b36b8d3387bc5880662d70.jpg',
-    tag: 'Patrimoine Équestre'
-  },
-  {
-    id: 'safari-pendjari',
-    title: 'Saison des Safaris de la Pendjari',
-    badge: 'Pleine Saison',
-    period: 'Décembre — Mai',
-    location: 'Parc National de la Pendjari · Atacora',
-    description: 'Période royale pour l’observation des éléphants, lions, cobes de Buffon et bivouacs confortables sous la voûte céleste.',
-    image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80',
-    tag: 'Faune & Aventure'
-  },
-  {
-    id: 'tresors-abomey',
-    title: 'Trésors Royaux & Palais d’Abomey',
-    badge: 'Patrimoine UNESCO',
-    period: 'Toute l’année',
-    location: 'Abomey · Palais des Rois',
-    description: 'Immersion dans l’épopée du Danxomè, contemplation des trônes et statues des souverains restitués dans leurs palais historiques.',
-    image: 'https://images.unsplash.com/photo-1578925518470-4def7a0f08bb?auto=format&fit=crop&w=1200&q=80',
-    tag: 'Histoire & Mémoire'
-  },
-  {
-    id: 'regates-ganvie',
-    title: 'Régates & Fêtes du Lac Nokoué',
-    badge: 'Tradition Lacustre',
-    period: 'Saison Touristique',
-    location: 'Ganvié · Cité lacustre',
-    description: 'Joutes nautiques en pirogues d’apparat, danses au fil de l’eau et animation festive du grand marché flottant.',
-    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1200&q=80',
-    tag: 'Vie sur l’Eau'
-  }
 ];
 
 function getWeatherInfo(code, isDay) {
@@ -101,28 +50,14 @@ function getWeatherInfo(code, isDay) {
       condition: 'Ciel couvert'
     };
   }
-  if (code === 45 || code === 48) {
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) {
     return {
-      label: 'Brume côtière',
-      icon: Wind,
-      condition: 'Brume & humidité'
-    };
-  }
-  if (code >= 51 && code <= 57) {
-    return {
-      label: 'Bruine légère',
+      label: 'Averses tropicales',
       icon: CloudRain,
-      condition: 'Bruine passagère'
+      condition: 'Pluie tropicale'
     };
   }
-  if ((code >= 61 && code <= 65) || (code >= 80 && code <= 82)) {
-    return {
-      label: isDay ? 'Pluie côtière' : 'Averse nocturne',
-      icon: CloudRain,
-      condition: 'Précipitations'
-    };
-  }
-  if (code >= 95) {
+  if ([95, 96, 99].includes(code)) {
     return {
       label: 'Orage tropical',
       icon: CloudLightning,
@@ -137,7 +72,9 @@ function getWeatherInfo(code, isDay) {
 }
 
 export function BeninLiveSection() {
+  const [events, setEvents] = useState([]);
   const [activeEventIndex, setActiveEventIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const [timeString, setTimeString] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('cotonou');
 
@@ -153,6 +90,19 @@ export function BeninLiveSection() {
   });
 
   const selectedCity = BENIN_CITIES.find((c) => c.id === selectedCityId) || BENIN_CITIES[0];
+
+  // Chargement dynamique des événements pilotés par l'administrateur
+  useEffect(() => {
+    let isMounted = true;
+    getEvents().then((data) => {
+      if (isMounted) {
+        setEvents(data || []);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Horloge synchronisée sur le fuseau du Bénin (GMT+1 / WAT)
   useEffect(() => {
@@ -200,7 +150,6 @@ export function BeninLiveSection() {
     };
 
     fetchRealWeather();
-    // Rafraîchissement automatique toutes les 5 minutes
     const weatherInterval = setInterval(fetchRealWeather, 300000);
     return () => {
       isMounted = false;
@@ -208,44 +157,59 @@ export function BeninLiveSection() {
     };
   }, [selectedCity]);
 
-  // Défilement automatique des événements culturels
+  // Défilement / switcher automatique si les événements dépassent 3
   useEffect(() => {
+    if (events.length <= 3 || isPaused) return;
+
     const timer = setInterval(() => {
-      setActiveEventIndex((prev) => (prev + 1) % CULTURAL_EVENTS.length);
-    }, 5000);
+      setActiveEventIndex((prev) => (prev + 1) % events.length);
+    }, 4500);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [events.length, isPaused]);
 
   const nextEvent = () => {
-    setActiveEventIndex((prev) => (prev + 1) % CULTURAL_EVENTS.length);
+    if (events.length <= 1) return;
+    setActiveEventIndex((prev) => (prev + 1) % events.length);
   };
 
   const prevEvent = () => {
-    setActiveEventIndex((prev) => (prev - 1 + CULTURAL_EVENTS.length) % CULTURAL_EVENTS.length);
+    if (events.length <= 1) return;
+    setActiveEventIndex((prev) => (prev - 1 + events.length) % events.length);
   };
+
+  // Sélection des événements à afficher (3 événements visibles avec rotation fluide si > 3)
+  const visibleEvents = useMemo(() => {
+    if (events.length === 0) return [];
+    if (events.length <= 3) return events;
+
+    const items = [];
+    for (let i = 0; i < 3; i++) {
+      items.push(events[(activeEventIndex + i) % events.length]);
+    }
+    return items;
+  }, [events, activeEventIndex]);
 
   const weatherInfo = getWeatherInfo(weatherData.code, weatherData.isDay);
   const WeatherIcon = weatherInfo.icon;
 
   return (
-    <section className="border-y border-foreground/10 bg-muted/40">
-      {/* 1. Live Status Bar (Météo Réelle API, Heure WAT, Couleurs Marron Harmoniques) */}
-      <ScrollReveal delay={0} y={20} className="border-b border-foreground/10 bg-card/75 backdrop-blur-md px-6 py-4 md:px-12">
-        <div className="mx-auto flex max-w-8xl flex-wrap items-center justify-between gap-5">
+    <section className="relative w-full border-y border-foreground/10 bg-card/60 backdrop-blur-md">
+      {/* 1. Direct Time & Weather Bar */}
+      <ScrollReveal delay={0} y={15} className="border-b border-foreground/10 py-3.5 px-6 md:px-12">
+        <div className="mx-auto max-w-8xl flex flex-wrap items-center justify-between gap-4">
           
-          {/* A. Heure locale Bénin (Couleur Marron / Terracotta unifiée, sans vert) */}
+          {/* A. Heure Officielle du Bénin */}
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
-              <Clock className="h-4 w-4" strokeWidth={2} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary">
+              <Clock className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-base font-bold text-foreground tracking-tight">
-                  {timeString || '22:30:00'}
+                <span className="font-heading text-lg font-bold tracking-tight text-foreground">
+                  {timeString || '12:00:00'}
                 </span>
-                
-                {/* Badge WAT avec pulsation Marron / Terracotta */}
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 font-mono text-[10px] font-bold text-primary">
+                <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-semibold text-foreground/80 flex items-center gap-1">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
@@ -253,7 +217,6 @@ export function BeninLiveSection() {
                   <span>WAT (GMT+1)</span>
                 </span>
 
-                {/* Statut En direct en Marron / Terracotta */}
                 <span className="text-[11px] text-primary font-bold hidden sm:inline-flex items-center gap-1">
                   • En direct
                 </span>
@@ -262,7 +225,7 @@ export function BeninLiveSection() {
             </div>
           </div>
 
-          {/* B. Météo Réelle en Direct (Connectée à l'API Open-Meteo, Gestion Jour/Nuit) */}
+          {/* B. Météo Réelle en Direct */}
           <div className="flex items-center gap-3.5">
             <div
               className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors ${
@@ -284,10 +247,9 @@ export function BeninLiveSection() {
                 <span className="text-xs text-foreground/90 font-semibold">
                   {weatherInfo.label}
                 </span>
-
               </div>
 
-              {/* Indicateurs précis : Ressenti, Humidité, Vent et Sélecteur de Ville */}
+              {/* Indicateurs : Ressenti, Humidité, Vent et Sélecteur */}
               <div className="flex flex-wrap items-center gap-3 text-[11px] text-foreground/65 mt-0.5">
                 <span className="flex items-center gap-1">
                   <Thermometer className="h-3 w-3 text-primary" /> Ressenti {weatherData.apparentTemp}°C
@@ -299,7 +261,6 @@ export function BeninLiveSection() {
                   <Wind className="h-3 w-3 text-primary" /> {weatherData.windSpeed} km/h
                 </span>
 
-                {/* Sélecteur de ville béninoise pour la météo */}
                 <span className="text-foreground/30">•</span>
                 <div className="flex items-center gap-1 text-[11px]">
                   <MapPin className="h-3 w-3 text-primary" />
@@ -320,7 +281,7 @@ export function BeninLiveSection() {
             </div>
           </div>
 
-          {/* C. Climat & Recommandation Saisonnière */}
+          {/* C. Recommandation Saisonnière */}
           <div className="hidden xl:flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary font-medium">
             <Radio className="h-3.5 w-3.5 text-primary animate-pulse" />
             <span>Le Bénin vous accueille toute l'année</span>
@@ -330,78 +291,90 @@ export function BeninLiveSection() {
       </ScrollReveal>
 
       {/* 2. Cultural & Touristic Events Section */}
-      <div className="mx-auto max-w-8xl px-6 py-10 md:px-12">
-        <ScrollReveal delay={50} y={20} className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-8">
-          <div>
-            <p className="caption text-accent font-semibold tracking-wider">
-              En direct du Bénin
-            </p>
-            <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
-              Événements culturels & Saison touristique
-            </h3>
-          </div>
+      {events.length > 0 && (
+        <div
+          className="mx-auto max-w-8xl px-6 py-10 md:px-12"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+        >
+          <ScrollReveal delay={50} y={20} className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-8">
+            <div>
+              <p className="caption text-accent font-semibold tracking-wider flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>En direct du Bénin</span>
+              </p>
+              <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
+                Événements culturels & Saison touristique
+              </h3>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={prevEvent}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-muted text-foreground transition-colors"
-              title="Événement précédent"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={nextEvent}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-muted text-foreground transition-colors"
-              title="Événement suivant"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </ScrollReveal>
+            {/* Navigation Switcher Controls (visibles si plus de 3 événements) */}
+            {events.length > 3 && (
+              <div className="flex items-center gap-3">
+                <div className="text-xs font-semibold text-foreground/50">
+                  {activeEventIndex + 1} / {events.length}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={prevEvent}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
+                    title="Événement précédent"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={nextEvent}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
+                    title="Événement suivant"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </ScrollReveal>
 
-        {/* Dynamic Events Cards Grid/Row */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {CULTURAL_EVENTS.slice(0, 3).map((event, idx) => {
-            const isFeatured = idx === activeEventIndex % 3;
-            return (
-              <ScrollReveal
-                key={event.id}
-                delay={idx * 120}
-                className="h-full"
+          {/* Dynamic Events Cards Grid with Smooth Transition */}
+          <div
+            className={`grid gap-6 ${
+              visibleEvents.length === 1
+                ? 'grid-cols-1 max-w-md mx-auto'
+                : visibleEvents.length === 2
+                ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto'
+                : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            }`}
+          >
+            {visibleEvents.map((event, idx) => (
+              <div
+                key={`${event.id}-${idx}`}
+                className="group relative h-full overflow-hidden rounded-2xl border border-foreground/10 bg-card hover:border-primary/40 hover:shadow-xl transition-all duration-500 hover:-translate-y-1 flex flex-col"
               >
-                <div
-                  onClick={() => setActiveEventIndex(idx)}
-                  className={`group relative h-full overflow-hidden rounded-2xl border bg-card transition-all duration-500 cursor-pointer ${
-                    isFeatured
-                      ? 'border-primary ring-2 ring-primary/20 shadow-xl scale-[1.02]'
-                      : 'border-foreground/10 hover:border-foreground/25 hover:shadow-md'
-                  }`}
-                >
-                  {/* Event Image */}
-                  <div className="relative h-48 w-full overflow-hidden bg-muted">
-                    <img
-                      src={event.image}
-                      alt={event.title}
-                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                {/* Event Image */}
+                <div className="relative h-48 w-full overflow-hidden bg-muted shrink-0">
+                  <img
+                    src={event.image}
+                    alt={event.title}
+                    className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                    {/* Badge */}
-                    <div className="absolute left-3 top-3">
-                      <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
-                        {event.badge}
-                      </span>
-                    </div>
-
-                    {/* Period tag */}
-                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-xs font-semibold text-white">
-                      <Calendar className="h-3.5 w-3.5 text-accent" />
-                      <span>{event.period}</span>
-                    </div>
+                  {/* Badge */}
+                  <div className="absolute left-3 top-3">
+                    <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
+                      {event.badge}
+                    </span>
                   </div>
 
-                  {/* Event Info */}
-                  <div className="p-5">
+                  {/* Period tag */}
+                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-xs font-semibold text-white">
+                    <Calendar className="h-3.5 w-3.5 text-accent" />
+                    <span>{event.period}</span>
+                  </div>
+                </div>
+
+                {/* Event Info */}
+                <div className="p-5 flex-1 flex flex-col justify-between">
+                  <div>
                     <h4 className="font-heading text-base font-bold text-foreground group-hover:text-primary transition-colors">
                       {event.title}
                     </h4>
@@ -415,12 +388,38 @@ export function BeninLiveSection() {
                       {event.description}
                     </p>
                   </div>
+
+                  {event.tag && (
+                    <div className="mt-4 pt-3 border-t border-foreground/5 flex items-center justify-between text-[11px] text-foreground/50">
+                      <span className="rounded-md bg-foreground/5 px-2 py-0.5 text-primary font-medium">
+                        {event.tag}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              </ScrollReveal>
-            );
-          })}
+              </div>
+            ))}
+          </div>
+
+          {/* Carousel Indicator Dots if > 3 */}
+          {events.length > 3 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              {events.map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  onClick={() => setActiveEventIndex(dotIdx)}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    dotIdx === activeEventIndex
+                      ? 'w-6 bg-primary'
+                      : 'w-2 bg-foreground/20 hover:bg-foreground/40'
+                  }`}
+                  title={`Aller à l'événement ${dotIdx + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </section>
   );
 }
