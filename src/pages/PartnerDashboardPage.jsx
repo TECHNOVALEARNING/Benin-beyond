@@ -281,15 +281,15 @@ export function PartnerDashboardPage() {
     setVideoError('');
   };
 
-  const handleDeleteListingItem = (id) => {
+  const handleDeleteListingItem = async (id) => {
     if (window.confirm('Voulez-vous vraiment retirer cette annonce de la marketplace ?')) {
-      deleteListing(id);
       setListings((prev) => prev.filter((item) => item.id !== id));
+      await deleteListing(id);
     }
   };
 
   // Publishing an item
-  const handlePublishSubmit = (e) => {
+  const handlePublishSubmit = async (e) => {
     e.preventDefault();
     setPhotoError('');
     setVideoError('');
@@ -313,21 +313,22 @@ export function PartnerDashboardPage() {
       finalGallery.unshift(feat);
     }
 
-    const newListing = addListing({
+    const newListing = await addListing({
       title: formTitle || (formType === 'stay' ? (formSubcategory === 'hotel' ? 'Chambre d’Hôtel de Standing' : 'Résidence de Standing') : 'Véhicule de Prestige'),
       type: formType,
-      subcategory: formSubcategory,
+      subcategory: formType === 'stay' ? formSubcategory : 'car',
       location: formLocation,
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme vérifié par Bénin Beyond.',
-      badge: formSubcategory === 'hotel' ? `${roomsCount || 1} chambre(s) dispo` : 'EN ATTENTE DE MODÉRATION',
+      badge: formSubcategory === 'hotel' ? `${roomsCount || 1} chambre(s) dispo` : 'En attente de modération',
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
       status: 'pending', // Pending admin audit
-      owner_id: user?.id || 'usr_partner_01',
+      owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
       owner_name: user?.name || 'Propriétaire Certifié',
+      owner_email: user?.email || '',
       availability: {
         type: availabilityType,
         available_from: availableFrom || null,
@@ -336,7 +337,7 @@ export function PartnerDashboardPage() {
       }
     });
 
-    setListings((prev) => [newListing, ...prev]);
+    setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
     setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle a été transmise aux modérateurs de Bénin Beyond pour validation.`);
 
     // Reset form

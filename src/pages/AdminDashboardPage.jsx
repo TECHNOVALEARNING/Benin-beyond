@@ -525,7 +525,7 @@ export function AdminDashboardPage() {
   };
 
   // Submit Listing by Admin directly inside Cockpit
-  const handleAdminPublishSubmit = (e) => {
+  const handleAdminPublishSubmit = async (e) => {
     e.preventDefault();
     setPhotoError('');
     setVideoError('');
@@ -549,10 +549,10 @@ export function AdminDashboardPage() {
       finalGallery.unshift(feat);
     }
 
-    const newListing = addListing({
+    const newListing = await addListing({
       title: formTitle || (formType === 'stay' ? 'Résidence de Standing Bénin Beyond' : 'Véhicule de Prestige Bénin Beyond'),
       type: formType,
-      subcategory: formType === 'stay' ? formSubcategory : undefined,
+      subcategory: formType === 'stay' ? formSubcategory : 'car',
       rooms_count: formType === 'stay' && formSubcategory === 'hotel' ? Number(roomsCount) : undefined,
       availability: formType === 'stay' && formSubcategory === 'hotel' ? {
         available_from: availableFrom || null,
@@ -563,18 +563,18 @@ export function AdminDashboardPage() {
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme certifié par la direction Bénin Beyond.',
-      badge: adminInstantPublish ? 'CERTIFIÉ LUXE' : 'EN ATTENTE DE MODÉRATION',
+      badge: adminInstantPublish ? 'Vérifié par Bénin Beyond' : 'En attente de modération',
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing Exclusif'],
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
       status: adminInstantPublish ? 'active' : 'pending',
-      owner_id: user?.id || 'usr_admin_master',
+      owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
       owner_name: user?.name || 'Direction Plateforme Bénin Beyond'
     });
 
-    setListings((prev) => [newListing, ...prev]);
-    setPublishSuccess(`Le bien "${newListing.title}" a été créé avec succès et est ${adminInstantPublish ? 'immédiatement EN LIGNE dans le catalogue public !' : 'placé dans la file de modération.'}`);
-    showToast(adminInstantPublish ? `Bien "${newListing.title}" publié en ligne !` : `Bien "${newListing.title}" créé en attente.`);
+    setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
+    setPublishSuccess(`Le bien "${newListing.title}" a été créé avec succès et est ${adminInstantPublish ? 'immédiatement EN LIGNE dans le catalogue public et synchronisé !' : 'placé dans la file de modération.'}`);
+    showToast(adminInstantPublish ? `Bien "${newListing.title}" publié en ligne avec succès !` : `Bien "${newListing.title}" créé en attente.`);
 
     // Reset form
     setFormTitle('');
@@ -628,29 +628,25 @@ export function AdminDashboardPage() {
   }, [bookings]);
 
   // Actions
-  const handleToggleListingStatus = (id) => {
+  const handleToggleListingStatus = async (id) => {
+    const current = listings.find((l) => l.id === id);
+    const newStatus = current?.status === 'suspended' ? 'active' : 'suspended';
     setListings((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newStatus = item.status === 'suspended' ? 'active' : 'suspended';
-          updateListingStatus(id, newStatus);
-          return { ...item, status: newStatus };
-        }
-        return item;
-      })
+      prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
     );
+    await updateListingStatus(id, newStatus);
     showToast('Statut de l’annonce mis à jour sur la marketplace.');
   };
 
-  const handleApproveListing = (id) => {
-    updateListingStatus(id, 'active');
+  const handleApproveListing = async (id) => {
     setListings((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: 'active', rejection_reason: '' } : item))
     );
-    showToast("L'annonce a été approuvée et mise en ligne avec succès !");
     if (mediaAuditModal && mediaAuditModal.id === id) {
       setMediaAuditModal((prev) => ({ ...prev, status: 'active', rejection_reason: '' }));
     }
+    await updateListingStatus(id, 'active');
+    showToast("L'annonce a été approuvée et mise en ligne avec succès !");
   };
 
   const handleOpenRejectionModal = (listing) => {
@@ -659,35 +655,36 @@ export function AdminDashboardPage() {
     setRejectionCustomNote('');
   };
 
-  const handleConfirmRejection = () => {
+  const handleConfirmRejection = async () => {
     if (!rejectionModalListing) return;
     const finalReason = rejectionCustomNote.trim()
       ? `${rejectionPresetReason} — ${rejectionCustomNote.trim()}`
       : rejectionPresetReason;
 
-    updateListingStatus(rejectionModalListing.id, 'refused', finalReason);
+    const targetId = rejectionModalListing.id;
     setListings((prev) =>
       prev.map((item) =>
-        item.id === rejectionModalListing.id
+        item.id === targetId
           ? { ...item, status: 'refused', rejection_reason: finalReason }
           : item
       )
     );
     showToast(`Annonce refusée : motif de non-conformité notifié.`);
     setRejectionModalListing(null);
-    if (mediaAuditModal && mediaAuditModal.id === rejectionModalListing.id) {
+    if (mediaAuditModal && mediaAuditModal.id === targetId) {
       setMediaAuditModal((prev) => ({ ...prev, status: 'refused', rejection_reason: finalReason }));
     }
+    await updateListingStatus(targetId, 'refused', finalReason);
   };
 
-  const handleDeleteListingItem = (id, title) => {
+  const handleDeleteListingItem = async (id, title) => {
     if (window.confirm(`Retirer définitivement l'annonce "${title}" de Bénin Beyond ?`)) {
-      deleteListing(id);
       setListings((prev) => prev.filter((item) => item.id !== id));
-      showToast(`L'annonce "${title}" a été supprimée.`);
       if (mediaAuditModal && mediaAuditModal.id === id) {
         setMediaAuditModal(null);
       }
+      showToast(`L'annonce "${title}" a été supprimée.`);
+      await deleteListing(id);
     }
   };
 

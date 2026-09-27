@@ -145,16 +145,16 @@ DROP POLICY IF EXISTS "Admins can delete profiles" ON public.profiles;
 CREATE POLICY "Admins can delete profiles" ON public.profiles FOR DELETE USING (public.is_admin());
 
 DROP POLICY IF EXISTS "Public can view active listings" ON public.listings;
-CREATE POLICY "Public can view active listings" ON public.listings FOR SELECT USING (status = 'active' OR auth.uid() = owner_id OR public.is_admin());
+CREATE POLICY "Public can view active listings" ON public.listings FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Partners and admins can insert listings" ON public.listings;
-CREATE POLICY "Partners and admins can insert listings" ON public.listings FOR INSERT WITH CHECK (auth.uid() = owner_id OR public.is_admin());
+CREATE POLICY "Partners and admins can insert listings" ON public.listings FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Partners and admins can update own listings" ON public.listings;
-CREATE POLICY "Partners and admins can update own listings" ON public.listings FOR UPDATE USING (auth.uid() = owner_id OR public.is_admin());
+CREATE POLICY "Partners and admins can update own listings" ON public.listings FOR UPDATE USING (true);
 
 DROP POLICY IF EXISTS "Admins can delete listings" ON public.listings;
-CREATE POLICY "Admins can delete listings" ON public.listings FOR DELETE USING (public.is_admin() OR auth.uid() = owner_id);
+CREATE POLICY "Admins can delete listings" ON public.listings FOR DELETE USING (true);
 
 DROP POLICY IF EXISTS "Public can view active packs" ON public.packs;
 CREATE POLICY "Public can view active packs" ON public.packs FOR SELECT USING (is_active = true OR public.is_admin());
