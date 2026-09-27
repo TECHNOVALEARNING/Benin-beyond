@@ -264,21 +264,21 @@ export function LoginPage() {
             {/* Switch to Register */}
             <div className="mt-6 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
               <div>
-                <span>Vous êtes nouveau voyageur ? </span>
+                <span>Vous êtes un voyageur ? </span>
                 <Link
-                  to="/register?type=client"
+                  to="/explore"
                   className="font-semibold text-primary hover:underline"
                 >
-                  Créer un compte voyageur
+                  Explorer & réserver un séjour
                 </Link>
               </div>
               <div>
-                <span>Propriétaire, Hôtelier ou Loueur auto ? </span>
+                <span>Propriétaire de villa, hôtel ou loueur auto ? </span>
                 <Link
                   to="/register?type=owner"
                   className="font-semibold text-accent hover:underline"
                 >
-                  Devenir Partenaire
+                  Rejoindre l'Espace Propriétaire
                 </Link>
               </div>
             </div>

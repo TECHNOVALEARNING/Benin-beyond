@@ -439,9 +439,22 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Inscription d'un nouveau compte
+   * Inscription d'un nouveau compte (Voyageur ou Partenaire Propriétaire avec KYC)
    */
-  const register = async ({ name, email, role = 'client', company = '', password = '' }) => {
+  const register = async ({
+    name,
+    email,
+    role = 'client',
+    phone = '',
+    company = '',
+    partnerType = 'stay',
+    taxId = '',
+    rccm = '',
+    cip = '',
+    kycDocType = '',
+    kycDocUrl = '',
+    password = ''
+  }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const assignedRole = resolveUserRole(cleanEmail, role);
 
@@ -455,12 +468,37 @@ export function AuthProvider({ children }) {
             data: {
               name: name || cleanEmail.split('@')[0],
               role: assignedRole,
-              company: company || ''
+              company: company || '',
+              phone: phone || '',
+              partner_type: partnerType,
+              tax_id: taxId,
+              rccm: rccm,
+              cip: cip,
+              kyc_doc_type: kycDocType,
+              kyc_doc_url: kycDocUrl
             }
           }
         });
 
         if (!error && data?.user) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: data.user.id,
+              email: cleanEmail,
+              full_name: name,
+              role: assignedRole === 'admin' ? 'admin' : (assignedRole === 'owner' ? 'partner' : 'client'),
+              company_name: company || '',
+              phone: phone || '',
+              partner_type: partnerType,
+              tax_id: taxId,
+              kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
+              kyc_doc_url: kycDocUrl,
+              kyc_status: 'pending',
+              verified: assignedRole === 'admin',
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'email' });
+          } catch {}
+
           const registeredUser = await syncSupabaseSession(data.user);
           return { success: true, user: registeredUser };
         }
@@ -473,8 +511,16 @@ export function AuthProvider({ children }) {
       id: `usr_${Date.now()}`,
       name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (name || cleanEmail.split('@')[0].replace(/[._]/g, ' ')),
       email: cleanEmail,
+      phone: phone || 'Non renseigné',
       role: assignedRole,
       company: assignedRole === 'owner' ? (company || 'Partenaire Hébergement & Mobilité') : undefined,
+      partner_type: partnerType,
+      tax_id: taxId,
+      rccm: rccm,
+      cip: cip,
+      kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
+      kyc_doc_url: kycDocUrl,
+      kyc_status: assignedRole === 'admin' ? 'verified' : 'pending',
       verified: assignedRole === 'admin',
       avatar: assignedRole === 'admin'
         ? DEMO_USERS.admin.avatar

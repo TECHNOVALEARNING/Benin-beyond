@@ -152,11 +152,12 @@ export function HeroPinterestCarousel() {
 
           <div className="flex items-center gap-2.5 sm:gap-3">
             <Link
-              to="/register"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
+              to="/register?type=owner"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
+              title="Devenir propriétaire ou gestionnaire partenaire sur Bénin Beyond"
             >
               <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
-              <span>Espace Hôte</span>
+              <span>Espace Propriétaire</span>
             </Link>
 
             <Link

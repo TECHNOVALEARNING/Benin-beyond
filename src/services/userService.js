@@ -17,6 +17,13 @@ function getLocalUsers() {
         phone: u.phone || 'Non renseigné',
         role: isAdmin ? 'admin' : (u.role === 'owner' || u.role === 'partner' ? 'owner' : 'client'),
         company: u.company || (u.role === 'owner' ? 'Partenaire Hébergeur / Auto' : ''),
+        partner_type: u.partner_type || u.partnerType || 'stay',
+        tax_id: u.tax_id || u.taxId || '',
+        rccm: u.rccm || '',
+        cip: u.cip || '',
+        kyc_doc_type: u.kyc_doc_type || u.kycDocType || 'Dossier Conforme',
+        kyc_doc_url: u.kyc_doc_url || u.kycDocUrl || '',
+        kyc_status: u.kyc_status || (isAdmin || u.verified ? 'verified' : 'pending'),
         verified: isAdmin ? true : Boolean(u.verified),
         is_active: u.is_active !== undefined ? u.is_active : (u.isActive !== undefined ? u.isActive : true),
         created_at: u.createdAt || u.created_at || new Date().toISOString()
@@ -63,6 +70,13 @@ export async function getUsers() {
             phone: p.phone || 'Non renseigné',
             role: isAdmin ? 'admin' : (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client'),
             company: p.company_name || '',
+            partner_type: p.partner_type || 'stay',
+            tax_id: p.tax_id || '',
+            rccm: p.rccm || '',
+            cip: p.cip || '',
+            kyc_doc_type: p.kyc_doc_type || 'Dossier Conforme',
+            kyc_doc_url: p.kyc_doc_url || '',
+            kyc_status: p.kyc_status || (isAdmin || p.verified ? 'verified' : 'pending'),
             verified: isAdmin ? true : Boolean(p.verified),
             is_active: p.is_active !== undefined ? p.is_active : true,
             created_at: p.created_at || new Date().toISOString()
@@ -81,6 +95,13 @@ export async function getUsers() {
               ...existing,
               phone: existing.phone && existing.phone !== 'Non renseigné' ? existing.phone : (lu.phone || 'Non renseigné'),
               company: existing.company || lu.company || '',
+              partner_type: existing.partner_type || lu.partner_type || 'stay',
+              tax_id: existing.tax_id || lu.tax_id || '',
+              rccm: existing.rccm || lu.rccm || '',
+              cip: existing.cip || lu.cip || '',
+              kyc_doc_type: existing.kyc_doc_type || lu.kyc_doc_type || 'Dossier Conforme',
+              kyc_doc_url: existing.kyc_doc_url || lu.kyc_doc_url || '',
+              kyc_status: existing.kyc_status || lu.kyc_status || 'pending',
               is_active: existing.is_active !== undefined ? existing.is_active : (lu.is_active !== undefined ? lu.is_active : true)
             });
           }
@@ -116,16 +137,23 @@ export async function updateUser(userId, updates) {
   if (isSupabaseConfigured && supabase) {
     try {
       const dbRole = sanitizedUpdates.role === 'admin' ? 'admin' : (sanitizedUpdates.role === 'owner' ? 'partner' : 'client');
+      const payload = {
+        full_name: sanitizedUpdates.name,
+        phone: sanitizedUpdates.phone,
+        role: dbRole,
+        company_name: sanitizedUpdates.company || '',
+        is_active: sanitizedUpdates.is_active,
+        updated_at: new Date().toISOString()
+      };
+      if (sanitizedUpdates.verified !== undefined) payload.verified = sanitizedUpdates.verified;
+      if (sanitizedUpdates.kyc_status) payload.kyc_status = sanitizedUpdates.kyc_status;
+      if (sanitizedUpdates.tax_id) payload.tax_id = sanitizedUpdates.tax_id;
+      if (sanitizedUpdates.kyc_doc_type) payload.kyc_doc_type = sanitizedUpdates.kyc_doc_type;
+      if (sanitizedUpdates.partner_type) payload.partner_type = sanitizedUpdates.partner_type;
+
       await supabase
         .from('profiles')
-        .update({
-          full_name: sanitizedUpdates.name,
-          phone: sanitizedUpdates.phone,
-          role: dbRole,
-          company_name: sanitizedUpdates.company || '',
-          is_active: sanitizedUpdates.is_active,
-          updated_at: new Date().toISOString()
-        })
+        .update(payload)
         .or(`id.eq.${userId},email.ilike.${cleanEmail}`);
     } catch (e) {
       console.warn('Erreur updateUser Supabase:', e);
@@ -202,4 +230,15 @@ export async function deleteUser(userId, userEmail = '') {
   saveLocalUsers(filtered);
 
   return true;
+}
+
+/**
+ * Valider le KYC d'un partenaire hôte / loueur
+ */
+export async function verifyPartnerKYC(userId, userEmail = '') {
+  return updateUser(userId, {
+    email: userEmail,
+    verified: true,
+    kyc_status: 'verified'
+  });
 }
