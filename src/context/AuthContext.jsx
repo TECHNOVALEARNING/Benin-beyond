@@ -402,46 +402,34 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/login`
+            redirectTo: `${window.location.origin}/login`,
+            queryParams: {
+              prompt: 'select_account',
+              access_type: 'offline'
+            }
           }
         });
         if (error) {
-          console.warn('Supabase Google OAuth non configuré ou erreur:', error.message);
-          return fallbackGoogleLogin(error.message, intendedRole, company);
+          console.error('Supabase Google OAuth non configuré ou erreur:', error.message);
+          return {
+            success: false,
+            error: `Erreur Google OAuth : ${error.message}. Vérifiez que l'URL ${window.location.origin} est bien ajoutée dans les 'Redirect URLs' de Supabase (Authentication > URL Configuration).`
+          };
         }
         return { success: true, data };
       } catch (err) {
         console.error('Erreur Supabase Google OAuth:', err);
-        return fallbackGoogleLogin(err.message, intendedRole, company);
+        return {
+          success: false,
+          error: `Erreur inattendue Google OAuth : ${err.message}`
+        };
       }
     } else {
-      return fallbackGoogleLogin('', intendedRole, company);
+      return {
+        success: false,
+        error: "Configuration Supabase manquante : Veuillez renseigner VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans les paramètres d'environnement."
+      };
     }
-  };
-
-  // Relevé de secours Google immédiat
-  const fallbackGoogleLogin = (reason = '', hintRole = null, hintCompany = '') => {
-    const intendedRole = hintRole || localStorage.getItem('benin_beyond_oauth_intended_role') || 'client';
-    const cleanRole = intendedRole === 'owner' || intendedRole === 'partner' ? 'owner' : 'client';
-    const demoGoogleUser = {
-      id: `usr_google_${Date.now()}`,
-      name: cleanRole === 'owner' ? 'Propriétaire Partenaire Google' : 'Voyageur Google VIP',
-      email: cleanRole === 'owner' ? 'partenaire.google@beninbeyond.bj' : 'client.google@gmail.com',
-      role: cleanRole,
-      company: cleanRole === 'owner' ? (hintCompany || 'Résidences & Flotte Bénin') : undefined,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-      provider: 'google',
-      verified: true,
-      createdAt: new Date().toISOString()
-    };
-    saveRegisteredUser(demoGoogleUser);
-    setUser(demoGoogleUser);
-    return {
-      success: true,
-      user: demoGoogleUser,
-      simulated: true,
-      notice: reason ? "Connexion Google activée en mode sécurisé direct." : null
-    };
   };
 
   const loginAsDemo = (demoRole = 'admin') => {
