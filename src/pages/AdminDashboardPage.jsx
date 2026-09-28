@@ -1027,43 +1027,43 @@ export function AdminDashboardPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED, AIRY & CLEAN) */}
+      {/* ========================================================================= */}
+      {/* 1. SIDEBAR NAVIGATION (Apple-grade Minimalist Luxury - STRICTLY PINNED, NO SCROLL) */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-[290px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 select-none ${
+        className={`fixed inset-y-0 left-0 z-50 w-68 md:w-[272px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {/* Logo & Superviseur status in airy header */}
-          <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
-            <Link to="/" className="flex items-center gap-2.5 group" title="Retourner à l'accueil du site">
-              <span className="font-heading text-xl font-bold tracking-tight text-white group-hover:text-accent transition-colors">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Logo & Superviseur status in compact, Apple-grade header */}
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] shrink-0">
+            <Link to="/" className="flex items-center gap-2 group" title="Retourner à l'accueil du site">
+              <span className="font-heading text-[16px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
                 Bénin Beyond
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[9px] font-bold text-accent uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Superviseur
               </span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-secondary-foreground/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10"
+              className="md:hidden text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10"
             >
               <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
             </button>
           </div>
 
           {/* Navigation Groups */}
-          <nav className="px-3.5 py-4 space-y-5 flex-1">
+          <nav className="px-2.5 py-2.5 space-y-3 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {navGroups.map((group, gIdx) => (
-              <div key={gIdx} className="space-y-1.5">
-                <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary-foreground/45 flex items-center justify-between">
-                  <span>{group.title}</span>
-                  <span className="h-px flex-1 bg-white/10 ml-2.5" />
+              <div key={gIdx} className="space-y-0.5">
+                <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-widest text-white/45 font-heading">
+                  {group.title}
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-0.5">
                   {group.items.map((item) => {
                     const isActive = currentSection === item.key;
                     if (item.isHighlight) {
@@ -1074,28 +1074,25 @@ export function AdminDashboardPage() {
                             handleSetSection(item.key);
                             setSidebarOpen(false);
                           }}
-                          className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                          className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-semibold transition-all duration-150 ${
                             isActive
-                              ? 'bg-accent text-black shadow-md shadow-accent/25 font-bold ring-1 ring-accent/60'
-                              : 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white shadow-xs'
+                              ? 'bg-accent text-secondary shadow-xs'
+                              : 'bg-accent/15 text-accent hover:bg-accent/25 hover:text-white'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                                isActive
-                                  ? 'bg-black/15 text-black'
-                                  : 'bg-accent/20 text-accent group-hover:bg-accent group-hover:text-black'
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <FontAwesomeIcon
+                              icon={item.icon}
+                              className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+                                isActive ? 'text-secondary' : 'text-accent group-hover:text-white'
                               }`}
-                            >
-                              <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
-                            </div>
-                            <span className="tracking-tight text-sm">{item.label}</span>
+                            />
+                            <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
                           </div>
                           {item.badge && (
                             <span
-                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-xs ${
-                                isActive ? 'bg-black/20 text-black' : item.badgeColor
+                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                                isActive ? 'bg-black/20 text-secondary' : 'bg-accent text-secondary'
                               }`}
                             >
                               {item.badge}
@@ -1112,28 +1109,27 @@ export function AdminDashboardPage() {
                           handleSetSection(item.key);
                           setSidebarOpen(false);
                         }}
-                        className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all duration-150 ${
                           isActive
-                            ? 'bg-primary text-white shadow-md shadow-primary/30 font-semibold ring-1 ring-white/15'
-                            : 'text-secondary-foreground/75 hover:bg-white/8 hover:text-white'
+                            ? 'bg-white/[0.12] text-white shadow-xs font-semibold'
+                            : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                              isActive
-                                ? 'bg-accent text-black font-bold shadow-xs'
-                                : 'bg-white/5 text-secondary-foreground/60 group-hover:bg-white/15 group-hover:text-white'
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FontAwesomeIcon
+                            icon={item.icon}
+                            className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+                              isActive ? 'text-accent' : 'text-white/50 group-hover:text-white'
                             }`}
-                          >
-                            <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
-                          </div>
-                          <span className="tracking-tight text-sm">{item.label}</span>
+                          />
+                          <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
                         </div>
                         {item.badge && (
                           <span
-                            className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
-                              isActive ? 'bg-black/30 text-white border-transparent' : item.badgeColor
+                            className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 border ${
+                              isActive
+                                ? 'bg-black/30 text-white border-transparent'
+                                : item.badgeColor
                             }`}
                           >
                             {item.badge}
@@ -1148,11 +1144,11 @@ export function AdminDashboardPage() {
           </nav>
         </div>
 
-        {/* Sidebar Footer (Déconnexion directe & épurée) */}
-        <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
+        {/* Sidebar Footer (Apple-grade compact footer) */}
+        <div className="p-3 border-t border-white/[0.08] space-y-1 shrink-0 bg-secondary">
           <Link
             to="/"
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-secondary-foreground/75 hover:bg-white/10 hover:text-white transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
           >
             <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
             <span>Voir le site public</span>
@@ -1163,7 +1159,7 @@ export function AdminDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>

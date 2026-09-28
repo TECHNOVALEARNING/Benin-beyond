@@ -47,9 +47,17 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        heading: ["Instrument Serif", "Georgia", "serif"],
-        body: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
-        display: ["Instrument Serif", "Georgia", "serif"],
+        heading: ["Outfit", "Trebuchet MS", "Urbanist", "Plus Jakarta Sans", "system-ui", "sans-serif"],
+        body: ["Plus Jakarta Sans", "Outfit", "Trebuchet MS", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        display: ["Outfit", "Trebuchet MS", "Urbanist", "sans-serif"],
+      },
+      letterSpacing: {
+        tighter: "-0.01em",
+        tight: "0em",
+        normal: "0.015em",
+        wide: "0.035em",
+        wider: "0.06em",
+        widest: "0.14em",
       },
       maxWidth: {
         "8xl": "92rem",

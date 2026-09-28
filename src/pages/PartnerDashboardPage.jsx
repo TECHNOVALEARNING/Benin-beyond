@@ -475,58 +475,58 @@ export function PartnerDashboardPage() {
       {/* 1. SIDEBAR PRO MARKETPLACE (FONTAWESOME ICONS ONLY) - STRICTLY PINNED */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-[290px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
+        className={`fixed inset-y-0 left-0 z-50 w-68 md:w-[272px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Brand Logo & Close button on Mobile */}
-          <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
-            <Link to="/" className="flex items-center gap-3 group">
-              <span className="font-heading text-xl font-bold tracking-tight text-white group-hover:text-accent transition-colors">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] shrink-0">
+            <Link to="/" className="flex items-center gap-2 group">
+              <span className="font-heading text-[16px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
                 Bénin Beyond
               </span>
-              <span className="rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[9px] font-bold text-accent uppercase tracking-wider">
+              <span className="rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
                 Hôte & Flotte
               </span>
             </Link>
 
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-secondary-foreground/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10"
+              className="md:hidden text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10"
             >
-              <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
+              <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
             </button>
           </div>
 
           {/* Partner Profile Snippet */}
-          <div className="px-6 py-4.5 bg-black/25 border-b border-secondary-foreground/10 flex items-center gap-3.5 shrink-0">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-accent to-accent/80 text-black font-bold flex items-center justify-center text-sm shadow-md shrink-0">
+          <div className="px-4 py-3 bg-white/[0.03] border-b border-white/[0.08] flex items-center gap-3 shrink-0">
+            <div className="h-8 w-8 rounded-full bg-accent/20 text-accent font-semibold flex items-center justify-center text-xs shrink-0 font-heading">
               {user?.name ? user.name.charAt(0).toUpperCase() : 'P'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">
+              <p className="font-heading text-[13.5px] font-semibold text-white truncate tracking-wide">
                 {user?.name || 'Partenaire Hôte'}
               </p>
-              <p className="text-xs text-secondary-foreground/70 truncate flex items-center gap-1.5 mt-0.5">
+              <div className="text-[11px] text-white/50 flex items-center gap-1.5 mt-0.5">
                 {user?.verified ? (
                   <>
-                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-xs" />
-                    <span className="text-emerald-400 font-medium">KYC Validé (Certifié)</span>
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-[10px]" />
+                    <span className="text-emerald-400 font-medium">KYC Certifié</span>
                   </>
                 ) : (
                   <>
-                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-xs" />
-                    <span className="text-amber-400 font-medium">Audit KYC en attente</span>
+                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-[10px]" />
+                    <span className="text-amber-400 font-medium">Audit en attente</span>
                   </>
                 )}
-              </p>
+              </div>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-2 flex-1">
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-secondary-foreground/40">
+          <nav className="p-3 space-y-1 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="px-3 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-white/45 font-heading">
               Navigation Espace Pro
             </div>
             {navItems.map((item) => {
@@ -538,36 +538,37 @@ export function PartnerDashboardPage() {
                     handleSetSection(item.key);
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
+                  className={`w-full group flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all ${
                     isActive
-                      ? 'bg-primary text-white shadow-lg shadow-primary/25 font-semibold ring-1 ring-white/10'
+                      ? 'bg-white/[0.12] text-white shadow-xs font-semibold'
                       : item.highlight
-                      ? 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white'
-                      : 'text-secondary-foreground/75 hover:bg-white/8 hover:text-white'
+                      ? 'bg-accent text-secondary font-semibold hover:bg-accent/90 shadow-xs'
+                      : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FontAwesomeIcon
+                      icon={item.icon}
+                      className={`h-3.5 w-3.5 shrink-0 transition-colors ${
                         isActive
-                          ? 'bg-white/20 text-white'
+                          ? 'text-accent'
                           : item.highlight
-                          ? 'bg-accent/20 text-accent'
-                          : 'bg-white/5 text-secondary-foreground/70'
+                          ? 'text-secondary'
+                          : 'text-white/60 group-hover:text-white'
                       }`}
-                    >
-                      <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
-                    </div>
-                    <span>{item.label}</span>
+                    />
+                    <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
                   </div>
 
                   {item.badge && (
-                    <span className="rounded-full bg-accent text-black text-[10px] font-bold px-2 py-0.5 shadow-xs">
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                      item.highlight ? 'bg-black/20 text-secondary' : 'bg-accent/20 text-accent'
+                    }`}>
                       {item.badge}
                     </span>
                   )}
                   {typeof item.count === 'number' && !item.badge && (
-                    <span className="text-xs text-secondary-foreground/60 font-mono px-2 py-0.5 rounded-md bg-white/5">
+                    <span className="text-[11px] text-white/50 font-mono px-2 py-0.5 rounded-full bg-white/[0.06]">
                       {item.count}
                     </span>
                   )}
@@ -578,10 +579,10 @@ export function PartnerDashboardPage() {
         </div>
 
         {/* Sidebar Footer Actions (Strictly Pinned at the Bottom) */}
-        <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
+        <div className="p-3 border-t border-white/[0.08] space-y-1 shrink-0 bg-secondary">
           <Link
             to="/"
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-secondary-foreground/70 hover:bg-white/10 hover:text-white transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
           >
             <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
             <span>Voir le site public</span>
@@ -592,7 +593,7 @@ export function PartnerDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>
