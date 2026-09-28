@@ -121,7 +121,7 @@ export function ClientDashboardPage() {
                 </div>
                 <div className="hidden sm:block text-left">
                   <p className="text-xs font-semibold leading-none">{user?.name || 'Voyageur'}</p>
-                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[140px]">{user?.email || 'client@beninbeyond.bj'}</p>
+                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[140px]">{user?.email || 'client@beninbeyond.com'}</p>
                 </div>
               </div>
 
@@ -397,7 +397,7 @@ export function ClientDashboardPage() {
                   <input
                     type="email"
                     disabled
-                    value={user?.email || 'client@beninbeyond.bj'}
+                    value={user?.email || 'client@beninbeyond.com'}
                     className="w-full rounded-xl border border-foreground/10 bg-muted/60 px-4 py-2.5 text-sm text-foreground/50 cursor-not-allowed"
                   />
                 </div>

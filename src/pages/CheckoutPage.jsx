@@ -88,7 +88,7 @@ export function CheckoutPage() {
 
     setIsSubmitting(true);
     const bookingRef = `BB-${Math.floor(Math.random() * 900000 + 100000)}`;
-    const clientEmail = (customer.email || 'voyageur@beninbeyond.bj').trim().toLowerCase();
+    const clientEmail = (customer.email || 'voyageur@beninbeyond.com').trim().toLowerCase();
 
     // Activation automatique du compte Voyageur au moment de l'achat
     if (registerOrLoginClient) {

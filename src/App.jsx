@@ -15,6 +15,8 @@ import { PartnerDashboardPage } from './pages/PartnerDashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { ClientDashboardPage } from './pages/ClientDashboardPage';
 import { TourismPage } from './pages/TourismPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsPage } from './pages/TermsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthProvider } from './context/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -51,6 +53,13 @@ export function App() {
               <Route path="/decouvrir" element={<TourismPage />} />
               <Route path="/panier" element={<CartPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
+              
+              {/* Informations légales, Confidentialité & Utilisation */}
+              <Route path="/confidentialite" element={<PrivacyPolicyPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/cgu" element={<TermsPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/conditions-utilisation" element={<TermsPage />} />
               
               {/* Authentification & Tableaux de bord */}
               <Route path="/login" element={<LoginPage />} />

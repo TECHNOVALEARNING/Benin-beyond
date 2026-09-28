@@ -21,7 +21,7 @@ export const DEMO_USERS = {
   owner: {
     id: 'usr_owner_01',
     name: 'Patrice H. (Hôte & Loueur Pro)',
-    email: 'proprietaire@beninbeyond.bj',
+    email: 'proprietaire@beninbeyond.com',
     role: 'owner',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
     company: 'Littoral Prestige Assets',
@@ -30,7 +30,7 @@ export const DEMO_USERS = {
   client: {
     id: 'usr_client_01',
     name: 'Amina Koffi',
-    email: 'voyageur@beninbeyond.bj',
+    email: 'voyageur@beninbeyond.com',
     role: 'client',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
     membership: 'Voyageur Privilège',
@@ -43,6 +43,7 @@ export function resolveUserRole(email, rawRole = null) {
   const cleanEmail = (email || '').trim().toLowerCase();
   if (
     cleanEmail === SUPER_ADMIN_EMAIL ||
+    cleanEmail === 'admin@beninbeyond.com' ||
     cleanEmail === 'admin@beninbeyond.bj' ||
     cleanEmail.startsWith('admin@')
   ) {
@@ -308,7 +309,7 @@ export function AuthProvider({ children }) {
    */
   const login = async (email, password, optionalRole = null) => {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.bj' || cleanEmail.startsWith('admin@');
+    const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.com' || cleanEmail === 'admin@beninbeyond.bj' || cleanEmail.startsWith('admin@');
 
     // 1. Authentification officielle avec Supabase Auth si configuré
     if (isSupabaseConfigured && supabase) {
