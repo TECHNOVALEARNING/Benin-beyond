@@ -7,12 +7,9 @@ import {
   faArrowRight,
   faCircleCheck,
   faCircleInfo,
-  faSpinner,
-  faShieldHalved,
-  faBuilding,
-  faCompass
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
-import { useAuth, SUPER_ADMIN_EMAIL } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function LoginPage() {
@@ -96,27 +93,6 @@ export function LoginPage() {
       }
     } catch (err) {
       setError('Une erreur est survenue lors de la connexion.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickLogin = async (type) => {
-    setError('');
-    setLoading(true);
-    try {
-      if (type === 'admin') {
-        const res = await login(SUPER_ADMIN_EMAIL, 'BeninBeyond2025!');
-        if (res?.success) navigate('/admin', { replace: true });
-      } else if (type === 'owner') {
-        const res = await login('proprietaire@beninbeyond.bj', 'BeninBeyond2025!');
-        if (res?.success) navigate('/dashboard/partner', { replace: true });
-      } else {
-        const res = await login('voyageur@beninbeyond.bj', 'BeninBeyond2025!');
-        if (res?.success) navigate('/dashboard/client', { replace: true });
-      }
-    } catch {
-      setError('Erreur lors de la connexion rapide.');
     } finally {
       setLoading(false);
     }
@@ -336,44 +312,6 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* Quick Demo Access */}
-            <div className="mt-5 pt-4 border-t border-foreground/10">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/50 text-center mb-2.5">
-                Accès direct évaluation rapide
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('admin')}
-                  disabled={loading || loadingGoogle}
-                  className="p-2 rounded-xl bg-primary/10 border border-primary/25 hover:bg-primary/20 text-center transition-all group"
-                  title="Accéder en mode Super-Administrateur"
-                >
-                  <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5 text-primary mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                  <span className="block text-[10px] font-bold text-foreground">Super-Admin</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('owner')}
-                  disabled={loading || loadingGoogle}
-                  className="p-2 rounded-xl bg-accent/15 border border-accent/30 hover:bg-accent/25 text-center transition-all group"
-                  title="Accéder en mode Hôte / Partenaire"
-                >
-                  <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                  <span className="block text-[10px] font-bold text-foreground">Hôte Pro</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('client')}
-                  disabled={loading || loadingGoogle}
-                  className="p-2 rounded-xl bg-foreground/5 border border-foreground/15 hover:bg-foreground/10 text-center transition-all group"
-                  title="Accéder en mode Voyageur"
-                >
-                  <FontAwesomeIcon icon={faCompass} className="h-3.5 w-3.5 text-foreground/60 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                  <span className="block text-[10px] font-bold text-foreground">Voyageur</span>
-                </button>
-              </div>
-            </div>
 
             {/* Switch to Register */}
             <div className="mt-5 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
