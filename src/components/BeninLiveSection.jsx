@@ -1,23 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  Sun,
-  Moon,
-  Cloud,
-  CloudSun,
-  CloudMoon,
-  CloudRain,
-  CloudLightning,
-  Clock,
-  Calendar,
-  MapPin,
-  ChevronLeft,
-  ChevronRight,
-  Wind,
-  Droplets,
-  Thermometer,
-  Radio,
-  Sparkles
-} from 'lucide-react';
+  faSun,
+  faMoon,
+  faCloud,
+  faCloudSun,
+  faCloudMoon,
+  faCloudShowersHeavy,
+  faBolt,
+  faClock,
+  faCalendarDays,
+  faLocationDot,
+  faChevronLeft,
+  faChevronRight,
+  faWind,
+  faDroplet,
+  faTemperatureHalf,
+  faTowerBroadcast,
+  faGem
+} from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
 import { getEvents } from '../services/eventService';
 
@@ -32,41 +33,41 @@ function getWeatherInfo(code, isDay) {
   if (code === 0) {
     return {
       label: isDay ? 'Ensoleillé' : 'Nuit claire',
-      icon: isDay ? Sun : Moon,
+      icon: isDay ? faSun : faMoon,
       condition: isDay ? 'Ciel dégagé' : 'Ciel étoilé'
     };
   }
   if (code === 1 || code === 2) {
     return {
       label: isDay ? 'Éclaircies' : 'Nuit voilée',
-      icon: isDay ? CloudSun : CloudMoon,
+      icon: isDay ? faCloudSun : faCloudMoon,
       condition: isDay ? 'Passages nuageux' : 'Ciel partiellement voilé'
     };
   }
   if (code === 3) {
     return {
       label: 'Couvert',
-      icon: Cloud,
+      icon: faCloud,
       condition: 'Ciel couvert'
     };
   }
   if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) {
     return {
       label: 'Averses tropicales',
-      icon: CloudRain,
+      icon: faCloudShowersHeavy,
       condition: 'Pluie tropicale'
     };
   }
   if ([95, 96, 99].includes(code)) {
     return {
       label: 'Orage tropical',
-      icon: CloudLightning,
+      icon: faBolt,
       condition: 'Activité orageuse'
     };
   }
   return {
     label: isDay ? 'Climat doux' : 'Nuit tempérée',
-    icon: isDay ? Sun : Moon,
+    icon: isDay ? faSun : faMoon,
     condition: 'Climat béninois'
   };
 }
@@ -191,7 +192,6 @@ export function BeninLiveSection() {
   }, [events, activeEventIndex]);
 
   const weatherInfo = getWeatherInfo(weatherData.code, weatherData.isDay);
-  const WeatherIcon = weatherInfo.icon;
 
   return (
     <section className="relative w-full border-y border-foreground/10 bg-card/60 backdrop-blur-md">
@@ -202,7 +202,7 @@ export function BeninLiveSection() {
           {/* A. Heure Officielle du Bénin */}
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary">
-              <Clock className="h-5 w-5" />
+              <FontAwesomeIcon icon={faClock} className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -234,9 +234,9 @@ export function BeninLiveSection() {
                   : 'bg-primary/10 text-primary border-primary/25'
               }`}
             >
-              <WeatherIcon
+              <FontAwesomeIcon
+                icon={weatherInfo.icon}
                 className={`h-5 w-5 ${weatherData.isDay ? 'animate-[spin_16s_linear_infinite]' : ''}`}
-                strokeWidth={2}
               />
             </div>
             <div>
@@ -252,18 +252,18 @@ export function BeninLiveSection() {
               {/* Indicateurs : Ressenti, Humidité, Vent et Sélecteur */}
               <div className="flex flex-wrap items-center gap-3 text-[11px] text-foreground/65 mt-0.5">
                 <span className="flex items-center gap-1">
-                  <Thermometer className="h-3 w-3 text-primary" /> Ressenti {weatherData.apparentTemp}°C
+                  <FontAwesomeIcon icon={faTemperatureHalf} className="h-3 w-3 text-primary" /> Ressenti {weatherData.apparentTemp}°C
                 </span>
                 <span className="flex items-center gap-1">
-                  <Droplets className="h-3 w-3 text-primary" /> {weatherData.humidity}% Humidité
+                  <FontAwesomeIcon icon={faDroplet} className="h-3 w-3 text-primary" /> {weatherData.humidity}% Humidité
                 </span>
                 <span className="flex items-center gap-1">
-                  <Wind className="h-3 w-3 text-primary" /> {weatherData.windSpeed} km/h
+                  <FontAwesomeIcon icon={faWind} className="h-3 w-3 text-primary" /> {weatherData.windSpeed} km/h
                 </span>
 
                 <span className="text-foreground/30">•</span>
                 <div className="flex items-center gap-1 text-[11px]">
-                  <MapPin className="h-3 w-3 text-primary" />
+                  <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-primary" />
                   <select
                     value={selectedCityId}
                     onChange={(e) => setSelectedCityId(e.target.value)}
@@ -283,7 +283,7 @@ export function BeninLiveSection() {
 
           {/* C. Recommandation Saisonnière */}
           <div className="hidden xl:flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary font-medium">
-            <Radio className="h-3.5 w-3.5 text-primary animate-pulse" />
+            <FontAwesomeIcon icon={faTowerBroadcast} className="h-3.5 w-3.5 text-primary animate-pulse" />
             <span>Le Bénin vous accueille toute l'année</span>
           </div>
 
@@ -300,7 +300,7 @@ export function BeninLiveSection() {
           <ScrollReveal delay={50} y={20} className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-8">
             <div>
               <p className="caption text-accent font-semibold tracking-wider flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5" />
+                <FontAwesomeIcon icon={faGem} className="h-3.5 w-3.5" />
                 <span>En direct du Bénin</span>
               </p>
               <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
@@ -320,14 +320,14 @@ export function BeninLiveSection() {
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
                     title="Événement précédent"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <FontAwesomeIcon icon={faChevronLeft} className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={nextEvent}
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
                     title="Événement suivant"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <FontAwesomeIcon icon={faChevronRight} className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -367,7 +367,7 @@ export function BeninLiveSection() {
 
                   {/* Period tag */}
                   <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <Calendar className="h-3.5 w-3.5 text-accent" />
+                    <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5 text-accent" />
                     <span>{event.period}</span>
                   </div>
                 </div>
@@ -380,7 +380,7 @@ export function BeninLiveSection() {
                     </h4>
 
                     <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground/60">
-                      <MapPin className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                      <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-primary/70 shrink-0" />
                       <span>{event.location}</span>
                     </p>
 

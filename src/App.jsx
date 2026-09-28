@@ -17,6 +17,7 @@ import { ClientDashboardPage } from './pages/ClientDashboardPage';
 import { TourismPage } from './pages/TourismPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthProvider } from './context/AuthContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -34,36 +35,38 @@ export function App() {
   const hidePublicChrome = isDashboard || isAuth;
 
   return (
-    <AuthProvider>
-      <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
-        <ScrollToTop />
-        <main className={`flex-1 ${hidePublicChrome ? '' : 'pb-28'}`}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/explore" element={<ExplorePage />} />
-            <Route path="/listing/:id" element={<ListingDetailPage />} />
-            <Route path="/packs" element={<PacksPage />} />
-            <Route path="/pack/:id" element={<PackDetailPage />} />
-            <Route path="/decouvertes" element={<TourismPage />} />
-            <Route path="/tourisme" element={<TourismPage />} />
-            <Route path="/decouvrir" element={<TourismPage />} />
-            <Route path="/panier" element={<CartPage />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            
-            {/* Authentification & Tableaux de bord */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/dashboard/client" element={<ClientDashboardPage />} />
-            <Route path="/dashboard/partner" element={<PartnerDashboardPage />} />
-            <Route path="/admin" element={<AdminDashboardPage />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
+          <ScrollToTop />
+          <main className={`flex-1 ${hidePublicChrome ? '' : 'pb-28'}`}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/explore" element={<ExplorePage />} />
+              <Route path="/listing/:id" element={<ListingDetailPage />} />
+              <Route path="/packs" element={<PacksPage />} />
+              <Route path="/pack/:id" element={<PackDetailPage />} />
+              <Route path="/decouvertes" element={<TourismPage />} />
+              <Route path="/tourisme" element={<TourismPage />} />
+              <Route path="/decouvrir" element={<TourismPage />} />
+              <Route path="/panier" element={<CartPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              
+              {/* Authentification & Tableaux de bord */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/dashboard/client" element={<ClientDashboardPage />} />
+              <Route path="/dashboard/partner" element={<PartnerDashboardPage />} />
+              <Route path="/admin" element={<AdminDashboardPage />} />
 
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </main>
-        {!hidePublicChrome && <Footer />}
-        {!hidePublicChrome && <Navbar />}
-      </div>
-    </AuthProvider>
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </main>
+          {!hidePublicChrome && <Footer />}
+          {!hidePublicChrome && <Navbar />}
+        </div>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

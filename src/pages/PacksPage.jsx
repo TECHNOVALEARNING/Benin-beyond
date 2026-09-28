@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Layers, ShieldCheck, Sparkles, PhoneCall, CheckCircle2, ArrowRight, House, Car } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faLayerGroup,
+  faShieldHalved,
+  faPhone,
+  faCircleCheck,
+  faHouse,
+  faCar
+} from '@fortawesome/free-solid-svg-icons';
 import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -57,7 +65,7 @@ export function PacksPage() {
 
         <ScrollReveal delay={70} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <ShieldCheck className="h-4 w-4" />
+            <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Tout inclus</div>
@@ -67,7 +75,7 @@ export function PacksPage() {
 
         <ScrollReveal delay={140} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" />
+            <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4" />
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Prise aéroport</div>
@@ -77,7 +85,7 @@ export function PacksPage() {
 
         <ScrollReveal delay={210} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-700">
-            <PhoneCall className="h-4 w-4" />
+            <FontAwesomeIcon icon={faPhone} className="h-3.5 w-3.5" />
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Assistance 24/7</div>
@@ -95,7 +103,7 @@ export function PacksPage() {
         <ScrollReveal delay={100} y={20} className="mt-12">
           <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-8 sm:p-12 text-center max-w-2xl mx-auto shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
-              <Layers className="h-7 w-7" />
+              <FontAwesomeIcon icon={faLayerGroup} className="h-7 w-7" />
             </div>
             <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
               Formules Signature en Préparation
@@ -109,14 +117,14 @@ export function PacksPage() {
                 to="/residences"
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:bg-primary/90 transition-all shadow-md"
               >
-                <House className="h-3.5 w-3.5" />
+                <FontAwesomeIcon icon={faHouse} className="h-3 w-3" />
                 <span>Explorer les Hébergements</span>
               </Link>
               <Link
                 to="/explore?type=drive"
                 className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
               >
-                <Car className="h-3.5 w-3.5" />
+                <FontAwesomeIcon icon={faCar} className="h-3 w-3" />
                 <span>Explorer les Véhicules</span>
               </Link>
             </div>

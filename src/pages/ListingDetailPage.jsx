@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  ChevronLeft,
-  BadgeCheck,
-  MapPin,
-  Star,
-  CheckCircle2,
-  Calendar,
-  Users,
-  ShieldCheck
-} from 'lucide-react';
+  faChevronLeft,
+  faCertificate,
+  faLocationDot,
+  faCircleCheck,
+  faCalendarDays,
+  faUsers,
+  faShieldHalved
+} from '@fortawesome/free-solid-svg-icons';
 import { getListingById } from '../services/listingService';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
@@ -119,7 +119,7 @@ export function ListingDetailPage() {
         to="/explore"
         className="mb-6 inline-flex items-center gap-2 text-sm text-foreground/60 hover:text-primary transition-colors"
       >
-        <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+        <FontAwesomeIcon icon={faChevronLeft} className="h-3.5 w-3.5" />
         <span>Catalogue</span>
       </Link>
 
@@ -152,7 +152,7 @@ export function ListingDetailPage() {
             <div className="flex flex-wrap items-center gap-3">
               {listing.badge && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent-foreground">
-                  <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <FontAwesomeIcon icon={faCertificate} className="h-3.5 w-3.5" />
                   {listing.badge}
                 </span>
               )}
@@ -164,21 +164,12 @@ export function ListingDetailPage() {
               {listing.title}
             </h1>
 
-            {/* Location & Rating */}
+            {/* Location */}
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-foreground/60">
-              <span className="flex items-center gap-1">
-                <MapPin className="h-4 w-4 text-primary" strokeWidth={1.5} />
-                {listing.location}
+              <span className="flex items-center gap-1.5">
+                <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-primary" />
+                <span>{listing.location}</span>
               </span>
-              {listing.rating > 0 && (
-                <span className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-accent text-accent" strokeWidth={1.5} />
-                  <span className="font-semibold text-foreground">
-                    {listing.rating.toFixed(1)}
-                  </span>
-                  <span>· {listing.reviews_count} avis</span>
-                </span>
-              )}
             </div>
           </ScrollReveal>
 
@@ -247,7 +238,7 @@ export function ListingDetailPage() {
                       {listing.host.name}
                     </h4>
                     {listing.host.verified && (
-                      <CheckCircle2 className="h-4 w-4 text-primary" strokeWidth={2} />
+                      <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 text-primary" />
                     )}
                   </div>
                   <p className="text-xs text-foreground/60">{listing.host.role}</p>
@@ -271,7 +262,7 @@ export function ListingDetailPage() {
                 </span>
               </div>
               <div className="text-xs text-foreground/50 flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5 text-accent" />
                 Garantie Vérifiée
               </div>
             </div>
@@ -280,7 +271,7 @@ export function ListingDetailPage() {
             {listing.availability?.available_from && (
               <div className="mt-4 rounded-xl bg-accent/15 border border-accent/30 p-3 text-xs text-foreground">
                 <p className="font-bold text-accent uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" />
+                  <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5" />
                   <span>Période de disponibilité hôtelière</span>
                 </p>
                 <p className="mt-1 font-semibold text-foreground">
@@ -300,7 +291,7 @@ export function ListingDetailPage() {
                 <div className="grid grid-cols-2 gap-2 rounded-lg border border-foreground/15 p-2 bg-background">
                   <div>
                     <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Arrivée
+                      <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Arrivée
                     </label>
                     <input
                       type="date"
@@ -312,7 +303,7 @@ export function ListingDetailPage() {
                   </div>
                   <div className="border-l border-foreground/15 pl-2">
                     <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Départ
+                      <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Départ
                     </label>
                     <input
                       type="date"
@@ -328,7 +319,7 @@ export function ListingDetailPage() {
               {/* Guests */}
               <div className="rounded-lg border border-foreground/15 p-2 bg-background">
                 <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                  <Users className="h-3 w-3" /> Voyageurs / Participants
+                  <FontAwesomeIcon icon={faUsers} className="h-3 w-3" /> Voyageurs / Participants
                 </label>
                 <select
                   value={guests}

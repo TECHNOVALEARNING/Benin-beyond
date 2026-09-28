@@ -47,9 +47,9 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        heading: ["Syne", "sans-serif"],
-        body: ["Inter", "sans-serif"],
-        display: ["Syne", "sans-serif"],
+        heading: ["Instrument Serif", "Georgia", "serif"],
+        body: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        display: ["Instrument Serif", "Georgia", "serif"],
       },
       maxWidth: {
         "8xl": "92rem",

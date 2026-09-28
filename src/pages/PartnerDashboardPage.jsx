@@ -53,20 +53,42 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { addListing, deleteListing, getListings } from '../services/listingService';
+import { addListing, deleteListing, getListings, getCustomListings } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { compressImage } from '../utils/imageOptimizer';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
 
   // Sidebar navigation state
-  const [currentSection, setCurrentSection] = useState('overview'); // 'overview' | 'bookings' | 'listings' | 'publish' | 'finances' | 'stats'
+  const [currentSection, setCurrentSection] = useState(() => {
+    try {
+      return localStorage.getItem('benin_beyond_partner_section') || 'overview';
+    } catch {
+      return 'overview';
+    }
+  });
+
+  const handleSetSection = (sec) => {
+    setCurrentSection(sec);
+    try {
+      localStorage.setItem('benin_beyond_partner_section', sec);
+    } catch {}
+  };
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Data states
-  const [listings, setListings] = useState([]);
+  const [listings, setListings] = useState(() => {
+    try {
+      return getCustomListings();
+    } catch {
+      return [];
+    }
+  });
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -107,6 +129,7 @@ export function PartnerDashboardPage() {
   const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState({ isOpen: false, id: null, title: '' });
 
   // Payout request modal state
   const [showPayoutModal, setShowPayoutModal] = useState(false);
@@ -254,28 +277,40 @@ export function PartnerDashboardPage() {
     }
   };
 
-  // Photo handlers
-  const handlePhotoUpload = (e) => {
+  // Photo handlers (with automated client-side compression)
+  const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
+  const handlePhotoUpload = async (e) => {
     setPhotoError('');
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    files.forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        setPhotoError(`L'image "${file.name}" dépasse la taille recommandée de 10 Mo.`);
-        return;
-      }
+    setIsCompressingPhotos(true);
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
+          continue;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+          setPhotoError(`L'image "${file.name}" dépasse 15 Mo.`);
+          continue;
+        }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setUploadedPhotos((prev) => [...prev, event.target.result]);
-      };
-      reader.readAsDataURL(file);
-    });
+        try {
+          const compressed = await compressImage(file, 1280, 800, 0.82);
+          setUploadedPhotos((prev) => [...prev, compressed]);
+        } catch (err) {
+          console.warn('Fallback FileReader for image:', err);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setUploadedPhotos((prev) => [...prev, event.target.result]);
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    } finally {
+      setIsCompressingPhotos(false);
+    }
   };
 
   const handleAddPhotoUrl = () => {
@@ -325,11 +360,20 @@ export function PartnerDashboardPage() {
     setVideoError('');
   };
 
-  const handleDeleteListingItem = async (id) => {
-    if (window.confirm('Voulez-vous vraiment retirer cette annonce de la marketplace ?')) {
-      setListings((prev) => prev.filter((item) => item.id !== id));
-      await deleteListing(id);
-    }
+  const handleDeleteListingItem = (id, title = '') => {
+    setConfirmDeleteModal({
+      isOpen: true,
+      id,
+      title: title || 'cette annonce'
+    });
+  };
+
+  const handleConfirmDeleteListing = async () => {
+    const id = confirmDeleteModal.id;
+    if (!id) return;
+    setConfirmDeleteModal({ isOpen: false, id: null, title: '' });
+    setListings((prev) => prev.filter((item) => item.id !== id));
+    await deleteListing(id);
   };
 
   // Publishing an item
@@ -396,7 +440,7 @@ export function PartnerDashboardPage() {
     setRoomsCount(1);
 
     setTimeout(() => {
-      setCurrentSection('listings');
+      handleSetSection('listings');
       setPublishSuccess('');
     }, 2000);
   };
@@ -431,49 +475,49 @@ export function PartnerDashboardPage() {
       {/* 1. SIDEBAR PRO MARKETPLACE (FONTAWESOME ICONS ONLY) - STRICTLY PINNED */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-[290px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Brand Logo & Close button on Mobile */}
-          <div className="flex items-center justify-between px-6 py-6 border-b border-secondary-foreground/10 shrink-0">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="font-heading text-xl font-bold tracking-tight text-white">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
+            <Link to="/" className="flex items-center gap-3 group">
+              <span className="font-heading text-xl font-bold tracking-tight text-white group-hover:text-accent transition-colors">
                 Bénin Beyond
               </span>
-              <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-bold text-accent uppercase">
+              <span className="rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[9px] font-bold text-accent uppercase tracking-wider">
                 Hôte & Flotte
               </span>
             </Link>
 
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-secondary-foreground/60 hover:text-white p-1"
+              className="md:hidden text-secondary-foreground/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10"
             >
               <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
             </button>
           </div>
 
           {/* Partner Profile Snippet */}
-          <div className="px-6 py-4 bg-black/20 border-b border-secondary-foreground/10 flex items-center gap-3 shrink-0">
-            <div className="h-10 w-10 rounded-full bg-accent text-black font-bold flex items-center justify-center text-sm shadow-md">
+          <div className="px-6 py-4.5 bg-black/25 border-b border-secondary-foreground/10 flex items-center gap-3.5 shrink-0">
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-accent to-accent/80 text-black font-bold flex items-center justify-center text-sm shadow-md shrink-0">
               {user?.name ? user.name.charAt(0).toUpperCase() : 'P'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">
                 {user?.name || 'Partenaire Hôte'}
               </p>
-              <p className="text-[11px] text-secondary-foreground/70 truncate flex items-center gap-1">
+              <p className="text-xs text-secondary-foreground/70 truncate flex items-center gap-1.5 mt-0.5">
                 {user?.verified ? (
                   <>
-                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-[10px]" />
-                    <span className="text-emerald-400 font-semibold">KYC Validé (Certifié)</span>
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-xs" />
+                    <span className="text-emerald-400 font-medium">KYC Validé (Certifié)</span>
                   </>
                 ) : (
                   <>
-                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-[10px]" />
-                    <span className="text-amber-400 font-semibold">Audit KYC en attente</span>
+                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-xs" />
+                    <span className="text-amber-400 font-medium">Audit KYC en attente</span>
                   </>
                 )}
               </p>
@@ -481,39 +525,49 @@ export function PartnerDashboardPage() {
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1.5 flex-1">
+          <nav className="p-4 space-y-2 flex-1">
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-secondary-foreground/40">
+              Navigation Espace Pro
+            </div>
             {navItems.map((item) => {
               const isActive = currentSection === item.key;
               return (
                 <button
                   key={item.key}
                   onClick={() => {
-                    setCurrentSection(item.key);
+                    handleSetSection(item.key);
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-primary text-white shadow-lg shadow-primary/25 font-bold'
+                      ? 'bg-primary text-white shadow-lg shadow-primary/25 font-semibold ring-1 ring-white/10'
                       : item.highlight
-                      ? 'bg-accent/15 text-accent hover:bg-accent/25'
-                      : 'text-secondary-foreground/75 hover:bg-white/10 hover:text-white'
+                      ? 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white'
+                      : 'text-secondary-foreground/75 hover:bg-white/8 hover:text-white'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <FontAwesomeIcon
-                      icon={item.icon}
-                      className={`h-4 w-4 ${isActive ? 'text-white' : item.highlight ? 'text-accent' : 'text-secondary-foreground/60'}`}
-                    />
+                    <div
+                      className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : item.highlight
+                          ? 'bg-accent/20 text-accent'
+                          : 'bg-white/5 text-secondary-foreground/70'
+                      }`}
+                    >
+                      <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
+                    </div>
                     <span>{item.label}</span>
                   </div>
 
                   {item.badge && (
-                    <span className="rounded-full bg-accent text-black text-[10px] font-bold px-2 py-0.5">
+                    <span className="rounded-full bg-accent text-black text-[10px] font-bold px-2 py-0.5 shadow-xs">
                       {item.badge}
                     </span>
                   )}
                   {typeof item.count === 'number' && !item.badge && (
-                    <span className="text-[11px] text-secondary-foreground/60 font-mono">
+                    <span className="text-xs text-secondary-foreground/60 font-mono px-2 py-0.5 rounded-md bg-white/5">
                       {item.count}
                     </span>
                   )}
@@ -527,7 +581,7 @@ export function PartnerDashboardPage() {
         <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
           <Link
             to="/"
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-medium text-secondary-foreground/70 hover:bg-white/10 hover:text-white transition-colors"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-secondary-foreground/70 hover:bg-white/10 hover:text-white transition-colors"
           >
             <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
             <span>Voir le site public</span>
@@ -538,7 +592,7 @@ export function PartnerDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-medium text-red-300 hover:bg-red-500/15 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>
@@ -1269,7 +1323,7 @@ export function PartnerDashboardPage() {
                             <FontAwesomeIcon icon={faEye} />
                           </button>
                           <button
-                            onClick={() => handleDeleteListingItem(item.id)}
+                            onClick={() => handleDeleteListingItem(item.id, item.title)}
                             className="rounded-lg border border-red-200 p-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
                             title="Supprimer l'annonce"
                           >
@@ -2552,6 +2606,18 @@ export function PartnerDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmation de Suppression Pro */}
+      <ConfirmModal
+        isOpen={confirmDeleteModal.isOpen}
+        title="Retirer cette annonce"
+        message={`Voulez-vous vraiment retirer définitivement l'annonce "${confirmDeleteModal.title}" de la marketplace Bénin Beyond ? Cette action supprimera le bien du catalogue.`}
+        confirmText="Supprimer l'annonce"
+        cancelText="Annuler"
+        variant="danger"
+        onConfirm={handleConfirmDeleteListing}
+        onCancel={() => setConfirmDeleteModal({ isOpen: false, id: null, title: '' })}
+      />
 
     </div>
   );

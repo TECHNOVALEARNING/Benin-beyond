@@ -28,8 +28,9 @@ export async function getPacks() {
         .from('packs')
         .select('*')
         .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        return [...custom, ...data];
+      if (!error && Array.isArray(data) && data.length > 0) {
+        saveCustomPacks(data);
+        return data;
       }
     } catch (err) {
       console.warn('Supabase packs fetch error:', err.message);
@@ -42,8 +43,8 @@ export async function addPack(newPack) {
   const packWithId = {
     id: newPack.id || `pack-${Date.now()}`,
     ...newPack,
-    rating: newPack.rating || 5.0,
-    reviewsCount: newPack.reviewsCount || 1,
+    rating: newPack.rating || null,
+    reviewsCount: newPack.reviewsCount || 0,
     created_at: newPack.created_at || new Date().toISOString()
   };
 

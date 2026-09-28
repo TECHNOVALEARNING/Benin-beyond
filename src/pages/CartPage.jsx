@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, ArrowRight, Trash2 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBagShopping, faArrowRight, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -11,7 +12,7 @@ export function CartPage() {
   if (items.length === 0) {
     return (
       <ScrollReveal delay={0} y={20} className="mx-auto flex max-w-8xl flex-col items-center px-6 py-32 text-center md:px-12">
-        <ShoppingBag className="h-14 w-14 text-foreground/30" strokeWidth={1} />
+        <FontAwesomeIcon icon={faBagShopping} className="h-14 w-14 text-foreground/30" />
         <h1 className="section-title mt-6 text-3xl md:text-4xl">
           Votre panier est vide
         </h1>
@@ -23,7 +24,7 @@ export function CartPage() {
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 shadow-md"
         >
           <span>Explorer le catalogue</span>
-          <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+          <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
         </Link>
       </ScrollReveal>
     );
@@ -85,7 +86,7 @@ export function CartPage() {
                         className="text-foreground/40 hover:text-destructive transition-colors p-1"
                         title="Supprimer du panier"
                       >
-                        <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                        <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
                       </button>
                     </div>
 

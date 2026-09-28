@@ -1,78 +1,79 @@
 import React from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
-  Building2, 
-  Plane, 
-  ShieldCheck, 
-  Sparkles, 
-  CreditCard, 
-  Landmark, 
-  Palmtree, 
-  Car, 
-  Award 
-} from 'lucide-react';
+  faBuilding, 
+  faPlane, 
+  faShieldHalved, 
+  faGem, 
+  faCreditCard, 
+  faLandmark, 
+  faUmbrellaBeach, 
+  faCar, 
+  faAward 
+} from '@fortawesome/free-solid-svg-icons';
 
 const PARTNERS = [
   {
     id: 'benin-tourisme',
     name: 'Bénin Tourisme',
     sub: 'Agence Nationale du Tourisme',
-    icon: Landmark,
+    icon: faLandmark,
     accent: '#d99f2b'
   },
   {
     id: 'novotel-orisha',
     name: 'Novotel Orisha',
     sub: 'Hôtellerie 4★ Supérieur Cotonou',
-    icon: Building2,
+    icon: faBuilding,
     accent: '#2a6f97'
   },
   {
     id: 'air-france',
     name: 'Air France',
     sub: 'Liaisons Premium Cotonou — Paris',
-    icon: Plane,
+    icon: faPlane,
     accent: '#012169'
   },
   {
     id: 'sobebra',
     name: 'Sobebra Prestige',
     sub: 'Art de Vivre & Terroirs',
-    icon: Award,
+    icon: faAward,
     accent: '#c85a17'
   },
   {
     id: 'mtn-momo',
     name: 'MTN MoMo Bénin',
     sub: 'Paiement Sécurisé Sans Frais',
-    icon: CreditCard,
+    icon: faCreditCard,
     accent: '#ffcc00'
   },
   {
     id: 'club-med',
     name: 'Club Med Bénin',
     sub: 'Resort Éco-Luxe d’Avlo',
-    icon: Palmtree,
+    icon: faUmbrellaBeach,
     accent: '#2b9348'
   },
   {
     id: 'seme-city',
     name: 'Sèmè City',
     sub: 'Pôle International d’Innovation',
-    icon: Sparkles,
+    icon: faGem,
     accent: '#9d4edd'
   },
   {
     id: 'celtiis-cash',
     name: 'Celtiis Cash',
     sub: 'Réseau National Digital',
-    icon: ShieldCheck,
+    icon: faShieldHalved,
     accent: '#0077b6'
   },
   {
     id: 'littoral-mobility',
     name: 'Bénin VIP Drive',
     sub: 'Flotte Véhicules de Prestige',
-    icon: Car,
+    icon: faCar,
     accent: '#bc6c25'
   }
 ];
@@ -104,37 +105,34 @@ export function PartnerMarquee({ className = '' }) {
 
         {/* Marquee Wrapper with continuous animation and pause on hover */}
         <div className="flex items-center gap-6 animate-marquee shrink-0 group-hover:[animation-play-state:paused]">
-          {duplicatedPartners.map((item, index) => {
-            const Icon = item.icon;
-            return (
+          {duplicatedPartners.map((item, index) => (
+            <div
+              key={`${item.id}-${index}`}
+              className="group/item flex items-center gap-3.5 rounded-2xl border border-foreground/10 bg-card/80 px-5 py-3.5 backdrop-blur-md transition-all duration-300 hover:border-accent hover:scale-[1.03] hover:shadow-lg hover:shadow-accent/10 cursor-pointer shrink-0"
+            >
+              {/* Brand Monogram / Icon container */}
               <div
-                key={`${item.id}-${index}`}
-                className="group/item flex items-center gap-3.5 rounded-2xl border border-foreground/10 bg-card/80 px-5 py-3.5 backdrop-blur-md transition-all duration-300 hover:border-accent hover:scale-[1.03] hover:shadow-lg hover:shadow-accent/10 cursor-pointer shrink-0"
+                className="flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-300 group-hover/item:scale-110 shadow-sm"
+                style={{
+                  backgroundColor: `${item.accent}15`,
+                  color: item.accent,
+                  border: `1px solid ${item.accent}30`
+                }}
               >
-                {/* Brand Monogram / Icon container (ready to replace with custom SVG/PNG logo) */}
-                <div
-                  className="flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-300 group-hover/item:scale-110 shadow-sm"
-                  style={{
-                    backgroundColor: `${item.accent}15`,
-                    color: item.accent,
-                    border: `1px solid ${item.accent}30`
-                  }}
-                >
-                  <Icon className="h-5 w-5" strokeWidth={1.75} />
-                </div>
-
-                {/* Brand Name & Subtitle */}
-                <div className="flex flex-col">
-                  <span className="font-heading text-sm font-bold text-foreground transition-colors group-hover/item:text-primary whitespace-nowrap">
-                    {item.name}
-                  </span>
-                  <span className="text-[11px] text-foreground/60 whitespace-nowrap">
-                    {item.sub}
-                  </span>
-                </div>
+                <FontAwesomeIcon icon={item.icon} className="h-5 w-5" />
               </div>
-            );
-          })}
+
+              {/* Brand Name & Subtitle */}
+              <div className="flex flex-col">
+                <span className="font-heading text-sm font-bold text-foreground transition-colors group-hover/item:text-primary whitespace-nowrap">
+                  {item.name}
+                </span>
+                <span className="text-[11px] text-foreground/60 whitespace-nowrap">
+                  {item.sub}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

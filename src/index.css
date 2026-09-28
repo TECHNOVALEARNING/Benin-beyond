@@ -4,28 +4,28 @@
 
 @layer base {
   :root {
-    --background: 36 33% 96%;
-    --foreground: 146 16% 20%;
+    --background: 40 25% 97%;
+    --foreground: 210 18% 22%;
     --card: 0 0% 100%;
-    --card-foreground: 146 16% 20%;
+    --card-foreground: 210 18% 22%;
     --popover: 0 0% 100%;
-    --popover-foreground: 146 16% 20%;
-    --primary: 14 59% 34%;
-    --primary-foreground: 36 33% 96%;
-    --secondary: 146 16% 20%;
-    --secondary-foreground: 36 33% 96%;
-    --muted: 36 20% 92%;
-    --muted-foreground: 146 8% 38%;
-    --accent: 43 74% 52%;
-    --accent-foreground: 146 16% 20%;
-    --destructive: 0 72% 45%;
+    --popover-foreground: 210 18% 22%;
+    --primary: 168 55% 22%;
+    --primary-foreground: 40 30% 97%;
+    --secondary: 200 18% 16%;
+    --secondary-foreground: 40 30% 97%;
+    --muted: 40 15% 94%;
+    --muted-foreground: 210 10% 46%;
+    --accent: 38 42% 58%;
+    --accent-foreground: 200 18% 16%;
+    --destructive: 0 65% 48%;
     --destructive-foreground: 0 0% 98%;
-    --border: 36 16% 86%;
-    --input: 36 16% 86%;
-    --ring: 14 59% 34%;
+    --border: 40 12% 89%;
+    --input: 40 12% 89%;
+    --ring: 168 55% 22%;
     --radius: 0.5rem;
-    --font-heading: "Syne", sans-serif;
-    --font-body: "Inter", sans-serif;
+    --font-heading: "Instrument Serif", Georgia, serif;
+    --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
   }
 
   * {
@@ -35,6 +35,8 @@
   body {
     @apply bg-background text-foreground font-body;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -263,5 +265,24 @@
   width: max-content;
   animation: marquee 35s linear infinite;
   will-change: transform;
+}
+
+@keyframes modalScaleUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-scale-up {
+  animation: modalScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
 }
 

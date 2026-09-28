@@ -1,20 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  MapPin,
-  Star,
-  ShieldCheck,
-  CheckCircle2,
-  Calendar,
-  Users,
-  BedDouble,
-  Car,
-  Compass,
-  ArrowLeft,
-  ShoppingBag,
-  Sparkles,
-  ChevronRight
-} from 'lucide-react';
+  faLocationDot,
+  faStar,
+  faCircleCheck,
+  faCalendarDays,
+  faUsers,
+  faBagShopping,
+  faChevronRight
+} from '@fortawesome/free-solid-svg-icons';
 import { getPacks } from '../services/packService';
 import { formatPrice } from '../data/initialListings';
 import { useCart } from '../context/CartContext';
@@ -105,9 +100,9 @@ export function PackDetailPage() {
       {/* Breadcrumb */}
       <ScrollReveal delay={0} y={10} className="flex items-center gap-2 text-xs text-foreground/60 mb-6">
         <Link to="/" className="hover:text-foreground">Accueil</Link>
-        <ChevronRight className="h-3.5 w-3.5" />
+        <FontAwesomeIcon icon={faChevronRight} className="h-2.5 w-2.5" />
         <Link to="/packs" className="hover:text-foreground">Packs Combinés</Link>
-        <ChevronRight className="h-3.5 w-3.5" />
+        <FontAwesomeIcon icon={faChevronRight} className="h-2.5 w-2.5" />
         <span className="text-foreground font-medium truncate">{pack.title}</span>
       </ScrollReveal>
 
@@ -154,14 +149,18 @@ export function PackDetailPage() {
           <ScrollReveal delay={80} y={20} className="mt-8 border-b border-foreground/10 pb-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-sm text-foreground/70">
-                <MapPin className="h-4 w-4 text-primary" />
+                <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-primary" />
                 <span className="font-medium">{pack.location}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-accent font-semibold text-sm">
-                <Star className="h-4 w-4 fill-accent text-accent" />
-                <span className="text-foreground font-bold">{pack.rating}</span>
-                <span className="text-foreground/50 text-xs">({pack.reviewsCount} avis vérifiés)</span>
-              </div>
+              {pack.rating > 0 && (
+                <div className="flex items-center gap-1.5 text-accent font-semibold text-sm">
+                  <FontAwesomeIcon icon={faStar} className="h-3.5 w-3.5 text-accent" />
+                  <span className="text-foreground font-bold">{pack.rating}</span>
+                  {pack.reviewsCount > 0 && (
+                    <span className="text-foreground/50 text-xs">({pack.reviewsCount} avis vérifiés)</span>
+                  )}
+                </div>
+              )}
             </div>
 
             <h1 className="font-heading mt-3 text-2xl sm:text-3xl font-bold text-foreground">
@@ -223,7 +222,7 @@ export function PackDetailPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               {pack.advantages.map((adv, idx) => (
                 <div key={idx} className="flex items-start gap-3 rounded-xl border border-foreground/10 bg-muted/25 p-3.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                   <span className="text-xs font-medium text-foreground/85 leading-snug">
                     {adv}
                   </span>
@@ -262,7 +261,7 @@ export function PackDetailPage() {
                     Début du séjour
                   </label>
                   <div className="flex items-center rounded-lg border border-foreground/15 bg-background px-3 py-2.5">
-                    <Calendar className="h-4 w-4 text-primary/70 mr-2 shrink-0" />
+                    <FontAwesomeIcon icon={faCalendarDays} className="h-4 w-4 text-primary/70 mr-2 shrink-0" />
                     <input
                       type="date"
                       value={startDate}
@@ -277,7 +276,7 @@ export function PackDetailPage() {
                     Fin du séjour
                   </label>
                   <div className="flex items-center rounded-lg border border-foreground/15 bg-background px-3 py-2.5">
-                    <Calendar className="h-4 w-4 text-primary/70 mr-2 shrink-0" />
+                    <FontAwesomeIcon icon={faCalendarDays} className="h-4 w-4 text-primary/70 mr-2 shrink-0" />
                     <input
                       type="date"
                       value={endDate}
@@ -294,7 +293,7 @@ export function PackDetailPage() {
                 </label>
                 <div className="flex items-center justify-between rounded-lg border border-foreground/15 bg-background px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary/70" />
+                    <FontAwesomeIcon icon={faUsers} className="h-4 w-4 text-primary/70" />
                     <span className="text-xs text-foreground">{guests} voyageur(s)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -344,7 +343,7 @@ export function PackDetailPage() {
               disabled={addedNotice}
               className="mt-6 w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
             >
-              <ShoppingBag className="h-4 w-4" />
+              <FontAwesomeIcon icon={faBagShopping} className="h-4 w-4" />
               <span>{addedNotice ? 'Ajouté au panier !' : 'Réserver ce Pack'}</span>
             </button>
 

@@ -4,19 +4,45 @@ const LOCAL_STORAGE_BOOKINGS_KEY = 'benin_beyond_bookings';
 
 export const INITIAL_BOOKINGS = [];
 
+const withTimeout = (promise, ms = 3000) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+  });
+  return Promise.race([
+    Promise.resolve(promise).then(
+      (res) => {
+        clearTimeout(timeoutId);
+        return res;
+      },
+      (err) => {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+    ),
+    timeoutPromise
+  ]);
+};
+
 export async function getBookings() {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
     const custom = raw ? JSON.parse(raw) : [];
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .order('created_at', { ascending: false });
+      try {
+        const queryPromise = supabase
+          .from('bookings')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return [...custom, ...data];
+        const { data, error } = await withTimeout(queryPromise, 3000);
+
+        if (!error && data && data.length > 0) {
+          return [...custom, ...data];
+        }
+      } catch (e) {
+        console.warn('Booking fetch timeout/error, using local:', e?.message || e);
       }
     }
 

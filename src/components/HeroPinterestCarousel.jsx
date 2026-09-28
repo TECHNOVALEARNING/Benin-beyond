@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faBuilding } from '@fortawesome/free-solid-svg-icons';
+import {
+  faUser,
+  faBuilding,
+  faArrowRight,
+  faChevronLeft,
+  faChevronRight
+} from '@fortawesome/free-solid-svg-icons';
 
 const DESTINATIONS = [
   {
@@ -195,7 +200,7 @@ export function HeroPinterestCarousel() {
             <Link to={activeDest.exploreLink}>
               <button className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white shadow-2xl hover:bg-primary/90 transition-all active:scale-95 border border-white/10">
                 <span>Explorer {activeDest.name}</span>
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2} />
+                <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </button>
             </Link>
 
@@ -207,7 +212,7 @@ export function HeroPinterestCarousel() {
                 title="Précédent"
                 aria-label="Destination précédente"
               >
-                <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+                <FontAwesomeIcon icon={faChevronLeft} className="h-4 w-4" />
               </button>
               <button
                 onClick={nextSlide}
@@ -215,7 +220,7 @@ export function HeroPinterestCarousel() {
                 title="Suivant"
                 aria-label="Destination suivante"
               >
-                <ChevronRight className="h-5 w-5" strokeWidth={2} />
+                <FontAwesomeIcon icon={faChevronRight} className="h-4 w-4" />
               </button>
             </div>
           </div>

@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  Check,
-  Printer,
-  MapPin,
-  Smartphone,
-  CreditCard,
-  Wallet,
-  ShieldCheck
-} from 'lucide-react';
+  faCheck,
+  faPrint,
+  faLocationDot,
+  faMobileScreen,
+  faCreditCard,
+  faWallet,
+  faShieldHalved
+} from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { createBooking } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 const STEPS = ['Identité', 'Protection', 'Paiement'];
 
@@ -33,9 +35,9 @@ const PROTECTION_OPTIONS = [
 ];
 
 const PAYMENT_METHODS = [
-  { id: 'momo', label: 'Mobile Money (MTN / Moov)', icon: Smartphone },
-  { id: 'card', label: 'Carte bancaire (Visa / Mastercard)', icon: CreditCard },
-  { id: 'wallet', label: 'Apple / Google Pay', icon: Wallet }
+  { id: 'momo', label: 'Mobile Money (MTN / Moov)', icon: faMobileScreen },
+  { id: 'card', label: 'Carte bancaire (Visa / Mastercard)', icon: faCreditCard },
+  { id: 'wallet', label: 'Apple / Google Pay', icon: faWallet }
 ];
 
 export function CheckoutPage() {
@@ -52,6 +54,7 @@ export function CheckoutPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
 
   // Calculate options total
   const optionsTotal = PROTECTION_OPTIONS.reduce(
@@ -75,7 +78,11 @@ export function CheckoutPage() {
     if (e) e.preventDefault();
     if (!customer.name || !customer.phone) {
       setActiveStep(0);
-      alert('Veuillez renseigner votre nom complet et votre téléphone.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Informations requises',
+        message: 'Veuillez renseigner votre nom complet et votre numéro de téléphone pour pouvoir confirmer votre réservation.'
+      });
       return;
     }
 
@@ -137,7 +144,7 @@ export function CheckoutPage() {
           {/* Header Banner */}
           <div className="bg-secondary px-8 py-10 text-center text-secondary-foreground">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg">
-              <Check className="h-8 w-8" strokeWidth={2.5} />
+              <FontAwesomeIcon icon={faCheck} className="h-8 w-8" />
             </div>
             <h1 className="section-title mt-5 text-3xl">Réservation confirmée</h1>
             <p className="mt-2 text-sm text-secondary-foreground/75">
@@ -165,7 +172,7 @@ export function CheckoutPage() {
                 {(confirmedBooking.items || []).map((it, idx) => (
                   <li key={idx} className="flex items-center justify-between text-sm py-1">
                     <span className="flex items-center gap-2 text-foreground/90 font-medium">
-                      <MapPin className="h-4 w-4 text-accent" strokeWidth={1.5} />
+                      <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-accent" />
                       {it.title}
                     </span>
                     <span className="font-semibold text-foreground">
@@ -188,7 +195,7 @@ export function CheckoutPage() {
                 onClick={() => window.print()}
                 className="flex-1 rounded-full border border-foreground/20 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
               >
-                <Printer className="h-4 w-4" strokeWidth={1.5} />
+                <FontAwesomeIcon icon={faPrint} className="h-4 w-4" />
                 <span>Imprimer le récapitulatif</span>
               </button>
               <Link to="/dashboard/client" className="flex-1">
@@ -410,7 +417,7 @@ export function CheckoutPage() {
                             className="h-4 w-4 text-primary accent-primary"
                           />
                           <div className="flex items-center gap-2">
-                            <Icon className="h-5 w-5 text-accent" strokeWidth={1.5} />
+                            <FontAwesomeIcon icon={pm.icon} className="h-4 w-4 text-accent" />
                             <span className="font-medium text-sm text-foreground">
                               {pm.label}
                             </span>
@@ -422,7 +429,7 @@ export function CheckoutPage() {
                 </div>
 
                 <div className="mt-6 rounded-lg bg-muted/40 p-4 text-xs text-foreground/70 flex items-center gap-2 border border-foreground/10">
-                  <ShieldCheck className="h-5 w-5 text-accent shrink-0" />
+                  <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4 text-accent shrink-0" />
                   <span>
                     Transactions cryptées SSL 256-bit conformes aux normes bancaires et opérateurs télécoms béninois.
                   </span>
@@ -474,6 +481,18 @@ export function CheckoutPage() {
           </ScrollReveal>
         </div>
       </div>
+
+      {/* Modal d'Alerte Pro */}
+      <ConfirmModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        confirmText="J'ai compris"
+        isAlert={true}
+        variant="warning"
+        onConfirm={() => setAlertModal({ isOpen: false, title: '', message: '' })}
+        onCancel={() => setAlertModal({ isOpen: false, title: '', message: '' })}
+      />
     </div>
   );
 }

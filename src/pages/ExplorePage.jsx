@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMagnifyingGlass, faSliders } from '@fortawesome/free-solid-svg-icons';
 import { SectionHeader } from '../components/SectionHeader';
 import { ListingCard } from '../components/ListingCard';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -75,8 +76,8 @@ export function ExplorePage() {
       result = [...result].sort((a, b) => a.price - b.price);
     } else if (sortOption === 'price-desc') {
       result = [...result].sort((a, b) => b.price - a.price);
-    } else if (sortOption === 'rating') {
-      result = [...result].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortOption === 'recent') {
+      result = [...result].sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
     } else if (sortOption === 'featured') {
       result = [...result].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     }
@@ -116,9 +117,9 @@ export function ExplorePage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           {/* Recherche */}
           <div className="relative">
-            <Search
-              className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40"
-              strokeWidth={1.5}
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/40"
             />
             <input
               type="text"
@@ -131,9 +132,9 @@ export function ExplorePage() {
 
           {/* Sélecteur de tri */}
           <div className="relative">
-            <SlidersHorizontal
-              className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40"
-              strokeWidth={1.5}
+            <FontAwesomeIcon
+              icon={faSliders}
+              className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/40"
             />
             <select
               value={sortOption}
@@ -141,9 +142,9 @@ export function ExplorePage() {
               className="w-full appearance-none rounded-full border border-foreground/15 bg-card py-2 pl-9 pr-8 text-sm outline-none transition-colors focus:border-primary sm:w-52 cursor-pointer"
             >
               <option value="featured">Mis en avant</option>
+              <option value="recent">Plus récents</option>
               <option value="price-asc">Prix croissant</option>
               <option value="price-desc">Prix décroissant</option>
-              <option value="rating">Mieux notés</option>
             </select>
           </div>
         </div>

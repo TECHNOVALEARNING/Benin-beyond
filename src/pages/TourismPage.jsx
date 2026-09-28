@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Compass, Landmark, Mountain, Sparkles, ArrowUpRight, BedDouble, Car, Info, UtensilsCrossed } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faCompass,
+  faLandmark,
+  faMountain,
+  faUtensils,
+  faLocationDot,
+  faCircleInfo,
+  faBed,
+  faCar,
+  faArrowRight
+} from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 const TOURISM_SITES = [
@@ -124,10 +135,10 @@ const TOURISM_SITES = [
 ];
 
 const CATEGORIES = [
-  { key: 'all', label: 'Toutes les découvertes', icon: Compass },
-  { key: 'monuments', label: 'Monuments & Histoire', icon: Landmark },
-  { key: 'nature', label: 'Paysages & Réserves', icon: Mountain },
-  { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: UtensilsCrossed }
+  { key: 'all', label: 'Toutes les découvertes', icon: faCompass },
+  { key: 'monuments', label: 'Monuments & Histoire', icon: faLandmark },
+  { key: 'nature', label: 'Paysages & Réserves', icon: faMountain },
+  { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: faUtensils }
 ];
 
 export function TourismPage() {
@@ -161,7 +172,7 @@ export function TourismPage() {
 
             {/* Note informative */}
             <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs sm:text-sm text-secondary-foreground/90 backdrop-blur-sm">
-              <Info className="h-4 w-4 text-accent shrink-0" />
+              <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 text-accent shrink-0" />
               <span>
                 Monuments d'histoire, réserves naturelles et restaurants locaux partenaires certifiés par Bénin Beyond.
               </span>
@@ -171,7 +182,6 @@ export function TourismPage() {
           {/* Filtres par Catégorie */}
           <ScrollReveal delay={100} y={20} className="mt-12 flex flex-wrap gap-2.5">
             {CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
               const isActive = selectedCategory === cat.key;
               return (
                 <button
@@ -183,7 +193,7 @@ export function TourismPage() {
                       : 'bg-white/10 text-white/80 hover:bg-white/15'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <FontAwesomeIcon icon={cat.icon} className="h-4 w-4" />
                   <span>{cat.label}</span>
                 </button>
               );
@@ -223,7 +233,7 @@ export function TourismPage() {
                 {/* Localisation */}
                 <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
                   <div className="flex items-center gap-1.5 text-xs font-semibold drop-shadow-md">
-                    <MapPin className="h-3.5 w-3.5 text-accent" />
+                    <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-accent" />
                     <span>{site.location}</span>
                   </div>
                 </div>
@@ -260,7 +270,7 @@ export function TourismPage() {
                   {/* Conseil Pratique Voyageur */}
                   <div className="mt-5 rounded-2xl bg-muted/60 p-4 text-xs text-foreground/80 border border-foreground/5">
                     <p className="font-semibold text-primary mb-1 flex items-center gap-1.5">
-                      <Info className="h-3.5 w-3.5" />
+                      <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5" />
                       <span>Conseil au voyageur</span>
                     </p>
                     <p className="leading-relaxed text-foreground/70">{site.tips}</p>
@@ -277,14 +287,14 @@ export function TourismPage() {
                       to="/explore?type=stay"
                       className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3.5 py-1.5 font-semibold text-foreground hover:bg-muted hover:text-primary transition-colors"
                     >
-                      <BedDouble className="h-3.5 w-3.5 text-primary" />
+                      <FontAwesomeIcon icon={faBed} className="h-3.5 w-3.5 text-primary" />
                       <span>Trouver un logement</span>
                     </Link>
                     <Link
                       to="/explore?type=drive"
                       className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3.5 py-1.5 font-semibold text-foreground hover:bg-muted hover:text-primary transition-colors"
                     >
-                      <Car className="h-3.5 w-3.5 text-accent" />
+                      <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5 text-accent" />
                       <span>Louer un véhicule</span>
                     </Link>
                   </div>
@@ -312,14 +322,14 @@ export function TourismPage() {
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all active:scale-95"
               >
                 <span>Explorer les logements</span>
-                <ArrowUpRight className="h-4 w-4" />
+                <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
               </Link>
               <Link
                 to="/explore?type=drive"
                 className="inline-flex items-center gap-2 rounded-full border border-foreground/20 bg-background px-7 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-all active:scale-95"
               >
                 <span>Découvrir la flotte de véhicules</span>
-                <ArrowUpRight className="h-4 w-4" />
+                <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
               </Link>
             </div>
           </ScrollReveal>

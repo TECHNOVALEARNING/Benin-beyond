@@ -68,8 +68,28 @@ export function saveCustomListings(listings) {
   }
 }
 
+const withTimeout = (promise, ms = 4000) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+  });
+  return Promise.race([
+    Promise.resolve(promise).then(
+      (res) => {
+        clearTimeout(timeoutId);
+        return res;
+      },
+      (err) => {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+    ),
+    timeoutPromise
+  ]);
+};
+
 /**
- * Synchronise les annonces locales vers Supabase en tâche de fond (uniquement les nouveaux ajouts non supprimés)
+ * Synchronise les annonces locales vers Supabase en tâche de fond (uniquement les nouveaux ajouts non synchronisés)
  */
 async function syncLocalListingsToSupabase(localListings = []) {
   if (!isSupabaseConfigured || !supabase || !localListings || localListings.length === 0) return;
@@ -103,23 +123,24 @@ async function syncLocalListingsToSupabase(localListings = []) {
         amenities: Array.isArray(item.amenities) ? item.amenities : [],
         gallery: Array.isArray(item.gallery) ? item.gallery : [],
         video_url: item.video_url || null,
-        rating: Number(item.rating) || 5.0,
-        reviews_count: Number(item.reviews_count) || 1,
+        rating: item.rating ? Number(item.rating) : null,
+        reviews_count: item.reviews_count ? Number(item.reviews_count) : 0,
         owner_id: item.owner_id && uuidRegex.test(item.owner_id) ? item.owner_id : null,
         created_date: item.created_date || new Date().toISOString()
       };
-      const { error } = await supabase.from('listings').upsert(payload, { onConflict: 'id' });
+      const queryPromise = supabase.from('listings').upsert(payload, { onConflict: 'id' });
+      const { error } = await withTimeout(queryPromise, 3000);
       if (!error) {
         item.needs_sync = false;
       }
     } catch {
-      // Ignoré si RLS non encore débloqué
+      // Ignoré si RLS non encore débloqué ou timeout
     }
   }
 }
 
 /**
- * Récupère toutes les annonces (Supabase en priorité absolue + suppression des fantômes locaux)
+ * Récupère toutes les annonces (Priorité absolue aux données certifiées Supabase avec purge automatique des éléments supprimés)
  */
 export async function getListings(options = {}) {
   const { includePending = false } = options;
@@ -127,41 +148,38 @@ export async function getListings(options = {}) {
   const custom = getCustomListings();
   const itemsMap = new Map();
 
-  // 1. Initialiser avec le catalogue de base curaté (vide pour un catalogue pur)
-  INITIAL_LISTINGS.forEach((item) => {
-    if (!deletedIds.has(item.id)) {
-      itemsMap.set(item.id, { ...item });
-    }
-  });
-
-  // 2. Fusionner avec le cache local initial
+  // 1. Initialiser avec le cache local pour un rendu instantané sans scintillement
   custom.forEach((item) => {
     if (!deletedIds.has(item.id)) {
       itemsMap.set(item.id, { ...item });
     }
   });
 
-  // 3. Charger depuis Supabase si configuré (source de vérité officielle)
+  // 2. Charger depuis Supabase si configuré : Supabase est la source de vérité absolue
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase
+      const queryPromise = supabase
         .from('listings')
         .select('*')
         .order('created_date', { ascending: false });
 
+      const { data, error } = await withTimeout(queryPromise, 4000);
+
       if (!error && Array.isArray(data)) {
         const dbIds = new Set(data.map((d) => d.id));
 
-        // Purge automatique du localStorage : tout ce qui a été supprimé de la base n'est pas réinjecté
-        const cleanedCustom = custom.filter((c) => {
-          if (c.needs_sync && !deletedIds.has(c.id)) return true;
-          return dbIds.has(c.id) && !deletedIds.has(c.id);
-        });
-        saveCustomListings(cleanedCustom);
-
-        // Réinitialiser la collection avec les données certifiées de Supabase
+        // Purge immédiate : supprimer du cache local tout élément qui n'est plus dans Supabase
+        // (sauf brouillons créés hors-ligne avec needs_sync === true)
         itemsMap.clear();
 
+        // Réinjecter uniquement les créations locales en attente d'envoi hors-ligne
+        custom.forEach((item) => {
+          if (!deletedIds.has(item.id) && Boolean(item.needs_sync) && !dbIds.has(item.id)) {
+            itemsMap.set(item.id, { ...item });
+          }
+        });
+
+        // Enregistrer les données certifiées actuelles de Supabase
         data.forEach((dbItem) => {
           if (!deletedIds.has(dbItem.id)) {
             itemsMap.set(dbItem.id, {
@@ -177,18 +195,14 @@ export async function getListings(options = {}) {
           }
         });
 
-        // Ajouter les éventuels nouveaux brouillons locaux non encore envoyés
-        cleanedCustom.forEach((c) => {
-          if (c.needs_sync && !itemsMap.has(c.id) && !deletedIds.has(c.id)) {
-            itemsMap.set(c.id, c);
-          }
-        });
+        // Mettre à jour le cache local avec l'état réel et propre
+        saveCustomListings(Array.from(itemsMap.values()));
       }
 
-      // Synchronisation en tâche de fond des annonces créées localement qui ne sont pas encore en base
-      syncLocalListingsToSupabase(custom);
+      // Synchronisation en tâche de fond des annonces créées localement non encore en base
+      syncLocalListingsToSupabase(Array.from(itemsMap.values())).catch(() => {});
     } catch (err) {
-      console.warn('Erreur chargement Supabase listings, utilisation du cache:', err);
+      console.warn('Chargement Supabase optimisé via cache local instantané:', err?.message || err);
     }
   }
 
@@ -210,12 +224,11 @@ export async function getListings(options = {}) {
 }
 
 /**
- * Récupère une annonce par son ID
+ * Récupère une annonce par son ID (Priorité Supabase directe avec détection des suppressions)
  */
 export async function getListingById(id) {
-  const custom = getCustomListings();
-  const foundCustom = custom.find((item) => item.id === id);
-  if (foundCustom) return foundCustom;
+  const deletedIds = getDeletedListingIds();
+  if (deletedIds.has(id)) return null;
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -223,7 +236,7 @@ export async function getListingById(id) {
         .from('listings')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         return {
@@ -236,14 +249,20 @@ export async function getListingById(id) {
                   : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
               ]
         };
+      } else if (!error && !data) {
+        // Supprimé de Supabase : purger du cache local
+        const custom = getCustomListings();
+        saveCustomListings(custom.filter((item) => item.id !== id));
+        return null;
       }
     } catch (err) {
       console.warn('Supabase getListingById error:', err);
     }
   }
 
-  // Fallback sur le dataset de base
-  return INITIAL_LISTINGS.find((item) => item.id === id) || null;
+  // Fallback sur le cache local
+  const custom = getCustomListings();
+  return custom.find((item) => item.id === id) || null;
 }
 
 /**
@@ -261,8 +280,8 @@ export async function addListing(listingData) {
     status: listingData.status || 'active', // 'active' ou 'pending'
     rejection_reason: listingData.rejection_reason || '',
     video_url: listingData.video_url || null,
-    rating: listingData.rating || 5.0,
-    reviews_count: listingData.reviews_count || 1,
+    rating: listingData.rating ? Number(listingData.rating) : null,
+    reviews_count: listingData.reviews_count ? Number(listingData.reviews_count) : 0,
     featured: listingData.featured !== undefined ? listingData.featured : true,
     title: listingData.title,
     type: listingData.type || 'stay',
@@ -334,11 +353,13 @@ export async function addListing(listingData) {
         created_date: newListing.created_date
       };
 
-      const { data, error } = await supabase
+      const queryPromise = supabase
         .from('listings')
         .upsert(dbPayload, { onConflict: 'id' })
         .select()
         .single();
+
+      const { data, error } = await withTimeout(queryPromise, 4000);
 
       if (!error && data) {
         newListing.needs_sync = false;
@@ -349,7 +370,7 @@ export async function addListing(listingData) {
         console.warn('Supabase addListing warning:', error.message);
       }
     } catch (err) {
-      console.warn('Exception Supabase addListing:', err);
+      console.warn('Exception Supabase addListing:', err?.message || err);
     }
   }
 

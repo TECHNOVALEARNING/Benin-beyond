@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Star, ArrowUpRight } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLocationDot, faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
 
 export function ListingCard({ listing, featured = false, className = '' }) {
@@ -78,24 +79,17 @@ export function ListingCard({ listing, featured = false, className = '' }) {
           <h3 className="font-heading text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary line-clamp-1">
             {listing.title}
           </h3>
-          <ArrowUpRight
-            className="mt-0.5 h-4 w-4 shrink-0 text-foreground/40 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary"
-            strokeWidth={1.5}
+          <FontAwesomeIcon
+            icon={faArrowUpRightFromSquare}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground/40 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary"
           />
         </div>
 
         <div className="mt-2.5 flex items-center justify-between text-xs text-foreground/60">
-          <span className="flex items-center gap-1">
-            <MapPin className="h-3.5 w-3.5 text-foreground/40 shrink-0" strokeWidth={1.5} />
+          <span className="flex items-center gap-1.5">
+            <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-foreground/40 shrink-0" />
             <span>{listing.location}</span>
           </span>
-
-          {listing.rating > 0 && (
-            <span className="flex items-center gap-1 font-medium text-foreground">
-              <Star className="h-3 w-3 fill-accent text-accent" strokeWidth={1.5} />
-              <span>{listing.rating.toFixed(1)}</span>
-            </span>
-          )}
         </div>
       </div>
     </Link>

@@ -1,26 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Calendar,
-  MapPin,
-  FileText,
-  Printer,
-  Compass,
-  ArrowRight,
-  ShieldCheck,
-  CreditCard,
-  Phone,
-  Mail,
-  User,
-  LogOut,
-  X,
-  ExternalLink,
-  BedDouble,
-  Car,
-  UtensilsCrossed,
-  CheckCircle2,
-  Clock
-} from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBagShopping,
@@ -30,7 +9,15 @@ import {
   faHouse,
   faCar,
   faLayerGroup,
-  faPhone
+  faPhone,
+  faCompass,
+  faRightFromBracket,
+  faArrowRight,
+  faLocationDot,
+  faPrint,
+  faArrowUpRightFromSquare,
+  faXmark,
+  faShieldHalved
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { getBookings } from '../services/bookingService';
@@ -123,7 +110,7 @@ export function ClientDashboardPage() {
               to="/explore"
               className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-4 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25 transition-all"
             >
-              <Compass className="h-3.5 w-3.5" />
+              <FontAwesomeIcon icon={faCompass} className="h-3.5 w-3.5" />
               <span>Explorer le catalogue</span>
             </Link>
 
@@ -143,7 +130,7 @@ export function ClientDashboardPage() {
                 title="Se déconnecter"
                 className="ml-2 p-1.5 rounded-lg text-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
               >
-                <LogOut className="h-4 w-4" />
+                <FontAwesomeIcon icon={faRightFromBracket} className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -211,7 +198,7 @@ export function ClientDashboardPage() {
                   : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'
               }`}
             >
-              <User className="h-4 w-4" />
+              <FontAwesomeIcon icon={faUser} className="h-4 w-4" />
               <span>Mon Profil</span>
             </button>
 
@@ -223,7 +210,7 @@ export function ClientDashboardPage() {
                   : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'
               }`}
             >
-              <Compass className="h-4 w-4" />
+              <FontAwesomeIcon icon={faCompass} className="h-4 w-4" />
               <span>Guide & Découvertes</span>
             </button>
           </div>
@@ -255,7 +242,7 @@ export function ClientDashboardPage() {
                       className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
                     >
                       <span>Parcourir le catalogue</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                     </Link>
                     <Link
                       to="/packs"
@@ -301,7 +288,7 @@ export function ClientDashboardPage() {
                                   : 'bg-amber-500/15 text-amber-700 border border-amber-500/30'
                               }`}
                             >
-                              <CheckCircle2 className="h-3 w-3" />
+                              <FontAwesomeIcon icon={faCircleCheck} className="h-3 w-3" />
                               <span>{isConfirmed ? 'Confirmée' : 'En attente'}</span>
                             </span>
                           </div>
@@ -326,7 +313,7 @@ export function ClientDashboardPage() {
                               </h4>
                               {b.location && (
                                 <p className="mt-0.5 text-xs text-foreground/60 flex items-center gap-1 truncate">
-                                  <MapPin className="h-3 w-3 text-accent shrink-0" />
+                                  <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-accent shrink-0" />
                                   <span>{b.location}</span>
                                 </p>
                               )}
@@ -353,7 +340,7 @@ export function ClientDashboardPage() {
                             onClick={() => setSelectedVoucher(b)}
                             className="inline-flex items-center gap-1.5 rounded-full bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-xs font-semibold text-foreground transition-all"
                           >
-                            <Printer className="h-3.5 w-3.5" />
+                            <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
                             <span>Voucher & Reçu</span>
                           </button>
 
@@ -363,7 +350,7 @@ export function ClientDashboardPage() {
                               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                             >
                               <span>Détails du bien</span>
-                              <ExternalLink className="h-3 w-3" />
+                              <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3" />
                             </Link>
                           )}
                         </div>
@@ -385,7 +372,7 @@ export function ClientDashboardPage() {
 
               {profileSaved && (
                 <div className="mt-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
                   <span>Vos informations ont été mises à jour avec succès !</span>
                 </div>
               )}
@@ -453,7 +440,7 @@ export function ClientDashboardPage() {
                   to="/decouvertes"
                   className="inline-flex items-center gap-2 rounded-full bg-accent/20 text-accent font-semibold px-4 py-2 text-xs hover:bg-accent/30 transition-all"
                 >
-                  <Compass className="h-3.5 w-3.5" />
+                  <FontAwesomeIcon icon={faCompass} className="h-3.5 w-3.5" />
                   <span>Voir toutes les découvertes</span>
                 </Link>
               </div>
@@ -517,7 +504,7 @@ export function ClientDashboardPage() {
               onClick={() => setSelectedVoucher(null)}
               className="absolute right-4 top-4 rounded-full p-2 text-foreground/40 hover:bg-foreground/10 hover:text-foreground transition-colors"
             >
-              <X className="h-5 w-5" />
+              <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
             </button>
 
             {/* Voucher Body (Print-ready) */}
@@ -578,7 +565,7 @@ export function ClientDashboardPage() {
 
               {/* Instructions */}
               <div className="mt-4 rounded-xl bg-accent/10 border border-accent/20 p-3 text-[11px] text-foreground/80 flex items-start gap-2">
-                <ShieldCheck className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+                <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4 text-accent shrink-0 mt-0.5" />
                 <span>
                   Présentez ce bon lors de votre arrivée ou auprès de votre chauffeur / concierge Bénin Beyond. Assistance 24/7 disponible.
                 </span>
@@ -597,7 +584,7 @@ export function ClientDashboardPage() {
                 onClick={() => window.print()}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
               >
-                <Printer className="h-3.5 w-3.5" />
+                <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
                 <span>Imprimer le voucher</span>
               </button>
             </div>

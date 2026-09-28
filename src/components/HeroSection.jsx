@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 
 const HERO_PANELS = [
   {
@@ -61,7 +62,7 @@ export function HeroSection() {
                 </h2>
                 <div className="mt-4 flex items-center gap-2 text-sm text-white/0 transition-all duration-500 group-hover:text-white/90">
                   <span className="caption">Explorer</span>
-                  <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+                  <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                 </div>
               </div>
 

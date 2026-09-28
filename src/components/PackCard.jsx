@@ -1,6 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, BedDouble, Car, Compass, ArrowRight, ShieldCheck, Star, Sparkles } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faBed,
+  faCar,
+  faLocationDot,
+  faStar,
+  faShieldHalved,
+  faArrowRight
+} from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
 
 export function PackCard({ pack }) {
@@ -20,8 +28,8 @@ export function PackCard({ pack }) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
           <div className="absolute bottom-2.5 left-2.5 right-2 text-white">
-            <span className="inline-flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
-              <BedDouble className="h-3 w-3 text-accent" />
+            <span className="inline-flex items-center gap-1.5 rounded bg-black/50 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
+              <FontAwesomeIcon icon={faBed} className="h-2.5 w-2.5 text-accent" />
               <span>Hébergement</span>
             </span>
           </div>
@@ -36,8 +44,8 @@ export function PackCard({ pack }) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
           <div className="absolute bottom-2.5 left-2.5 right-2 text-white">
-            <span className="inline-flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
-              <Car className="h-3 w-3 text-accent" />
+            <span className="inline-flex items-center gap-1.5 rounded bg-black/50 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
+              <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5 text-accent" />
               <span>{secondaryItem.type}</span>
             </span>
           </div>
@@ -64,14 +72,18 @@ export function PackCard({ pack }) {
         {/* Rating & Location */}
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-1 text-foreground/60">
-            <MapPin className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+            <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-primary/70 shrink-0" />
             <span className="font-medium">{pack.location}</span>
           </div>
-          <div className="flex items-center gap-1 text-accent font-semibold">
-            <Star className="h-3.5 w-3.5 fill-accent text-accent" />
-            <span className="text-foreground font-bold">{pack.rating}</span>
-            <span className="text-foreground/50 text-[11px]">({pack.reviewsCount})</span>
-          </div>
+          {pack.rating > 0 && (
+            <div className="flex items-center gap-1 text-accent font-semibold">
+              <FontAwesomeIcon icon={faStar} className="h-3 w-3 text-accent" />
+              <span className="text-foreground font-bold">{pack.rating}</span>
+              {pack.reviewsCount > 0 && (
+                <span className="text-foreground/50 text-[11px]">({pack.reviewsCount})</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Title & Tagline */}
@@ -99,9 +111,9 @@ export function PackCard({ pack }) {
           {pack.advantages.slice(0, 2).map((adv, idx) => (
             <span
               key={idx}
-              className="inline-flex items-center gap-1 rounded-full bg-foreground/5 px-2.5 py-1 text-[11px] text-foreground/75"
+              className="inline-flex items-center gap-1.5 rounded-full bg-foreground/5 px-2.5 py-1 text-[11px] text-foreground/75"
             >
-              <ShieldCheck className="h-3 w-3 text-primary/70" />
+              <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5 text-primary/70" />
               <span>{adv}</span>
             </span>
           ))}
@@ -126,7 +138,7 @@ export function PackCard({ pack }) {
           <Link to={`/pack/${pack.id}`}>
             <button className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-primary transition-all">
               <span>Voir le pack</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
             </button>
           </Link>
         </div>

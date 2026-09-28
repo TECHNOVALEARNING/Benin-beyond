@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { HeroPinterestCarousel } from '../components/HeroPinterestCarousel';
 import { BeninLiveSection } from '../components/BeninLiveSection';
 import { SectionHeader } from '../components/SectionHeader';
@@ -71,7 +72,7 @@ export function HomePage() {
                   className="group flex items-center gap-2 text-sm font-semibold text-primary hover:gap-3 transition-all"
                 >
                   <span>Tout voir</span>
-                  <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+                  <FontAwesomeIcon icon={faArrowRight} className="h-4 w-4" />
                 </Link>
               }
             />
@@ -101,7 +102,7 @@ export function HomePage() {
                     className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 px-4 py-1.5 text-xs font-semibold transition-all"
                   >
                     <span>Devenir partenaire certifié</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>
@@ -135,7 +136,7 @@ export function HomePage() {
                 className="group flex items-center gap-2 text-sm font-semibold text-primary hover:gap-3 transition-all"
               >
                 <span>Découvrir tous les packs</span>
-                <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+                <FontAwesomeIcon icon={faArrowRight} className="h-4 w-4" />
               </Link>
             }
           />
@@ -157,7 +158,7 @@ export function HomePage() {
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition-all"
                 >
                   <span>Consulter l'espace Formules</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
                 </Link>
               </div>
             </div>

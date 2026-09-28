@@ -49,32 +49,58 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing, updateListingStatus, addListing } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { compressImage } from '../utils/imageOptimizer';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // Navigation State
-  const [currentSection, setCurrentSection] = useState('cockpit'); // 'cockpit' | 'moderation' | 'reservations' | 'partners' | 'users' | 'finances' | 'packs' | 'events'
+  // Navigation State persisté pour conserver la vue sélectionnée après actualisation (F5)
+  const [currentSection, setCurrentSection] = useState(() => {
+    try {
+      return localStorage.getItem('benin_beyond_admin_section') || 'cockpit';
+    } catch {
+      return 'cockpit';
+    }
+  });
+
+  const handleSetSection = (sec) => {
+    setCurrentSection(sec);
+    try {
+      localStorage.setItem('benin_beyond_admin_section', sec);
+    } catch {}
+  };
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Data states (100% données réelles)
-  const [listings, setListings] = useState([]);
+  // Data states (Chargement instantané 0ms depuis le cache + rafraîchissement Supabase en tâche de fond)
+  const [listings, setListings] = useState(() => getCustomListings());
   const [bookings, setBookings] = useState([]);
   const [partners, setPartners] = useState([]);
   const [payouts, setPayouts] = useState([]);
   const [packs, setPacks] = useState([]);
   const [events, setEvents] = useState([]);
   const [usersList, setUsersList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [compressingPhotos, setCompressingPhotos] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirmer',
+    cancelText: 'Annuler',
+    variant: 'danger',
+    onConfirm: null
+  });
 
   // Users Management State & Filters
   const [userSearch, setUserSearch] = useState('');
@@ -201,7 +227,7 @@ export function AdminDashboardPage() {
         email: p.email,
         phone: p.phone || 'Non renseigné',
         listingsCount: (allListings || []).filter((l) => l.owner_id === p.id || l.owner_email === p.email).length,
-        kycStatus: (p.verified || p.kyc_status === 'verified') ? 'verified' : (p.kyc_status || 'pending'),
+        kycStatus: p.kyc_status === 'rejected' ? 'rejected' : (p.kyc_status === 'verified' || p.verified ? 'verified' : 'pending'),
         taxId: p.tax_id || p.taxId || 'Non renseigné',
         rccm: p.rccm || '',
         cip: p.cip || '',
@@ -210,6 +236,7 @@ export function AdminDashboardPage() {
         docUrl: p.kyc_doc_url || p.kycDocUrl || '',
         joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
         rejectionReason: p.rejection_reason || '',
+        isActive: p.is_active !== false,
         balance: 0
       })));
 
@@ -294,13 +321,22 @@ export function AdminDashboardPage() {
     setShowEventModal(false);
   };
 
-  const handleDeleteEvent = async (id, title) => {
-    if (window.confirm(`Supprimer définitivement l'événement "${title}" ?`)) {
-      await deleteEvent(id);
-      const updated = await getEvents();
-      setEvents(updated);
-      showToast(`Événement "${title}" supprimé.`);
-    }
+  const handleDeleteEvent = (id, title) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer l'événement",
+      message: `Voulez-vous vraiment supprimer définitivement l'événement culturel "${title}" ? Cette action retirera l'événement de l'agenda public.`,
+      confirmText: "Supprimer l'événement",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        await deleteEvent(id);
+        const updated = await getEvents();
+        setEvents(updated);
+        showToast(`Événement "${title}" supprimé.`);
+      }
+    });
   };
 
   // User Management Handlers (Super-Admin)
@@ -337,32 +373,50 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleToggleUserActive = async (targetUser) => {
-    try {
-      const willBeActive = targetUser.is_active === false;
-      const actionName = willBeActive ? 'réactiver' : 'désactiver temporairement';
-      if (window.confirm(`Confirmez-vous vouloir ${actionName} le compte de "${targetUser.name}" (${targetUser.email}) ?`)) {
-        await toggleUserStatus(targetUser.id, targetUser.is_active, targetUser.email);
-        showToast(`Compte de ${targetUser.name} ${willBeActive ? 'réactivé' : 'désactivé'}.`);
-        const updated = await getUsers();
-        setUsersList(updated);
+  const handleToggleUserActive = (targetUser) => {
+    const willBeActive = targetUser.is_active === false;
+    const actionName = willBeActive ? 'réactiver' : 'désactiver temporairement';
+    setConfirmDialog({
+      isOpen: true,
+      title: `${willBeActive ? 'Réactiver' : 'Désactiver'} l'utilisateur`,
+      message: `Confirmez-vous vouloir ${actionName} le compte de "${targetUser.name}" (${targetUser.email}) ?`,
+      confirmText: willBeActive ? 'Réactiver le compte' : 'Désactiver le compte',
+      cancelText: 'Annuler',
+      variant: willBeActive ? 'success' : 'warning',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await toggleUserStatus(targetUser.id, targetUser.is_active, targetUser.email);
+          showToast(`Compte de ${targetUser.name} ${willBeActive ? 'réactivé' : 'désactivé'}.`);
+          const updated = await getUsers();
+          setUsersList(updated);
+        } catch (err) {
+          showToast(err.message || 'Erreur action utilisateur');
+        }
       }
-    } catch (err) {
-      showToast(err.message || 'Erreur action utilisateur');
-    }
+    });
   };
 
-  const handleDeleteUserRecord = async (targetUser) => {
-    try {
-      if (window.confirm(`ATTENTION : Supprimer définitivement le compte de "${targetUser.name}" (${targetUser.email}) ? Cette action est irréversible.`)) {
-        await deleteUser(targetUser.id, targetUser.email);
-        showToast(`Utilisateur "${targetUser.name}" supprimé.`);
-        const updated = await getUsers();
-        setUsersList(updated);
+  const handleDeleteUserRecord = (targetUser) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Suppression définitive du compte',
+      message: `ATTENTION : Êtes-vous sûr de vouloir supprimer définitivement le compte de "${targetUser.name}" (${targetUser.email}) ? Cette action est irréversible.`,
+      confirmText: 'Supprimer définitivement',
+      cancelText: 'Annuler',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await deleteUser(targetUser.id, targetUser.email);
+          showToast(`Utilisateur "${targetUser.name}" supprimé.`);
+          const updated = await getUsers();
+          setUsersList(updated);
+        } catch (err) {
+          showToast(err.message || 'Erreur suppression utilisateur');
+        }
       }
-    } catch (err) {
-      showToast(err.message || 'Erreur suppression utilisateur');
-    }
+    });
   };
 
   const handleCreatePack = async (e) => {
@@ -425,13 +479,22 @@ export function AdminDashboardPage() {
     setPackDescription('');
   };
 
-  const handleDeletePack = async (packId, title) => {
-    if (window.confirm(`Confirmez-vous la suppression définitive du pack "${title}" ?`)) {
-      await deletePack(packId);
-      const updated = await getPacks();
-      setPacks(updated);
-      showToast(`Pack "${title}" supprimé.`);
-    }
+  const handleDeletePack = (packId, title) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer le pack combiné",
+      message: `Confirmez-vous la suppression définitive du pack "${title}" ? Il sera retiré de la vente en ligne.`,
+      confirmText: "Supprimer le pack",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        await deletePack(packId);
+        const updated = await getPacks();
+        setPacks(updated);
+        showToast(`Pack "${title}" supprimé.`);
+      }
+    });
   };
 
   const showToast = (msg) => {
@@ -439,28 +502,36 @@ export function AdminDashboardPage() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  // Photo handlers for Admin Property Publishing
-  const handlePhotoUpload = (e) => {
+  // Photo handlers for Admin Property Publishing (Optimisation et compression instantanée)
+  const handlePhotoUpload = async (e) => {
     setPhotoError('');
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    files.forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        setPhotoError(`L'image "${file.name}" dépasse la taille recommandée de 10 Mo.`);
-        return;
-      }
+    setCompressingPhotos(true);
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
+          continue;
+        }
+        if (file.size > 25 * 1024 * 1024) {
+          setPhotoError(`L'image "${file.name}" dépasse 25 Mo.`);
+          continue;
+        }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setUploadedPhotos((prev) => [...prev, event.target.result]);
-      };
-      reader.readAsDataURL(file);
-    });
+        try {
+          const optimized = await compressImage(file, 1280, 800, 0.82);
+          if (optimized) {
+            setUploadedPhotos((prev) => [...prev, optimized]);
+          }
+        } catch (err) {
+          console.warn('Erreur compression image:', err);
+        }
+      }
+    } finally {
+      setCompressingPhotos(false);
+    }
   };
 
   const handleAddPhotoUrl = () => {
@@ -535,6 +606,10 @@ export function AdminDashboardPage() {
       finalGallery.unshift(feat);
     }
 
+    const adminOwnerId = user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)
+      ? user.id
+      : 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
+
     const newListing = await addListing({
       title: formTitle || (formType === 'stay' ? 'Résidence de Standing Bénin Beyond' : 'Véhicule de Prestige Bénin Beyond'),
       type: formType,
@@ -554,12 +629,13 @@ export function AdminDashboardPage() {
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
       status: adminInstantPublish ? 'active' : 'pending',
-      owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
-      owner_name: user?.name || 'Direction Plateforme Bénin Beyond'
+      owner_id: adminOwnerId,
+      owner_name: user?.name || 'Direction Plateforme Bénin Beyond',
+      owner_email: user?.email || 'isidoretoudonou@gmail.com'
     });
 
     setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
-    setPublishSuccess(`Le bien "${newListing.title}" a été créé avec succès et est ${adminInstantPublish ? 'immédiatement EN LIGNE dans le catalogue public et synchronisé !' : 'placé dans la file de modération.'}`);
+    setPublishSuccess(`Le bien "${newListing.title}" a été créé avec succès et est immédiatement EN LIGNE dans le catalogue et dans votre inventaire !`);
     showToast(adminInstantPublish ? `Bien "${newListing.title}" publié en ligne avec succès !` : `Bien "${newListing.title}" créé en attente.`);
 
     // Reset form
@@ -568,6 +644,11 @@ export function AdminDashboardPage() {
     setFormDescription('');
     setUploadedPhotos([]);
     setUploadedVideo(null);
+
+    // Basculer automatiquement sur l'inventaire des biens pour que l'admin le voie immédiatement
+    setTimeout(() => {
+      handleSetSection('catalog_inventory');
+    }, 1200);
   };
 
   // Financial calculations 100% réelles
@@ -684,15 +765,24 @@ export function AdminDashboardPage() {
     await updateListingStatus(targetId, 'refused', finalReason);
   };
 
-  const handleDeleteListingItem = async (id, title) => {
-    if (window.confirm(`Retirer définitivement l'annonce "${title}" de Bénin Beyond ?`)) {
-      setListings((prev) => prev.filter((item) => item.id !== id));
-      if (mediaAuditModal && mediaAuditModal.id === id) {
-        setMediaAuditModal(null);
+  const handleDeleteListingItem = (id, title) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Retirer l'annonce du catalogue",
+      message: `Voulez-vous retirer définitivement l'annonce "${title}" de Bénin Beyond ? Le bien sera immédiatement supprimé du catalogue public.`,
+      confirmText: "Supprimer l'annonce",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setListings((prev) => prev.filter((item) => item.id !== id));
+        if (mediaAuditModal && mediaAuditModal.id === id) {
+          setMediaAuditModal(null);
+        }
+        showToast(`L'annonce "${title}" a été supprimée.`);
+        await deleteListing(id);
       }
-      showToast(`L'annonce "${title}" a été supprimée.`);
-      await deleteListing(id);
-    }
+    });
   };
 
   const handleUpdateBooking = async (bookingId, newStatus) => {
@@ -937,43 +1027,43 @@ export function AdminDashboardPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED & GROUPED) */}
+      {/* 1. SIDEBAR NAVIGATION (Dark Luxury Green - STRICTLY PINNED, AIRY & CLEAN) */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 md:w-[290px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-foreground/10 select-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {/* Logo & Superviseur status in one unified, airy header */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* Logo & Superviseur status in airy header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-foreground/10 shrink-0">
             <Link to="/" className="flex items-center gap-2.5 group" title="Retourner à l'accueil du site">
               <span className="font-heading text-xl font-bold tracking-tight text-white group-hover:text-accent transition-colors">
                 Bénin Beyond
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[10px] font-bold text-accent uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-[9px] font-bold text-accent uppercase tracking-wider">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Superviseur
               </span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-secondary-foreground/60 hover:text-white p-1"
+              className="md:hidden text-secondary-foreground/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10"
             >
-              <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
+              <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
             </button>
           </div>
 
           {/* Navigation Groups */}
-          <nav className="px-3 py-1 space-y-5 flex-1">
+          <nav className="px-3.5 py-4 space-y-5 flex-1">
             {navGroups.map((group, gIdx) => (
               <div key={gIdx} className="space-y-1.5">
-                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-secondary-foreground/50 flex items-center justify-between">
+                <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary-foreground/45 flex items-center justify-between">
                   <span>{group.title}</span>
-                  <span className="h-px flex-1 bg-white/10 ml-2" />
+                  <span className="h-px flex-1 bg-white/10 ml-2.5" />
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {group.items.map((item) => {
                     const isActive = currentSection === item.key;
                     if (item.isHighlight) {
@@ -981,18 +1071,18 @@ export function AdminDashboardPage() {
                         <button
                           key={item.key}
                           onClick={() => {
-                            setCurrentSection(item.key);
+                            handleSetSection(item.key);
                             setSidebarOpen(false);
                           }}
-                          className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all duration-200 ${
+                          className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                             isActive
-                              ? 'bg-accent text-black shadow-lg shadow-accent/25 font-bold ring-2 ring-accent/60'
-                              : 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white shadow-sm'
+                              ? 'bg-accent text-black shadow-md shadow-accent/25 font-bold ring-1 ring-accent/60'
+                              : 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 hover:text-white shadow-xs'
                           }`}
                         >
                           <div className="flex items-center gap-3">
                             <div
-                              className={`h-7 w-7 rounded-xl flex items-center justify-center transition-colors ${
+                              className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                                 isActive
                                   ? 'bg-black/15 text-black'
                                   : 'bg-accent/20 text-accent group-hover:bg-accent group-hover:text-black'
@@ -1000,11 +1090,11 @@ export function AdminDashboardPage() {
                             >
                               <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
                             </div>
-                            <span className="tracking-tight">{item.label}</span>
+                            <span className="tracking-tight text-sm">{item.label}</span>
                           </div>
                           {item.badge && (
                             <span
-                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-sm ${
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-xs ${
                                 isActive ? 'bg-black/20 text-black' : item.badgeColor
                               }`}
                             >
@@ -1019,30 +1109,30 @@ export function AdminDashboardPage() {
                       <button
                         key={item.key}
                         onClick={() => {
-                          setCurrentSection(item.key);
+                          handleSetSection(item.key);
                           setSidebarOpen(false);
                         }}
-                        className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-medium transition-all duration-200 ${
+                        className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                           isActive
-                            ? 'bg-primary text-white shadow-md shadow-primary/30 font-bold ring-1 ring-white/20'
-                            : 'text-secondary-foreground/75 hover:bg-white/10 hover:text-white'
+                            ? 'bg-primary text-white shadow-md shadow-primary/30 font-semibold ring-1 ring-white/15'
+                            : 'text-secondary-foreground/75 hover:bg-white/8 hover:text-white'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-7 w-7 rounded-xl flex items-center justify-center transition-colors ${
+                            className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                               isActive
-                                ? 'bg-accent text-black font-bold shadow-sm'
+                                ? 'bg-accent text-black font-bold shadow-xs'
                                 : 'bg-white/5 text-secondary-foreground/60 group-hover:bg-white/15 group-hover:text-white'
                             }`}
                           >
                             <FontAwesomeIcon icon={item.icon} className="h-3.5 w-3.5" />
                           </div>
-                          <span className="tracking-tight">{item.label}</span>
+                          <span className="tracking-tight text-sm">{item.label}</span>
                         </div>
                         {item.badge && (
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
                               isActive ? 'bg-black/30 text-white border-transparent' : item.badgeColor
                             }`}
                           >
@@ -1059,13 +1149,21 @@ export function AdminDashboardPage() {
         </div>
 
         {/* Sidebar Footer (Déconnexion directe & épurée) */}
-        <div className="p-4 border-t border-secondary-foreground/10 shrink-0 bg-secondary">
+        <div className="p-4 border-t border-secondary-foreground/10 space-y-2 shrink-0 bg-secondary">
+          <Link
+            to="/"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-secondary-foreground/75 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
+            <span>Voir le site public</span>
+          </Link>
+
           <button
             onClick={() => {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center justify-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             <span>Déconnexion</span>
@@ -1277,9 +1375,10 @@ export function AdminDashboardPage() {
               </div>
 
               {/* Quick Action Cards Grid */}
+              {/* Quick Action Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div
-                  onClick={() => setCurrentSection('moderation')}
+                  onClick={() => handleSetSection('moderation')}
                   className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -1297,7 +1396,7 @@ export function AdminDashboardPage() {
                 </div>
 
                 <div
-                  onClick={() => setCurrentSection('reservations')}
+                  onClick={() => handleSetSection('reservations')}
                   className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -1315,7 +1414,7 @@ export function AdminDashboardPage() {
                 </div>
 
                 <div
-                  onClick={() => setCurrentSection('partners')}
+                  onClick={() => handleSetSection('partners')}
                   className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -1331,6 +1430,118 @@ export function AdminDashboardPage() {
                     {payouts.filter((p) => p.status === 'pending').length} demande(s) de virement Mobile Money en attente d'approbation.
                   </p>
                 </div>
+              </div>
+
+              {/* Dernières Annonces & Biens Récemment Publiés */}
+              <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-foreground/10">
+                  <div>
+                    <h3 className="font-heading text-lg font-bold text-foreground flex items-center gap-2">
+                      <FontAwesomeIcon icon={faHouse} className="h-4 w-4 text-primary" />
+                      Dernières Annonces & Biens en Ligne
+                    </h3>
+                    <p className="text-xs text-foreground/60 mt-0.5">
+                      Visualisez instantanément vos annonces actives sans quitter le cockpit ({listings.length} au total)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={() => handleSetSection('publish')}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 transition-all"
+                    >
+                      <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                      Publier un bien
+                    </button>
+                    <button
+                      onClick={() => handleSetSection('catalog_inventory')}
+                      className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs font-bold text-foreground hover:bg-muted transition-all"
+                    >
+                      Voir tout l'inventaire ({listings.length})
+                      <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/50" />
+                    </button>
+                  </div>
+                </div>
+
+                {listings.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <FontAwesomeIcon icon={faHouse} className="h-10 w-10 text-foreground/20 mb-3" />
+                    <p className="text-sm font-semibold text-foreground/70">Aucune annonce trouvée pour le moment.</p>
+                    <p className="text-xs text-foreground/40 mt-1">Cliquez sur « Publier un bien » pour ajouter votre première propriété ou véhicule.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+                    {listings.slice(0, 6).map((item) => (
+                      <div
+                        key={item.id}
+                        className="group flex flex-col justify-between rounded-xl border border-foreground/10 bg-background/50 hover:bg-background hover:border-primary/40 transition-all p-3.5 shadow-xs"
+                      >
+                        <div className="flex gap-3">
+                          <div className="relative h-18 w-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-foreground/10">
+                            {item.gallery && item.gallery[0] ? (
+                              <img
+                                src={item.gallery[0]}
+                                alt={item.title}
+                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-foreground/30">
+                                <FontAwesomeIcon icon={item.type === 'vehicle' ? faCar : faHouse} className="h-5 w-5" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                item.type === 'vehicle' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                              }`}>
+                                <FontAwesomeIcon icon={item.type === 'vehicle' ? faCar : faHouse} className="h-2.5 w-2.5" />
+                                {item.type === 'vehicle' ? 'Véhicule' : 'Séjour'}
+                              </span>
+                              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                item.status === 'approved'
+                                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                  : item.status === 'pending'
+                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                                  : 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                              }`}>
+                                {item.status === 'approved' ? 'En ligne' : item.status === 'pending' ? 'En attente' : 'Suspendu'}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                              {item.title}
+                            </h4>
+                            <p className="text-[11px] text-foreground/60 flex items-center gap-1 mt-0.5 line-clamp-1">
+                              <FontAwesomeIcon icon={faLocationDot} className="h-2.5 w-2.5 shrink-0 text-foreground/40" />
+                              {item.location || 'Bénin'}
+                            </p>
+                            <p className="text-xs font-bold text-primary mt-1">
+                              {formatPrice(item.price)} <span className="text-[10px] font-normal text-foreground/60">{item.price_unit || (item.type === 'vehicle' ? '/jour' : '/nuit')}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-foreground/10 text-xs">
+                          <Link
+                            to={`/details/${item.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/70 hover:text-primary transition-colors"
+                          >
+                            <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
+                            Voir la fiche
+                          </Link>
+                          <button
+                            onClick={() => handleSetSection('catalog_inventory')}
+                            className="text-[11px] font-semibold text-primary hover:underline"
+                          >
+                            Gérer dans l'inventaire →
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -4598,6 +4809,18 @@ export function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Universelle de Confirmation Pro (Remplace window.confirm) */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );
