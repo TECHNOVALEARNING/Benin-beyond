@@ -24,6 +24,7 @@ function getLocalUsers() {
         kyc_doc_type: u.kyc_doc_type || u.kycDocType || 'Dossier Conforme',
         kyc_doc_url: u.kyc_doc_url || u.kycDocUrl || '',
         kyc_status: u.kyc_status || (isAdmin || u.verified ? 'verified' : 'pending'),
+        rejection_reason: u.rejection_reason || '',
         verified: isAdmin ? true : Boolean(u.verified),
         is_active: u.is_active !== undefined ? u.is_active : (u.isActive !== undefined ? u.isActive : true),
         created_at: u.createdAt || u.created_at || new Date().toISOString()
@@ -77,6 +78,7 @@ export async function getUsers() {
             kyc_doc_type: p.kyc_doc_type || 'Dossier Conforme',
             kyc_doc_url: p.kyc_doc_url || '',
             kyc_status: p.kyc_status || (isAdmin || p.verified ? 'verified' : 'pending'),
+            rejection_reason: p.rejection_reason || '',
             verified: isAdmin ? true : Boolean(p.verified),
             is_active: p.is_active !== undefined ? p.is_active : true,
             created_at: p.created_at || new Date().toISOString()
@@ -102,6 +104,7 @@ export async function getUsers() {
               kyc_doc_type: existing.kyc_doc_type || lu.kyc_doc_type || 'Dossier Conforme',
               kyc_doc_url: existing.kyc_doc_url || lu.kyc_doc_url || '',
               kyc_status: existing.kyc_status || lu.kyc_status || 'pending',
+              rejection_reason: existing.rejection_reason || lu.rejection_reason || '',
               is_active: existing.is_active !== undefined ? existing.is_active : (lu.is_active !== undefined ? lu.is_active : true)
             });
           }
@@ -120,7 +123,7 @@ export async function getUsers() {
 }
 
 /**
- * Mettre à jour un utilisateur (Nom, Rôle, Société, Téléphone, Statut Actif)
+ * Mettre à jour un utilisateur (Nom, Rôle, Société, Téléphone, Statut Actif, KYC)
  */
 export async function updateUser(userId, updates) {
   const cleanEmail = (updates.email || '').trim().toLowerCase();
@@ -147,6 +150,7 @@ export async function updateUser(userId, updates) {
       };
       if (sanitizedUpdates.verified !== undefined) payload.verified = sanitizedUpdates.verified;
       if (sanitizedUpdates.kyc_status) payload.kyc_status = sanitizedUpdates.kyc_status;
+      if (sanitizedUpdates.rejection_reason !== undefined) payload.rejection_reason = sanitizedUpdates.rejection_reason;
       if (sanitizedUpdates.tax_id) payload.tax_id = sanitizedUpdates.tax_id;
       if (sanitizedUpdates.kyc_doc_type) payload.kyc_doc_type = sanitizedUpdates.kyc_doc_type;
       if (sanitizedUpdates.partner_type) payload.partner_type = sanitizedUpdates.partner_type;
@@ -173,18 +177,20 @@ export async function updateUser(userId, updates) {
   });
   saveLocalUsers(updatedList);
 
-  // 3. Mettre à jour la session utilisateur active si c'est ce compte
+  // 3. Mettre à jour la session utilisateur active si c'est ce compte (benin_beyond_user et benin_beyond_user_session)
   try {
-    const rawSession = localStorage.getItem('benin_beyond_user_session');
-    if (rawSession) {
-      const current = JSON.parse(rawSession);
-      if (current.email?.toLowerCase() === cleanEmail || current.id === userId) {
-        localStorage.setItem(
-          'benin_beyond_user_session',
-          JSON.stringify({ ...current, ...sanitizedUpdates })
-        );
+    ['benin_beyond_user', 'benin_beyond_user_session'].forEach((key) => {
+      const rawSession = localStorage.getItem(key);
+      if (rawSession) {
+        const current = JSON.parse(rawSession);
+        if (current.email?.toLowerCase() === cleanEmail || current.id === userId) {
+          localStorage.setItem(
+            key,
+            JSON.stringify({ ...current, ...sanitizedUpdates })
+          );
+        }
       }
-    }
+    });
   } catch {}
 
   return sanitizedUpdates;
@@ -239,6 +245,19 @@ export async function verifyPartnerKYC(userId, userEmail = '') {
   return updateUser(userId, {
     email: userEmail,
     verified: true,
-    kyc_status: 'verified'
+    kyc_status: 'verified',
+    rejection_reason: ''
+  });
+}
+
+/**
+ * Refuser le KYC d'un partenaire avec notification du motif
+ */
+export async function rejectPartnerKYC(userId, userEmail = '', reason = '') {
+  return updateUser(userId, {
+    email: userEmail,
+    verified: false,
+    kyc_status: 'rejected',
+    rejection_reason: reason || 'Dossier KYC incomplet ou pièces non conformes.'
   });
 }

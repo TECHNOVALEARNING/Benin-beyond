@@ -53,22 +53,9 @@ import { getListings, deleteListing, updateListingStatus, addListing } from '../
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
-import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC } from '../services/userService';
+import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
-
-const SAMPLE_INSPIRATION_PHOTOS = {
-  stay: [
-    { label: 'Villa Contemporaine Lagune', url: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80' },
-    { label: 'Loft Océan Ouidah', url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80' },
-    { label: 'Appartement Standing Cotonou', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80' }
-  ],
-  drive: [
-    { label: 'SUV Toyota Fortuner VIP', url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80' },
-    { label: 'Berline Mercedes Luxe', url: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80' },
-    { label: '4x4 Tout-Terrain Expédition', url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80' }
-  ]
-};
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -120,6 +107,11 @@ export function AdminDashboardPage() {
   const [rejectionModalListing, setRejectionModalListing] = useState(null);
   const [rejectionPresetReason, setRejectionPresetReason] = useState('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
   const [rejectionCustomNote, setRejectionCustomNote] = useState('');
+
+  // KYC Rejection Modal states (Admin review)
+  const [rejectionKycPartner, setRejectionKycPartner] = useState(null);
+  const [rejectionKycPresetReason, setRejectionKycPresetReason] = useState('Numéro IFU invalide ou non conforme DGI Bénin');
+  const [rejectionKycCustomNote, setRejectionKycCustomNote] = useState('');
 
   // Filters & Searches
   const [listingSearch, setListingSearch] = useState('');
@@ -217,6 +209,7 @@ export function AdminDashboardPage() {
         docType: p.kyc_doc_type || p.kycDocType || 'Dossier Justificatif',
         docUrl: p.kyc_doc_url || p.kycDocUrl || '',
         joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
+        rejectionReason: p.rejection_reason || '',
         balance: 0
       })));
 
@@ -484,13 +477,6 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleApplyInspirationPhotos = () => {
-    const presets = SAMPLE_INSPIRATION_PHOTOS[formType].map((p) => p.url);
-    setUploadedPhotos(presets);
-    setFeaturedPhotoIndex(0);
-    setPhotoError('');
-  };
-
   // Video handlers (short tour video, max 25MB)
   const handleVideoUpload = (e) => {
     setVideoError('');
@@ -627,6 +613,27 @@ export function AdminDashboardPage() {
     return Object.values(monthsMap);
   }, [bookings]);
 
+  // Répartition réelle des canaux de paiement
+  const paymentBreakdown = useMemo(() => {
+    if (bookings.length === 0) return null;
+    const totals = { mtn: 0, moov: 0, celtiis: 0, card: 0 };
+    bookings.forEach((b) => {
+      const pm = (b.payment_method || '').toLowerCase();
+      if (pm.includes('mtn')) totals.mtn += 1;
+      else if (pm.includes('moov')) totals.moov += 1;
+      else if (pm.includes('celtiis')) totals.celtiis += 1;
+      else if (pm.includes('carte') || pm.includes('visa') || pm.includes('card')) totals.card += 1;
+      else totals.mtn += 1;
+    });
+    const total = bookings.length || 1;
+    return {
+      mtn: Math.round((totals.mtn / total) * 100),
+      moov: Math.round((totals.moov / total) * 100),
+      celtiis: Math.round((totals.celtiis / total) * 100),
+      card: Math.round((totals.card / total) * 100)
+    };
+  }, [bookings]);
+
   // Actions
   const handleToggleListingStatus = async (id) => {
     const current = listings.find((l) => l.id === id);
@@ -721,22 +728,61 @@ export function AdminDashboardPage() {
     try {
       await verifyPartnerKYC(partnerId, partnerEmail);
       setPartners((prev) =>
-        prev.map((p) => (p.id === partnerId ? { ...p, kycStatus: 'verified' } : p))
+        prev.map((p) => (p.id === partnerId ? { ...p, kycStatus: 'verified', rejectionReason: '' } : p))
       );
       setUsersList((prev) =>
         prev.map((u) =>
           u.id === partnerId || (partnerEmail && u.email?.toLowerCase() === partnerEmail.toLowerCase())
-            ? { ...u, verified: true, kyc_status: 'verified' }
+            ? { ...u, verified: true, kyc_status: 'verified', rejection_reason: '' }
             : u
         )
       );
-      if (selectedKycModal && selectedKycModal.id === partnerId) {
-        setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'verified' }));
+      if (selectedKycModal && (selectedKycModal.id === partnerId || selectedKycModal.email === partnerEmail)) {
+        setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'verified', rejectionReason: '' }));
       }
       showToast('Partenaire certifié conforme (KYC validé avec succès).');
     } catch (err) {
       console.error('Erreur validation KYC:', err);
       showToast('Erreur lors de la validation du KYC.');
+    }
+  };
+
+  const handleOpenRejectKycModal = (partner) => {
+    setRejectionKycPartner(partner);
+    setRejectionKycPresetReason('Numéro IFU invalide ou non conforme DGI Bénin');
+    setRejectionKycCustomNote('');
+  };
+
+  const handleConfirmRejectKyc = async () => {
+    if (!rejectionKycPartner) return;
+    const finalReason = rejectionKycCustomNote.trim()
+      ? `${rejectionKycPresetReason} — ${rejectionKycCustomNote.trim()}`
+      : rejectionKycPresetReason;
+
+    try {
+      await rejectPartnerKYC(rejectionKycPartner.id, rejectionKycPartner.email, finalReason);
+      setPartners((prev) =>
+        prev.map((p) =>
+          p.id === rejectionKycPartner.id || (rejectionKycPartner.email && p.email?.toLowerCase() === rejectionKycPartner.email.toLowerCase())
+            ? { ...p, kycStatus: 'rejected', rejectionReason: finalReason }
+            : p
+        )
+      );
+      setUsersList((prev) =>
+        prev.map((u) =>
+          u.id === rejectionKycPartner.id || (rejectionKycPartner.email && u.email?.toLowerCase() === rejectionKycPartner.email.toLowerCase())
+            ? { ...u, verified: false, kyc_status: 'rejected', rejection_reason: finalReason }
+            : u
+        )
+      );
+      if (selectedKycModal && (selectedKycModal.id === rejectionKycPartner.id || selectedKycModal.email === rejectionKycPartner.email)) {
+        setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'rejected', rejectionReason: finalReason }));
+      }
+      showToast('Dossier KYC rejeté : motif de non-conformité notifié au partenaire.');
+      setRejectionKycPartner(null);
+    } catch (err) {
+      console.error('Erreur rejet KYC:', err);
+      showToast('Erreur lors du rejet du dossier KYC.');
     }
   };
 
@@ -1891,6 +1937,14 @@ export function AdminDashboardPage() {
                                   <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
                                   Certifié Conforme
                                 </span>
+                              ) : p.kycStatus === 'rejected' ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold cursor-help"
+                                  title={p.rejectionReason || 'Dossier non conforme'}
+                                >
+                                  <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                  Non conforme (Rejeté)
+                                </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
                                   <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
@@ -1899,7 +1953,7 @@ export function AdminDashboardPage() {
                               )}
                             </td>
                             <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => setSelectedKycModal(p)}
@@ -1909,18 +1963,29 @@ export function AdminDashboardPage() {
                                   <FontAwesomeIcon icon={faEye} className="h-3 w-3 text-primary" />
                                   <span>Dossier</span>
                                 </button>
-                                {p.kycStatus === 'pending' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
-                                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white transition-colors shadow-sm"
-                                  >
-                                    Valider
-                                  </button>
-                                ) : (
+                                {p.kycStatus === 'verified' ? (
                                   <span className="text-[11px] text-emerald-600 font-bold px-2 py-0.5">
                                     ✓ Validé
                                   </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
+                                      className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-sm"
+                                      title="Valider la conformité du dossier"
+                                    >
+                                      Valider
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRejectKycModal(p)}
+                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-sm"
+                                      title="Refuser le dossier KYC avec motif"
+                                    >
+                                      Refuser
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -2229,28 +2294,39 @@ export function AdminDashboardPage() {
                 <h3 className="font-heading text-base font-bold text-foreground mb-4">
                   Répartition des Canaux de Paiement
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                    <span className="text-xs font-bold text-amber-500">MTN Mobile Money</span>
-                    <p className="font-heading text-xl font-bold text-foreground mt-1">54%</p>
-                    <p className="text-[11px] text-foreground/50">Canal N°1 au Bénin</p>
+
+                {!paymentBreakdown ? (
+                  <div className="py-10 text-center text-xs text-foreground/50 border border-dashed border-foreground/15 rounded-2xl bg-muted/20">
+                    <FontAwesomeIcon icon={faWallet} className="h-6 w-6 text-foreground/30 mb-2" />
+                    <p className="font-semibold text-foreground/75">Aucun flux financier de réservation enregistré pour l'instant</p>
+                    <p className="mt-1 max-w-md mx-auto">
+                      La répartition par canal (MTN MoMo, Moov Money, Celtiis Cash, Carte Visa) se calculera automatiquement à mesure des réservations effectives des voyageurs.
+                    </p>
                   </div>
-                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                    <span className="text-xs font-bold text-blue-600">Carte Visa / Mastercard</span>
-                    <p className="font-heading text-xl font-bold text-foreground mt-1">26%</p>
-                    <p className="text-[11px] text-foreground/50">Diaspora & Touristes</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                      <span className="text-xs font-bold text-amber-500">MTN Mobile Money</span>
+                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.mtn}%</p>
+                      <p className="text-[11px] text-foreground/50">Canal N°1 au Bénin</p>
+                    </div>
+                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                      <span className="text-xs font-bold text-blue-600">Carte Visa / Mastercard</span>
+                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.card}%</p>
+                      <p className="text-[11px] text-foreground/50">Diaspora & Touristes</p>
+                    </div>
+                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                      <span className="text-xs font-bold text-emerald-600">Celtiis Cash</span>
+                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.celtiis}%</p>
+                      <p className="text-[11px] text-foreground/50">Réseau national</p>
+                    </div>
+                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
+                      <span className="text-xs font-bold text-blue-400">Moov Money</span>
+                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.moov}%</p>
+                      <p className="text-[11px] text-foreground/50">Opérateur Flooz</p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                    <span className="text-xs font-bold text-emerald-600">Celtiis Cash</span>
-                    <p className="font-heading text-xl font-bold text-foreground mt-1">12%</p>
-                    <p className="text-[11px] text-foreground/50">Réseau national</p>
-                  </div>
-                  <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                    <span className="text-xs font-bold text-blue-400">Moov Money</span>
-                    <p className="font-heading text-xl font-bold text-foreground mt-1">8%</p>
-                    <p className="text-[11px] text-foreground/50">Opérateur Flooz</p>
-                  </div>
-                </div>
+                )}
 
                 <div className="mt-8 pt-6 border-t border-foreground/10 flex items-center justify-between">
                   <span className="text-xs text-foreground/60">
@@ -3128,24 +3204,13 @@ export function AdminDashboardPage() {
 
                 {/* 5. Photos Upload */}
                 <div className="space-y-3 pt-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                        3. Photos Haute Définition *
-                      </label>
-                      <p className="text-[11px] text-foreground/60">
-                        Sélectionnez les photos du bien (1 photo minimum requise)
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleApplyInspirationPhotos}
-                      className="text-[11px] font-semibold text-accent hover:underline flex items-center gap-1.5 self-start sm:self-auto"
-                    >
-                      <FontAwesomeIcon icon={faImage} />
-                      <span>Charger des photos d'inspiration</span>
-                    </button>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                      3. Photos Haute Définition *
+                    </label>
+                    <p className="text-[11px] text-foreground/60">
+                      Sélectionnez les photos du bien (1 photo minimum requise)
+                    </p>
                   </div>
 
                   {photoError && (
@@ -4357,19 +4422,43 @@ export function AdminDashboardPage() {
             </div>
 
             {/* Status card */}
-            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${selectedKycModal.kycStatus === 'verified' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${
+              selectedKycModal.kycStatus === 'verified'
+                ? 'bg-emerald-500/10 border-emerald-500/20'
+                : selectedKycModal.kycStatus === 'rejected'
+                ? 'bg-rose-500/10 border-rose-500/20'
+                : 'bg-amber-500/10 border-amber-500/20'
+            }`}>
               <div className="flex items-center gap-3">
                 <FontAwesomeIcon
-                  icon={selectedKycModal.kycStatus === 'verified' ? faCheckCircle : faClock}
-                  className={`h-5 w-5 ${selectedKycModal.kycStatus === 'verified' ? 'text-emerald-600' : 'text-amber-600'}`}
+                  icon={
+                    selectedKycModal.kycStatus === 'verified'
+                      ? faCheckCircle
+                      : selectedKycModal.kycStatus === 'rejected'
+                      ? faBan
+                      : faClock
+                  }
+                  className={`h-5 w-5 ${
+                    selectedKycModal.kycStatus === 'verified'
+                      ? 'text-emerald-600'
+                      : selectedKycModal.kycStatus === 'rejected'
+                      ? 'text-rose-600'
+                      : 'text-amber-600'
+                  }`}
                 />
                 <div>
                   <p className="text-xs font-bold text-foreground">
-                    {selectedKycModal.kycStatus === 'verified' ? 'Partenaire Certifié Conforme' : 'Dossier en Attente de Certification'}
+                    {selectedKycModal.kycStatus === 'verified'
+                      ? 'Partenaire Certifié Conforme'
+                      : selectedKycModal.kycStatus === 'rejected'
+                      ? 'Dossier KYC Non Conforme (Rejeté)'
+                      : 'Dossier en Attente de Certification'}
                   </p>
                   <p className="text-[11px] text-foreground/60">
                     {selectedKycModal.kycStatus === 'verified'
                       ? 'L’opérateur dispose des pleines autorisations pour publier et recevoir des versements.'
+                      : selectedKycModal.kycStatus === 'rejected'
+                      ? selectedKycModal.rejectionReason || 'Le dossier a été refusé pour non-conformité réglementaire.'
                       : 'La validation officielle attribue le badge de confiance et active la visibilité de ses annonces.'}
                   </p>
                 </div>
@@ -4377,7 +4466,7 @@ export function AdminDashboardPage() {
             </div>
 
             {/* Footer actions */}
-            <div className="border-t border-foreground/10 pt-4 flex items-center justify-end gap-3">
+            <div className="border-t border-foreground/10 pt-4 flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => setSelectedKycModal(null)}
@@ -4386,16 +4475,126 @@ export function AdminDashboardPage() {
                 Fermer
               </button>
               {selectedKycModal.kycStatus !== 'verified' && (
-                <button
-                  type="button"
-                  onClick={() => handleVerifyPartnerKyc(selectedKycModal.id, selectedKycModal.email)}
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-2"
-                >
-                  <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5" />
-                  <span>Certifier Conforme (Valider KYC)</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenRejectKycModal(selectedKycModal)}
+                    className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5"
+                    title="Refuser le dossier KYC et spécifier le motif"
+                  >
+                    <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                    <span>Refuser le Dossier</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyPartnerKyc(selectedKycModal.id, selectedKycModal.email)}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5" />
+                    <span>Certifier Conforme (Valider KYC)</span>
+                  </button>
+                </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL : REJET DU DOSSIER KYC DU PARTENAIRE (MOTIF DE NON-CONFORMITÉ) */}
+      {/* ========================================================================= */}
+      {rejectionKycPartner && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-lg rounded-3xl border border-foreground/15 shadow-2xl p-6 sm:p-7 space-y-5 animate-fadeIn">
+            
+            <div className="flex items-start justify-between border-b border-foreground/10 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                  Audit Réglementaire • Décision de Refus
+                </span>
+                <h3 className="font-heading text-lg font-bold text-foreground">
+                  Refuser le Dossier KYC
+                </h3>
+                <p className="text-xs text-foreground/60 mt-0.5">
+                  Partenaire : <strong>{rejectionKycPartner.name || rejectionKycPartner.email}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectionKycPartner(null)}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs text-amber-800 flex items-start gap-2.5">
+              <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5 text-amber-600 shrink-0" />
+              <span>
+                Le propriétaire sera immédiatement notifié dans son tableau de bord avec ce motif afin qu'il puisse corriger ses pièces justificatives.
+              </span>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="font-semibold text-foreground block mb-1.5">
+                  Motif principal de non-conformité :
+                </label>
+                <select
+                  value={rejectionKycPresetReason}
+                  onChange={(e) => setRejectionKycPresetReason(e.target.value)}
+                  className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="Numéro IFU invalide ou non conforme DGI Bénin">
+                    Numéro IFU invalide ou non conforme DGI Bénin
+                  </option>
+                  <option value="Pièce d'identité (CIP / CNI / Passeport) expirée, illisible ou non authentique">
+                    Pièce d'identité (CIP / CNI / Passeport) expirée, illisible ou non authentique
+                  </option>
+                  <option value="Registre de commerce RCCM manquant ou non conforme">
+                    Registre de commerce RCCM manquant ou non conforme
+                  </option>
+                  <option value="Incohérence entre les informations du profil et les pièces transmises">
+                    Incohérence entre les informations du profil et les pièces transmises
+                  </option>
+                  <option value="Dossier incomplet / Document scanné inexploitable">
+                    Dossier incomplet / Document scanné inexploitable
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground block mb-1.5">
+                  Instructions ou précisions pour le partenaire (optionnel) :
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectionKycCustomNote}
+                  onChange={(e) => setRejectionKycCustomNote(e.target.value)}
+                  placeholder="Ex : Veuillez retransmettre une photo nette de votre CIP recto-verso valide et confirmer votre IFU personnel..."
+                  className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-foreground/10 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRejectionKycPartner(null)}
+                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectKyc}
+                className="rounded-xl bg-rose-600 hover:bg-rose-700 px-5 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-2"
+              >
+                <FontAwesomeIcon icon={faBan} className="h-3.5 w-3.5" />
+                <span>Confirmer le Rejet KYC</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}

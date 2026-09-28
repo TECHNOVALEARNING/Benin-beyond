@@ -23,10 +23,18 @@ export function LoginPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [oauthTimeoutExpired, setOauthTimeoutExpired] = useState(false);
+
+  const isOAuthCallback =
+    window.location.hash.includes('access_token') ||
+    window.location.hash.includes('id_token') ||
+    window.location.search.includes('code=') ||
+    Boolean(localStorage.getItem('benin_beyond_oauth_in_progress'));
 
   // Redirection automatique si déjà connecté ou suite à redirection OAuth Google
   useEffect(() => {
     if (user) {
+      localStorage.removeItem('benin_beyond_oauth_in_progress');
       if (user.role === 'admin') {
         navigate('/admin', { replace: true });
       } else if (user.role === 'owner' || user.role === 'partner') {
@@ -36,6 +44,17 @@ export function LoginPage() {
       }
     }
   }, [user, navigate]);
+
+  // Timeout de sécurité si l'authentification OAuth tarde à se synchroniser
+  useEffect(() => {
+    if (isOAuthCallback) {
+      const timer = setTimeout(() => {
+        setOauthTimeoutExpired(true);
+        localStorage.removeItem('benin_beyond_oauth_in_progress');
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOAuthCallback]);
 
   const from = location.state?.from?.pathname || null;
 
@@ -82,6 +101,7 @@ export function LoginPage() {
   const handleGoogleLogin = async () => {
     setError('');
     setLoadingGoogle(true);
+    localStorage.setItem('benin_beyond_oauth_in_progress', 'true');
     try {
       const cleanEmail = email.trim().toLowerCase();
       let hintRole = null;
@@ -98,6 +118,7 @@ export function LoginPage() {
       }
       const res = await loginWithGoogle(hintRole, hintCompany);
       if (res?.success && res.user) {
+        localStorage.removeItem('benin_beyond_oauth_in_progress');
         if (res.user.role === 'admin') {
           navigate('/admin', { replace: true });
         } else if (res.user.role === 'owner' || res.user.role === 'partner') {
@@ -106,14 +127,44 @@ export function LoginPage() {
           navigate('/dashboard/client', { replace: true });
         }
       } else if (res?.error) {
+        localStorage.removeItem('benin_beyond_oauth_in_progress');
         setError(res.error);
+        setLoadingGoogle(false);
       }
     } catch (err) {
+      localStorage.removeItem('benin_beyond_oauth_in_progress');
       setError(err.message || 'Erreur lors de la connexion Google');
-    } finally {
       setLoadingGoogle(false);
     }
   };
+
+  // Écran de transition propre et instantané pour éviter tout clignotement de formulaire lors d'un retour OAuth
+  if (user || ((isOAuthCallback || loadingGoogle) && !oauthTimeoutExpired)) {
+    return (
+      <div className="min-h-[85vh] w-full flex flex-col items-center justify-center px-4">
+        <div className="relative flex flex-col items-center max-w-sm w-full p-8 rounded-3xl bg-card border border-foreground/10 shadow-2xl text-center space-y-6 animate-fadeIn">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-2xl">
+              <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+            </div>
+            <div className="absolute -inset-1 rounded-3xl bg-primary/20 blur-md -z-10" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-accent">
+              Bénin Beyond Authentification
+            </span>
+            <h2 className="font-heading text-lg font-bold text-foreground">
+              Connexion sécurisée en cours...
+            </h2>
+            <p className="text-xs text-foreground/60 leading-relaxed">
+              Validation de vos accès et redirection directe vers votre tableau de bord.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-[90vh] w-full flex items-center justify-center px-4 py-16">

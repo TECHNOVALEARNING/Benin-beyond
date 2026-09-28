@@ -2,6 +2,28 @@ import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient.js';
 import { INITIAL_LISTINGS } from '../data/initialListings.js';
 
 const CUSTOM_LISTINGS_KEY = 'benin_beyond_custom_listings';
+const DELETED_LISTINGS_KEY = 'benin_beyond_deleted_listings';
+
+export function getDeletedListingIds() {
+  try {
+    const raw = localStorage.getItem(DELETED_LISTINGS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function markListingAsDeleted(id) {
+  try {
+    const deletedSet = getDeletedListingIds();
+    deletedSet.add(id);
+    localStorage.setItem(DELETED_LISTINGS_KEY, JSON.stringify(Array.from(deletedSet)));
+  } catch (e) {
+    console.error('Error saving deleted listings key:', e);
+  }
+}
 
 function sanitizeImage(url, type) {
   if (!url || typeof url !== 'string' || url.includes('base44.com') || url.includes('_generated_')) {
@@ -18,16 +40,19 @@ export function getCustomListings() {
     if (!raw) return [];
     const list = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    return list.map((item) => ({
-      ...item,
-      gallery: (item.gallery && item.gallery.length > 0)
-        ? item.gallery.map((img) => sanitizeImage(img, item.type))
-        : [
-            item.type === 'drive'
-              ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
-              : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
-          ]
-    }));
+    const deletedIds = getDeletedListingIds();
+    return list
+      .filter((item) => !deletedIds.has(item.id))
+      .map((item) => ({
+        ...item,
+        gallery: (item.gallery && item.gallery.length > 0)
+          ? item.gallery.map((img) => sanitizeImage(img, item.type))
+          : [
+              item.type === 'drive'
+                ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+                : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
+            ]
+      }));
   } catch {
     return [];
   }
@@ -35,20 +60,27 @@ export function getCustomListings() {
 
 export function saveCustomListings(listings) {
   try {
-    localStorage.setItem(CUSTOM_LISTINGS_KEY, JSON.stringify(listings));
+    const deletedIds = getDeletedListingIds();
+    const cleanList = (listings || []).filter((item) => !deletedIds.has(item.id));
+    localStorage.setItem(CUSTOM_LISTINGS_KEY, JSON.stringify(cleanList));
   } catch (err) {
     console.error('Failed to save custom listings in localStorage:', err);
   }
 }
 
 /**
- * Synchronise les annonces locales vers Supabase en tâche de fond
+ * Synchronise les annonces locales vers Supabase en tâche de fond (uniquement les nouveaux ajouts non supprimés)
  */
 async function syncLocalListingsToSupabase(localListings = []) {
   if (!isSupabaseConfigured || !supabase || !localListings || localListings.length === 0) return;
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const deletedIds = getDeletedListingIds();
 
-  for (const item of localListings) {
+  // Ne synchroniser que les créations locales non encore en base et strictement non supprimées
+  const toSync = localListings.filter((item) => Boolean(item.needs_sync) && !deletedIds.has(item.id));
+  if (toSync.length === 0) return;
+
+  for (const item of toSync) {
     try {
       const payload = {
         id: item.id,
@@ -76,7 +108,10 @@ async function syncLocalListingsToSupabase(localListings = []) {
         owner_id: item.owner_id && uuidRegex.test(item.owner_id) ? item.owner_id : null,
         created_date: item.created_date || new Date().toISOString()
       };
-      await supabase.from('listings').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('listings').upsert(payload, { onConflict: 'id' });
+      if (!error) {
+        item.needs_sync = false;
+      }
     } catch {
       // Ignoré si RLS non encore débloqué
     }
@@ -84,24 +119,29 @@ async function syncLocalListingsToSupabase(localListings = []) {
 }
 
 /**
- * Récupère toutes les annonces (Supabase en priorité + cache local + catalogue de référence)
+ * Récupère toutes les annonces (Supabase en priorité absolue + suppression des fantômes locaux)
  */
 export async function getListings(options = {}) {
   const { includePending = false } = options;
+  const deletedIds = getDeletedListingIds();
   const custom = getCustomListings();
   const itemsMap = new Map();
 
-  // 1. Initialiser avec le catalogue de base curaté
+  // 1. Initialiser avec le catalogue de base curaté (vide pour un catalogue pur)
   INITIAL_LISTINGS.forEach((item) => {
-    itemsMap.set(item.id, { ...item });
+    if (!deletedIds.has(item.id)) {
+      itemsMap.set(item.id, { ...item });
+    }
   });
 
-  // 2. Fusionner avec le cache local
+  // 2. Fusionner avec le cache local initial
   custom.forEach((item) => {
-    itemsMap.set(item.id, { ...item });
+    if (!deletedIds.has(item.id)) {
+      itemsMap.set(item.id, { ...item });
+    }
   });
 
-  // 3. Charger depuis Supabase si configuré
+  // 3. Charger depuis Supabase si configuré (source de vérité officielle)
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase
@@ -109,18 +149,39 @@ export async function getListings(options = {}) {
         .select('*')
         .order('created_date', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
+        const dbIds = new Set(data.map((d) => d.id));
+
+        // Purge automatique du localStorage : tout ce qui a été supprimé de la base n'est pas réinjecté
+        const cleanedCustom = custom.filter((c) => {
+          if (c.needs_sync && !deletedIds.has(c.id)) return true;
+          return dbIds.has(c.id) && !deletedIds.has(c.id);
+        });
+        saveCustomListings(cleanedCustom);
+
+        // Réinitialiser la collection avec les données certifiées de Supabase
+        itemsMap.clear();
+
         data.forEach((dbItem) => {
-          itemsMap.set(dbItem.id, {
-            ...dbItem,
-            gallery: (dbItem.gallery && dbItem.gallery.length > 0)
-              ? dbItem.gallery.map((img) => sanitizeImage(img, dbItem.type))
-              : [
-                  dbItem.type === 'drive'
-                    ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
-                    : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
-                ]
-          });
+          if (!deletedIds.has(dbItem.id)) {
+            itemsMap.set(dbItem.id, {
+              ...dbItem,
+              gallery: (dbItem.gallery && dbItem.gallery.length > 0)
+                ? dbItem.gallery.map((img) => sanitizeImage(img, dbItem.type))
+                : [
+                    dbItem.type === 'drive'
+                      ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
+                      : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
+                  ]
+            });
+          }
+        });
+
+        // Ajouter les éventuels nouveaux brouillons locaux non encore envoyés
+        cleanedCustom.forEach((c) => {
+          if (c.needs_sync && !itemsMap.has(c.id) && !deletedIds.has(c.id)) {
+            itemsMap.set(c.id, c);
+          }
         });
       }
 
@@ -131,7 +192,7 @@ export async function getListings(options = {}) {
     }
   }
 
-  const all = Array.from(itemsMap.values());
+  const all = Array.from(itemsMap.values()).filter((item) => !deletedIds.has(item.id));
 
   // Tri par date de création (les plus récentes en premier)
   all.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
@@ -229,7 +290,17 @@ export async function addListing(listingData) {
     owner_email: listingData.owner_email || ''
   };
 
-  // 1. Toujours enregistrer immédiatement dans le cache local
+  // S'assurer que le nouvel identifiant n'est pas dans la liste des suppressions
+  try {
+    const deletedSet = getDeletedListingIds();
+    if (deletedSet.has(newId)) {
+      deletedSet.delete(newId);
+      localStorage.setItem(DELETED_LISTINGS_KEY, JSON.stringify(Array.from(deletedSet)));
+    }
+  } catch {}
+
+  // 1. Enregistrement immédiat dans le cache local (avec flag needs_sync par défaut)
+  newListing.needs_sync = true;
   const updated = [newListing, ...custom.filter((item) => item.id !== newId)];
   saveCustomListings(updated);
 
@@ -270,6 +341,8 @@ export async function addListing(listingData) {
         .single();
 
       if (!error && data) {
+        newListing.needs_sync = false;
+        saveCustomListings([newListing, ...custom.filter((item) => item.id !== newId)]);
         return { ...newListing, ...data };
       }
       if (error) {
@@ -319,15 +392,18 @@ export async function updateListingStatus(id, newStatus, rejectionReason = '') {
 }
 
 /**
- * Supprime une annonce
+ * Supprime une annonce (Purge locale + Supabase + inscription en liste noire pour bloquer la résurrection)
  */
 export async function deleteListing(id) {
-  // 1. Cache local
+  // 1. Inscrire immédiatement l'ID dans la liste noire des suppressions
+  markListingAsDeleted(id);
+
+  // 2. Cache local : retirer définitivement
   const custom = getCustomListings();
   const updated = custom.filter((item) => item.id !== id);
   saveCustomListings(updated);
 
-  // 2. Base Supabase
+  // 3. Base Supabase : suppression physique
   if (isSupabaseConfigured && supabase) {
     try {
       await supabase
