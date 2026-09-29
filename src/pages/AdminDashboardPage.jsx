@@ -891,17 +891,29 @@ export function AdminDashboardPage() {
       variant: "danger",
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        setBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
-        if (selectedBookingModal && (selectedBookingModal.id === bookingId || selectedBookingModal.booking_ref === bookingId)) {
+        setBookings((prev) =>
+          prev.filter(
+            (b) =>
+              b.id !== bookingId &&
+              b.booking_ref !== bookingId &&
+              (!bookingRef || (b.id !== bookingRef && b.booking_ref !== bookingRef))
+          )
+        );
+        if (
+          selectedBookingModal &&
+          (selectedBookingModal.id === bookingId ||
+            selectedBookingModal.booking_ref === bookingId ||
+            (bookingRef && (selectedBookingModal.id === bookingRef || selectedBookingModal.booking_ref === bookingRef)))
+        ) {
           setSelectedBookingModal(null);
         }
         showToast(`La réservation "${bookingRef || bookingId}" a été supprimée.`);
-        await deleteBooking(bookingId);
+        await deleteBooking(bookingId, bookingRef);
       }
     });
   };
 
-  const handleDeleteReviewItem = (reviewId, authorName) => {
+  const handleDeleteReviewItem = (reviewId, authorName, bookingId = null) => {
     setConfirmDialog({
       isOpen: true,
       title: "Supprimer l'avis client",
@@ -911,9 +923,15 @@ export function AdminDashboardPage() {
       variant: "danger",
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        setReviewsList((prev) => prev.filter((r) => r.id !== reviewId));
+        setReviewsList((prev) =>
+          prev.filter(
+            (r) =>
+              r.id !== reviewId &&
+              (!bookingId || (r.booking_id !== bookingId && r.id !== bookingId))
+          )
+        );
         showToast("L'avis voyageur a été supprimé avec succès.");
-        await deleteReview(reviewId);
+        await deleteReview(reviewId, bookingId);
       }
     });
   };
@@ -2700,7 +2718,7 @@ export function AdminDashboardPage() {
                     <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
                       <span className="text-xs font-bold text-blue-600">Carte Visa / Mastercard</span>
                       <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.card}%</p>
-                      <p className="text-[11px] text-foreground/50">Diaspora & Touristes</p>
+                      <p className="text-[11px] text-foreground/50">Cartes Bancaires Internationales</p>
                     </div>
                     <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
                       <span className="text-xs font-bold text-emerald-600">Celtiis Cash</span>
@@ -4204,7 +4222,7 @@ export function AdminDashboardPage() {
                       {/* Action: Delete review */}
                       <div className="shrink-0 flex md:flex-col items-end justify-between gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-foreground/10">
                         <button
-                          onClick={() => handleDeleteReviewItem(rev.id, rev.author_name)}
+                          onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
                           className="rounded-xl border border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1.5"
                           title="Supprimer cet avis client de la base"
                         >

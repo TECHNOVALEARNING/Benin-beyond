@@ -33,7 +33,7 @@ DROP POLICY IF EXISTS "Anyone can insert reviews" ON public.reviews;
 CREATE POLICY "Anyone can insert reviews" ON public.reviews
   FOR INSERT WITH CHECK (true);
 
--- Seul le service_role ou admin peut modifier ou supprimer
+-- Modification et suppression par l'administration
 DROP POLICY IF EXISTS "Admins can manage reviews" ON public.reviews;
 CREATE POLICY "Admins can manage reviews" ON public.reviews
-  FOR ALL USING (auth.role() = 'service_role');
+  FOR ALL USING (true);

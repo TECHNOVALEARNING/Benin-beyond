@@ -1,8 +1,38 @@
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 
 const LOCAL_STORAGE_BOOKINGS_KEY = 'benin_beyond_bookings';
+const DELETED_BOOKINGS_KEY = 'benin_beyond_deleted_bookings';
 
 export const INITIAL_BOOKINGS = [];
+
+/**
+ * Récupère l'ensemble des IDs et références de réservations supprimées par l'administrateur
+ * afin d'éviter qu'une réservation supprimée ne réapparaisse côté Partenaire ou Voyageur.
+ */
+export function getDeletedBookingIds() {
+  try {
+    const raw = localStorage.getItem(DELETED_BOOKINGS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Inscrit un ID ou une référence de réservation dans la liste noire des suppressions.
+ */
+export function markBookingAsDeleted(id, bookingRef = null) {
+  try {
+    const set = getDeletedBookingIds();
+    if (id) set.add(String(id));
+    if (bookingRef) set.add(String(bookingRef));
+    localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.error('Erreur inscription liste noire réservations:', e);
+  }
+}
 
 const withTimeout = (promise, ms = 3000) => {
   let timeoutId;
@@ -26,6 +56,7 @@ const withTimeout = (promise, ms = 3000) => {
 
 export async function getBookings() {
   try {
+    const deletedIds = getDeletedBookingIds();
     const raw = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
     const localBookings = raw ? JSON.parse(raw) : [];
 
@@ -51,6 +82,12 @@ export async function getBookings() {
     [...localBookings, ...remoteBookings].forEach((b) => {
       const key = b.booking_ref || b.id;
       if (key) {
+        const bId = String(b.id || '');
+        const bRef = String(b.booking_ref || '');
+        // Bloquer immédiatement si la réservation est sur liste noire
+        if (deletedIds.has(bId) || deletedIds.has(bRef)) {
+          return;
+        }
         // En cas de conflit, on fusionne pour préserver les métadonnées locales enrichies
         const existing = combinedMap.get(key) || {};
         combinedMap.set(key, { ...existing, ...b });
@@ -123,7 +160,14 @@ export async function getBookings() {
     });
 
     // Tri antéchronologique (les plus récentes en premier)
-    return normalized.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const sorted = normalized.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Sauvegarde de la liste nettoyée dans le cache local (sans les éléments supprimés)
+    try {
+      localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(sorted));
+    } catch {}
+
+    return sorted;
   } catch (err) {
     console.warn('Erreur chargement réservations:', err);
     return INITIAL_BOOKINGS;
@@ -140,10 +184,18 @@ export async function updateBookingStatus(bookingId, newStatus) {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
-          .from('bookings')
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .or(`id.eq.${bookingId},booking_ref.eq.${bookingId}`);
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (bookingId && uuidRegex.test(bookingId)) {
+          await supabase
+            .from('bookings')
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .eq('id', bookingId);
+        } else if (bookingId) {
+          await supabase
+            .from('bookings')
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .eq('booking_ref', bookingId);
+        }
       } catch (err) {
         console.warn('Supabase booking update error:', err);
       }
@@ -156,21 +208,50 @@ export async function updateBookingStatus(bookingId, newStatus) {
   }
 }
 
-export async function deleteBooking(bookingId) {
+export async function deleteBooking(bookingId, bookingRef = null) {
   try {
+    // 1. Inscrire immédiatement dans la liste noire pour interdire toute résurgence
+    markBookingAsDeleted(bookingId, bookingRef);
+
+    // 2. Nettoyage immédiat du LocalStorage
     const raw = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
     const bookings = raw ? JSON.parse(raw) : [];
-    const filtered = bookings.filter(
-      (b) => b.id !== bookingId && b.booking_ref !== bookingId
-    );
+    const bIdStr = String(bookingId || '');
+    const bRefStr = String(bookingRef || '');
+
+    const filtered = bookings.filter((b) => {
+      const curId = String(b.id || '');
+      const curRef = String(b.booking_ref || '');
+      if (bIdStr && (curId === bIdStr || curRef === bIdStr)) return false;
+      if (bRefStr && (curId === bRefStr || curRef === bRefStr)) return false;
+      return true;
+    });
     localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(filtered));
 
+    // 3. Suppression définitive dans Supabase (table payments puis bookings)
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
-          .from('bookings')
-          .delete()
-          .or(`id.eq.${bookingId},booking_ref.eq.${bookingId}`);
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        // Supprimer d'abord les paiements liés pour éviter les violations de clés étrangères
+        if (bookingId && uuidRegex.test(bookingId)) {
+          try {
+            await supabase.from('payments').delete().eq('booking_id', bookingId);
+          } catch (payDelErr) {
+            console.warn('Paiement lié non supprimé ou inexistant:', payDelErr);
+          }
+        }
+
+        // Supprimer la réservation par son UUID si valide
+        if (bookingId && uuidRegex.test(bookingId)) {
+          await supabase.from('bookings').delete().eq('id', bookingId);
+        }
+
+        // Supprimer la réservation par sa référence booking_ref
+        const refToDelete = bookingRef || (!uuidRegex.test(bookingId) ? bookingId : null);
+        if (refToDelete) {
+          await supabase.from('bookings').delete().eq('booking_ref', refToDelete);
+        }
       } catch (err) {
         console.warn('Supabase booking delete error:', err);
       }

@@ -3230,7 +3230,7 @@ export function PartnerDashboardPage() {
                   Statistiques & Performances des Annonces
                 </h2>
                 <p className="text-xs text-foreground/60">
-                  Suivez la visibilité de vos biens et l'engagement des voyageurs du Bénin et de la diaspora (données 100% réelles)
+                  Suivez la visibilité de vos biens et l'engagement des voyageurs (données 100% réelles issues de vos réservations)
                 </p>
               </div>
 
@@ -3281,76 +3281,48 @@ export function PartnerDashboardPage() {
                 </div>
               </div>
 
-              {/* Demographic & Top Listings (Données réelles) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <h3 className="font-heading text-base font-bold text-foreground mb-1">
-                    Origine des Voyageurs
-                  </h3>
-                  <p className="text-xs text-foreground/60 mb-5">
-                    Répartition géographique de vos réservations effectives
-                  </p>
-
-                  {bookings.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
-                      <FontAwesomeIcon icon={faUsers} className="h-6 w-6 text-foreground/30 mb-2" />
-                      <p className="font-semibold text-foreground/75">Aucune donnée géographique enregistrée</p>
-                      <p className="mt-1">La répartition des voyageurs (Diaspora, résidents, international) s'établira automatiquement avec vos réservations.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3.5">
-                      {[
-                        { origin: 'Diaspora Béninoise (France & Europe)', pct: 50 },
-                        { origin: 'Résidents & Entreprises Bénin (Cotonou)', pct: 35 },
-                        { origin: 'Afrique de l’Ouest & International', pct: 15 }
-                      ].map((row, i) => (
-                        <div key={i}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="font-medium text-foreground">{row.origin}</span>
-                            <span className="font-bold text-primary font-mono">{row.pct}%</span>
-                          </div>
-                          <div className="h-2 rounded-full bg-muted overflow-hidden">
-                            <div className="h-full bg-primary rounded-full" style={{ width: `${row.pct}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+              {/* Top Listings (Données 100% réelles issues des réservations) */}
+              <div className="rounded-2xl border border-foreground/10 bg-card p-6 sm:p-7 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+                  <div>
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Top de Vos Biens les Plus Réservés
+                    </h3>
+                    <p className="text-xs text-foreground/60">
+                      Classement réel calculé sur le chiffre d'affaires net effectivement généré
+                    </p>
+                  </div>
+                  {topPartnerListings.length > 0 && (
+                    <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full self-start">
+                      {topPartnerListings.length} bien(s) classé(s)
+                    </span>
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <h3 className="font-heading text-base font-bold text-foreground mb-1">
-                    Top de Vos Biens les Plus Réservés
-                  </h3>
-                  <p className="text-xs text-foreground/60 mb-5">
-                    Classement réel par chiffre d'affaires net généré
-                  </p>
-
-                  {topPartnerListings.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
-                      <FontAwesomeIcon icon={faHouse} className="h-6 w-6 text-foreground/30 mb-2" />
-                      <p className="font-semibold text-foreground/75">Aucune réservation pour établir le classement</p>
-                      <p className="mt-1">Le classement de vos annonces les plus performantes s'affichera dès vos premières locations validées.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {topPartnerListings.map((top, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-foreground/5">
-                          <div className="flex items-center gap-3">
-                            <span className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
-                              #{i + 1}
-                            </span>
-                            <div>
-                              <p className="font-bold text-xs text-foreground">{top.title}</p>
-                              <p className="text-[10px] text-foreground/50">{top.type} • {top.bookings} réservation(s)</p>
-                            </div>
+                {topPartnerListings.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
+                    <FontAwesomeIcon icon={faHouse} className="h-7 w-7 text-foreground/30 mb-2" />
+                    <p className="font-semibold text-foreground/75">Aucune réservation pour établir le classement</p>
+                    <p className="mt-1 max-w-md mx-auto">Le classement de vos annonces les plus performantes s'affichera automatiquement dès vos premières réservations confirmées.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {topPartnerListings.map((top, i) => (
+                      <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-muted/40 border border-foreground/5 hover:border-primary/20 transition-all">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <span className="h-8 w-8 rounded-xl bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                            #{i + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-foreground truncate">{top.title}</p>
+                            <p className="text-[11px] text-foreground/50">{top.type === 'stay' ? 'Hébergement' : 'Véhicule'} • {top.bookings} réservation{top.bookings > 1 ? 's' : ''}</p>
                           </div>
-                          <span className="font-mono font-bold text-xs text-primary">{formatPrice(top.revenue)}</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <span className="font-mono font-bold text-xs text-primary shrink-0 ml-3">{formatPrice(top.revenue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
