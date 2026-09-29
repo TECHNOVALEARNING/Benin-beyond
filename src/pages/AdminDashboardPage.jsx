@@ -58,6 +58,7 @@ import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -4062,11 +4063,11 @@ export function AdminDashboardPage() {
               </div>
 
               {mediaAuditModal.video_url ? (
-                <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow border border-foreground/10">
-                  <video
-                    src={mediaAuditModal.video_url}
-                    controls
-                    className="w-full h-full object-contain"
+                <div className="rounded-2xl overflow-hidden shadow">
+                  <ListingVideoPlayer
+                    videoUrl={mediaAuditModal.video_url}
+                    poster={mediaAuditModal.gallery?.[0]}
+                    title={mediaAuditModal.title}
                   />
                 </div>
               ) : (

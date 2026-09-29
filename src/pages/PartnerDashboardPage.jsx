@@ -58,6 +58,8 @@ import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { saveMediaBlob } from '../services/mediaStorage';
+import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -126,7 +128,10 @@ export function PartnerDashboardPage() {
   const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
   const [photoError, setPhotoError] = useState('');
-  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, name, sizeMB }
+  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, previewUrl, name, sizeMB }
+  const [videoSourceType, setVideoSourceType] = useState('file'); // 'file' | 'url'
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
@@ -328,8 +333,8 @@ export function PartnerDashboardPage() {
     }
   };
 
-  // Video handlers (short tour video, max 25MB)
-  const handleVideoUpload = (e) => {
+  // Video handlers (short tour video, max 35MB or web URL)
+  const handleVideoUpload = async (e) => {
     setVideoError('');
     const file = e.target.files?.[0];
     if (!file) return;
@@ -340,22 +345,53 @@ export function PartnerDashboardPage() {
     }
 
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 25) {
-      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la rapidité de la plateforme, la taille maximale est de 25 Mo (durée recommandée : 15 à 45 secondes).`);
+    if (sizeMB > 35) {
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 35 Mo (durée recommandée : 15 à 45 secondes).`);
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
+    setIsUploadingVideo(true);
+    try {
+      const persistentId = await saveMediaBlob(file);
+      const objectUrl = URL.createObjectURL(file);
+      setUploadedVideo({
+        url: persistentId,
+        previewUrl: objectUrl,
+        name: file.name,
+        sizeMB: sizeMB.toFixed(1)
+      });
+    } catch (err) {
+      console.warn('Erreur sauvegarde vidéo:', err);
+      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien web.');
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleAddVideoUrl = () => {
+    const trimmed = videoUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setVideoError('Veuillez entrer une adresse URL valide commençant par https://');
+      return;
+    }
     setUploadedVideo({
-      url: objectUrl,
-      name: file.name,
-      sizeMB: sizeMB.toFixed(1)
+      url: trimmed,
+      previewUrl: trimmed,
+      name: trimmed.includes('youtube') || trimmed.includes('youtu.be')
+        ? 'Vidéo YouTube'
+        : trimmed.includes('vimeo')
+        ? 'Vidéo Vimeo'
+        : 'Vidéo en ligne',
+      sizeMB: 'Web'
     });
+    setVideoUrlInput('');
+    setVideoError('');
   };
 
   const handleRemoveVideo = () => {
-    if (uploadedVideo?.url && uploadedVideo.url.startsWith('blob:')) {
-      URL.revokeObjectURL(uploadedVideo.url);
+    if (uploadedVideo?.previewUrl && uploadedVideo.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(uploadedVideo.previewUrl);
     }
     setUploadedVideo(null);
     setVideoError('');
@@ -1897,27 +1933,75 @@ export function PartnerDashboardPage() {
                   )}
 
                   {!uploadedVideo ? (
-                    <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
-                      <input
-                        type="file"
-                        id="host-video-upload"
-                        accept="video/mp4,video/webm,video/quicktime"
-                        onChange={handleVideoUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
-                        <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
-                          <FontAwesomeIcon icon={faVideo} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-foreground">
-                            Sélectionner une vidéo d'aperçu (.MP4 ou .WebM)
-                          </p>
-                          <p className="text-[10px] text-foreground/50">
-                            Fichier vidéo léger obligatoire : 25 Mo max pour un chargement fluide sur mobile
-                          </p>
-                        </div>
+                    <div className="space-y-3">
+                      {/* Video mode switcher tabs */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVideoSourceType('file')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                            videoSourceType === 'file'
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-muted/30 text-foreground/70 border-foreground/10 hover:bg-muted/60'
+                          }`}
+                        >
+                          Fichier Vidéo (MP4, WebM)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVideoSourceType('url')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                            videoSourceType === 'url'
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-muted/30 text-foreground/70 border-foreground/10 hover:bg-muted/60'
+                          }`}
+                        >
+                          Lien Web (YouTube, Vimeo, MP4)
+                        </button>
                       </div>
+
+                      {videoSourceType === 'file' ? (
+                        <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
+                          <input
+                            type="file"
+                            id="host-video-upload"
+                            accept="video/mp4,video/webm,video/quicktime"
+                            onChange={handleVideoUpload}
+                            disabled={isUploadingVideo}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                          <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
+                            <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
+                              <FontAwesomeIcon icon={faVideo} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-foreground">
+                                {isUploadingVideo ? 'Enregistrement de la vidéo en cours…' : 'Sélectionner une vidéo d\'aperçu (.MP4 ou .WebM)'}
+                              </p>
+                              <p className="text-[10px] text-foreground/50">
+                                Durée recommandée : 15 à 45 secondes (max 35 Mo)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={videoUrlInput}
+                            onChange={(e) => setVideoUrlInput(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=... ou https://vimeo.com/..."
+                            className="flex-1 rounded-xl border border-foreground/15 bg-background px-4 py-2.5 text-xs text-foreground placeholder:text-foreground/40 outline-none focus:border-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddVideoUrl}
+                            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-all shrink-0"
+                          >
+                            Ajouter le lien
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="p-4 rounded-2xl border border-foreground/10 bg-background space-y-3">
@@ -1925,7 +2009,7 @@ export function PartnerDashboardPage() {
                         <div className="flex items-center gap-2">
                           <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
                           <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
-                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB} Mo)</span>
+                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB})</span>
                         </div>
                         <button
                           type="button"
@@ -1937,13 +2021,22 @@ export function PartnerDashboardPage() {
                         </button>
                       </div>
 
-                      {/* Integrated HTML5 Video Preview Player */}
+                      {/* Integrated HTML5 / Web Video Preview Player */}
                       <div className="aspect-video w-full max-w-md mx-auto rounded-xl overflow-hidden bg-black shadow">
-                        <video
-                          src={uploadedVideo.url}
-                          controls
-                          className="w-full h-full object-contain"
-                        />
+                        {uploadedVideo.previewUrl?.includes('youtube') || uploadedVideo.previewUrl?.includes('youtu.be') ? (
+                          <iframe
+                            src={uploadedVideo.previewUrl.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube-nocookie.com/embed/')}
+                            title="Aperçu vidéo"
+                            className="h-full w-full border-0"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <video
+                            src={uploadedVideo.previewUrl}
+                            controls
+                            className="w-full h-full object-contain"
+                          />
+                        )}
                       </div>
                     </div>
                   )}
@@ -1964,7 +2057,9 @@ export function PartnerDashboardPage() {
                     className="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
                   >
                     <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>Transmettre à la modération</span>
+                    <span>
+                      {isPartnerCertified ? 'Publier et Mettre en Ligne Immédiatement' : 'Enregistrer et Transmettre pour Certification'}
+                    </span>
                   </button>
                 </div>
               </form>
@@ -2630,17 +2725,12 @@ export function PartnerDashboardPage() {
                   )}
 
                   {previewListingModal.video_url && (
-                    <div className="pt-2 border-t border-foreground/10">
-                      <span className="text-foreground/50 block text-[10px] uppercase font-semibold mb-1">Vidéo de présentation</span>
-                      <a
-                        href={previewListingModal.video_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-primary font-bold hover:underline"
-                      >
-                        <FontAwesomeIcon icon={faVideo} />
-                        <span>Visionner la vidéo</span>
-                      </a>
+                    <div className="pt-3 border-t border-foreground/10">
+                      <ListingVideoPlayer
+                        videoUrl={previewListingModal.video_url}
+                        poster={previewListingModal.gallery?.[0]}
+                        title={previewListingModal.title}
+                      />
                     </div>
                   )}
                 </div>

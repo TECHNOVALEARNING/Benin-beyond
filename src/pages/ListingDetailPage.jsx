@@ -3,17 +3,23 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faChevronLeft,
+  faChevronRight,
   faCertificate,
   faLocationDot,
   faCircleCheck,
   faCalendarDays,
   faUsers,
-  faShieldHalved
+  faShieldHalved,
+  faVideo,
+  faImages,
+  faExpand,
+  faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { getListingById } from '../services/listingService';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
 export function ListingDetailPage() {
   const { id } = useParams();
@@ -22,6 +28,11 @@ export function ListingDetailPage() {
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Gallery & Media states
+  const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const [activeMediaTab, setActiveMediaTab] = useState('photos'); // 'photos' | 'video'
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   // Booking widget form state
   const today = new Date().toISOString().split('T')[0];
@@ -50,6 +61,35 @@ export function ListingDetailPage() {
       mounted = false;
     };
   }, [id]);
+
+  const gallery = Array.isArray(listing?.gallery) && listing.gallery.length > 0
+    ? listing.gallery
+    : ['https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'];
+
+  const handlePrevPhoto = (e) => {
+    e?.stopPropagation?.();
+    setActivePhotoIdx((prev) => (prev > 0 ? prev - 1 : gallery.length - 1));
+  };
+
+  const handleNextPhoto = (e) => {
+    e?.stopPropagation?.();
+    setActivePhotoIdx((prev) => (prev < gallery.length - 1 ? prev + 1 : 0));
+  };
+
+  // Keyboard navigation for photo gallery
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        setActivePhotoIdx((prev) => (prev > 0 ? prev - 1 : gallery.length - 1));
+      } else if (e.key === 'ArrowRight') {
+        setActivePhotoIdx((prev) => (prev < gallery.length - 1 ? prev + 1 : 0));
+      } else if (e.key === 'Escape') {
+        setIsLightboxOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gallery.length]);
 
   // Duration calculation
   const duration = (() => {
@@ -123,25 +163,209 @@ export function ListingDetailPage() {
         <span>Catalogue</span>
       </Link>
 
-      {/* Horizontal photo gallery slider */}
+      {/* MASTER GALLERY & VIDEO HERO (PLEINE LARGEUR AVEC FLÈCHES) */}
       <ScrollReveal delay={0} y={15} scale={0.98}>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
-          {(listing.gallery && listing.gallery.length > 0 ? listing.gallery : ['']).map(
-            (imgUrl, idx) => (
-              <div
-                key={idx}
-                className="relative h-[56vh] min-h-[360px] w-full shrink-0 overflow-hidden rounded-lg md:w-[78%]"
-              >
-                <img
-                  src={imgUrl}
-                  alt={`${listing.title} ${idx + 1}`}
-                  className="h-full w-full object-cover"
+        <div className="space-y-3">
+          {/* Main Viewer Card */}
+          <div className="relative h-[48vh] sm:h-[62vh] max-h-[620px] min-h-[360px] w-full overflow-hidden rounded-2xl md:rounded-3xl bg-neutral-950 border border-foreground/10 shadow-2xl">
+            {activeMediaTab === 'video' && listing.video_url ? (
+              <div className="h-full w-full p-2 sm:p-4">
+                <ListingVideoPlayer
+                  videoUrl={listing.video_url}
+                  poster={gallery[0]}
+                  title={listing.title}
                 />
               </div>
-            )
+            ) : (
+              <div
+                className="relative h-full w-full cursor-zoom-in group select-none"
+                onClick={() => setIsLightboxOpen(true)}
+              >
+                <img
+                  src={gallery[activePhotoIdx]}
+                  alt={`${listing.title} — Photo ${activePhotoIdx + 1}`}
+                  className="h-full w-full object-cover object-center transition-all duration-500 group-hover:scale-102"
+                />
+
+                {/* Subtle vignette shadow */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
+
+                {/* Flèche Précédent */}
+                {gallery.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevPhoto}
+                    aria-label="Photo précédente"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
+                  >
+                    <FontAwesomeIcon icon={faChevronLeft} className="text-base" />
+                  </button>
+                )}
+
+                {/* Flèche Suivant */}
+                {gallery.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleNextPhoto}
+                    aria-label="Photo suivante"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
+                  >
+                    <FontAwesomeIcon icon={faChevronRight} className="text-base" />
+                  </button>
+                )}
+
+                {/* Indicateur Compteur Photo */}
+                <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
+                  <span className="rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow">
+                    Photo {activePhotoIdx + 1} / {gallery.length}
+                  </span>
+                </div>
+
+                {/* Bouton Agrandir Lightbox */}
+                <div className="absolute bottom-4 right-4 z-20">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsLightboxOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3.5 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
+                  >
+                    <FontAwesomeIcon icon={faExpand} className="text-xs" />
+                    <span>Agrandir</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Onglets Médias Haut Gauche (Photos / Vidéo) */}
+            <div className="absolute top-4 left-4 z-30 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveMediaTab('photos')}
+                className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shadow-md backdrop-blur-md border ${
+                  activeMediaTab === 'photos'
+                    ? 'bg-white text-neutral-950 border-white shadow-lg scale-102'
+                    : 'bg-black/60 text-white/80 border-white/15 hover:bg-black/80 hover:text-white'
+                }`}
+              >
+                <FontAwesomeIcon icon={faImages} className="text-xs" />
+                <span>Photos ({gallery.length})</span>
+              </button>
+
+              {listing.video_url && (
+                <button
+                  type="button"
+                  onClick={() => setActiveMediaTab('video')}
+                  className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shadow-md backdrop-blur-md border ${
+                    activeMediaTab === 'video'
+                      ? 'bg-accent text-neutral-950 border-accent shadow-lg scale-102 font-bold'
+                      : 'bg-black/60 text-accent border-accent/30 hover:bg-black/80 hover:border-accent'
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faVideo} className="text-xs animate-pulse" />
+                  <span>Visite Vidéo</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bandeau de Miniatures Cliquables */}
+          {gallery.length > 1 && (
+            <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin">
+              {gallery.map((imgUrl, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setActiveMediaTab('photos');
+                    setActivePhotoIdx(idx);
+                  }}
+                  className={`relative h-18 sm:h-20 w-28 sm:w-32 shrink-0 rounded-xl overflow-hidden transition-all duration-300 border ${
+                    activeMediaTab === 'photos' && activePhotoIdx === idx
+                      ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-102 shadow-md'
+                      : 'border-foreground/15 opacity-65 hover:opacity-100 hover:border-foreground/40'
+                  }`}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Miniature ${idx + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute bottom-1 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {idx + 1}
+                  </div>
+                </button>
+              ))}
+
+              {listing.video_url && (
+                <button
+                  type="button"
+                  onClick={() => setActiveMediaTab('video')}
+                  className={`relative h-18 sm:h-20 w-28 sm:w-32 shrink-0 rounded-xl overflow-hidden transition-all duration-300 border flex flex-col items-center justify-center bg-black/90 text-accent ${
+                    activeMediaTab === 'video'
+                      ? 'border-accent ring-2 ring-accent ring-offset-2 ring-offset-background scale-102 shadow-md'
+                      : 'border-accent/40 opacity-75 hover:opacity-100'
+                  }`}
+                >
+                  <FontAwesomeIcon icon={faVideo} className="text-base sm:text-lg mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Vidéo</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </ScrollReveal>
+
+      {/* Lightbox Plein Écran */}
+      {isLightboxOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-4 sm:p-8 animate-fadeIn"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          <button
+            onClick={() => setIsLightboxOpen(false)}
+            className="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all z-50"
+            aria-label="Fermer"
+          >
+            <FontAwesomeIcon icon={faXmark} className="text-xl" />
+          </button>
+
+          {gallery.length > 1 && (
+            <button
+              onClick={handlePrevPhoto}
+              className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white transition-all z-50"
+              aria-label="Précédent"
+            >
+              <FontAwesomeIcon icon={faChevronLeft} className="text-xl sm:text-2xl" />
+            </button>
+          )}
+
+          {gallery.length > 1 && (
+            <button
+              onClick={handleNextPhoto}
+              className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white transition-all z-50"
+              aria-label="Suivant"
+            >
+              <FontAwesomeIcon icon={faChevronRight} className="text-xl sm:text-2xl" />
+            </button>
+          )}
+
+          <div
+            className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={gallery[activePhotoIdx]}
+              alt={`${listing.title} ${activePhotoIdx + 1}`}
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
+            />
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/75 backdrop-blur-md px-4 py-1.5 text-xs font-semibold text-white border border-white/15">
+              {activePhotoIdx + 1} / {gallery.length}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid: Details + Booking Widget */}
       <div className="mt-10 grid gap-12 lg:grid-cols-[1fr_380px]">
@@ -221,6 +445,17 @@ export function ListingDetailPage() {
                   </li>
                 ))}
               </ul>
+            </ScrollReveal>
+          )}
+
+          {/* Section Vidéo Immersive Exclusive */}
+          {listing.video_url && (
+            <ScrollReveal delay={280} y={20} className="mt-8 border-t border-foreground/10 pt-8">
+              <ListingVideoPlayer
+                videoUrl={listing.video_url}
+                poster={gallery[0]}
+                title={listing.title}
+              />
             </ScrollReveal>
           )}
 

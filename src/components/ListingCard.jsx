@@ -1,30 +1,27 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLocationDot, faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
+import { faLocationDot, faArrowUpRightFromSquare, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
 
-export function ListingCard({ listing, featured = false, className = '' }) {
+export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
   if (!listing) return null;
 
   const image = (listing.gallery && listing.gallery[0]) || '';
+  const ratioClass = aspectRatio || (featured ? 'aspect-[16/10]' : 'aspect-[16/10]');
 
   return (
     <Link
       to={`/listing/${listing.id}`}
       className={`group relative flex flex-col h-full overflow-hidden rounded-xl border border-foreground/10 bg-card transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-foreground/15 hover:border-foreground/25 ${className}`}
     >
-      {/* Image Container */}
-      <div
-        className={`relative w-full overflow-hidden bg-muted ${
-          featured ? 'aspect-[16/10]' : 'aspect-[4/5]'
-        }`}
-      >
+      {/* Image Container — Ratio 16/10 adapté pour cadrer parfaitement villas et véhicules sans les couper */}
+      <div className={`relative w-full overflow-hidden bg-muted ${ratioClass}`}>
         <img
           src={image}
           alt={listing.title}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108"
+          className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
         />
 
         {/* Gradient shadow for text/buttons */}
@@ -35,6 +32,16 @@ export function ListingCard({ listing, featured = false, className = '' }) {
           <div className="absolute left-3 top-3 z-10 transition-opacity duration-300 group-hover:opacity-0">
             <span className="inline-flex items-center rounded-full bg-[#d99f2b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#221804] shadow-sm">
               {listing.badge}
+            </span>
+          </div>
+        )}
+
+        {/* Badge Vidéo si disponible */}
+        {listing.video_url && (
+          <div className="absolute right-3 top-3 z-10">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-accent border border-white/15 shadow-sm">
+              <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
+              <span>Vidéo</span>
             </span>
           </div>
         )}
