@@ -59,9 +59,9 @@ import { formatPrice } from '../data/initialListings';
 import { addListing, updateListing, deleteListing, getListings, getCustomListings } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { compressImage } from '../utils/imageOptimizer';
+import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { saveMediaBlob } from '../services/mediaStorage';
+import { saveMediaBlob, uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
 export function PartnerDashboardPage() {
@@ -321,19 +321,35 @@ export function PartnerDashboardPage() {
 
     setIsCompressingPhotos(true);
     try {
+      const ownerId = user?.id || 'partner';
       for (const file of files) {
         if (!file.type.startsWith('image/')) {
           setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
           continue;
         }
-        if (file.size > 15 * 1024 * 1024) {
-          setPhotoError(`L'image "${file.name}" dépasse 15 Mo.`);
+        if (file.size > 25 * 1024 * 1024) {
+          setPhotoError(`L'image "${file.name}" dépasse 25 Mo.`);
           continue;
         }
 
         try {
-          const compressed = await compressImage(file, 1280, 800, 0.82);
-          setUploadedPhotos((prev) => [...prev, compressed]);
+          // 1. Compression haute fidélité (2048x1536 max, qualité 90% pour une netteté Full HD absolue)
+          const optimizedFile = await compressImageToBlob(file, 2048, 1536, 0.90);
+          
+          // 2. Téléversement dans Supabase Storage dans le dossier structuré de l'hôte
+          // Chemin : <userId>/<listingId>/photos/<filename>
+          const uploadedUrl = await uploadMediaFile(optimizedFile, {
+            userId: ownerId,
+            listingId: 'new_listing',
+            category: 'photos'
+          });
+
+          if (uploadedUrl) {
+            setUploadedPhotos((prev) => [...prev, uploadedUrl]);
+          } else {
+            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            setUploadedPhotos((prev) => [...prev, dataUrl]);
+          }
         } catch (err) {
           console.warn('Fallback FileReader for image:', err);
           const reader = new FileReader();
@@ -362,7 +378,7 @@ export function PartnerDashboardPage() {
     }
   };
 
-  // Video handlers (short tour video, max 35MB or web URL)
+  // Video handlers (short tour video, max 50MB or web URL)
   const handleVideoUpload = async (e) => {
     setVideoError('');
     const file = e.target.files?.[0];
@@ -374,14 +390,20 @@ export function PartnerDashboardPage() {
     }
 
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 35) {
-      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 35 Mo (durée recommandée : 15 à 45 secondes).`);
+    if (sizeMB > 50) {
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo (durée recommandée : 15 à 60 secondes).`);
       return;
     }
 
     setIsUploadingVideo(true);
     try {
-      const persistentId = await saveMediaBlob(file);
+      const ownerId = user?.id || 'partner';
+      // Téléversement ordonné dans le dossier vidéo du profil : <userId>/<listingId>/videos/<filename>
+      const persistentId = await uploadMediaFile(file, {
+        userId: ownerId,
+        listingId: 'new_listing',
+        category: 'videos'
+      });
       const objectUrl = URL.createObjectURL(file);
       setUploadedVideo({
         url: persistentId,
@@ -404,14 +426,11 @@ export function PartnerDashboardPage() {
       setVideoError('Veuillez entrer une adresse URL valide commençant par https://');
       return;
     }
+    const embedInfo = parseVideoEmbed(trimmed);
     setUploadedVideo({
       url: trimmed,
       previewUrl: trimmed,
-      name: trimmed.includes('youtube') || trimmed.includes('youtu.be')
-        ? 'Vidéo YouTube'
-        : trimmed.includes('vimeo')
-        ? 'Vidéo Vimeo'
-        : 'Vidéo en ligne',
+      name: embedInfo?.serviceName ? `Vidéo ${embedInfo.serviceName}` : 'Vidéo en ligne',
       sizeMB: 'Web'
     });
     setVideoUrlInput('');
@@ -477,19 +496,33 @@ export function PartnerDashboardPage() {
 
     setEditIsCompressingPhotos(true);
     try {
+      const ownerId = user?.id || 'partner';
+      const listingId = editingListingModal?.id || 'listing';
       for (const file of files) {
         if (!file.type.startsWith('image/')) {
           setEditPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
           continue;
         }
-        if (file.size > 15 * 1024 * 1024) {
-          setEditPhotoError(`L'image "${file.name}" dépasse 15 Mo.`);
+        if (file.size > 25 * 1024 * 1024) {
+          setEditPhotoError(`L'image "${file.name}" dépasse 25 Mo.`);
           continue;
         }
 
         try {
-          const compressed = await compressImage(file, 1280, 800, 0.82);
-          setEditUploadedPhotos((prev) => [...prev, compressed]);
+          // Compression haute résolution 2048x1536 qualité 90% pour un rendu Full HD net
+          const optimizedBlob = await compressImageToBlob(file, 2048, 1536, 0.90);
+          const uploadedUrl = await uploadMediaFile(optimizedBlob, {
+            userId: ownerId,
+            listingId: listingId,
+            category: 'photos'
+          });
+
+          if (uploadedUrl) {
+            setEditUploadedPhotos((prev) => [...prev, uploadedUrl]);
+          } else {
+            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            setEditUploadedPhotos((prev) => [...prev, dataUrl]);
+          }
         } catch (err) {
           console.warn('Fallback FileReader for image:', err);
           const reader = new FileReader();
@@ -536,14 +569,20 @@ export function PartnerDashboardPage() {
     }
 
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 35) {
-      setEditVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 35 Mo.`);
+    if (sizeMB > 50) {
+      setEditVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo.`);
       return;
     }
 
     setEditIsUploadingVideo(true);
     try {
-      const persistentId = await saveMediaBlob(file);
+      const ownerId = user?.id || 'partner';
+      const listingId = editingListingModal?.id || 'listing';
+      const persistentId = await uploadMediaFile(file, {
+        userId: ownerId,
+        listingId: listingId,
+        category: 'videos'
+      });
       setEditVideoUrl(persistentId);
     } catch (err) {
       console.warn('Erreur upload vidéo:', err);

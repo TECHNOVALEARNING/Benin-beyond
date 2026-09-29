@@ -56,7 +56,8 @@ import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/event
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { compressImage } from '../utils/imageOptimizer';
+import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
+import { uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
@@ -183,7 +184,9 @@ export function AdminDashboardPage() {
   const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
   const [photoError, setPhotoError] = useState('');
-  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, name, sizeMB }
+  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, previewUrl, name, sizeMB }
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
 
@@ -503,7 +506,7 @@ export function AdminDashboardPage() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  // Photo handlers for Admin Property Publishing (Optimisation et compression instantanée)
+  // Photo handlers for Admin Property Publishing (Optimisation haute résolution et stockage structuré)
   const handlePhotoUpload = async (e) => {
     setPhotoError('');
     const files = Array.from(e.target.files || []);
@@ -511,6 +514,7 @@ export function AdminDashboardPage() {
 
     setCompressingPhotos(true);
     try {
+      const adminOwnerId = user?.id || 'admin';
       for (const file of files) {
         if (!file.type.startsWith('image/')) {
           setPhotoError('Format non supporté. Veuillez choisir des photos JPG, PNG ou WebP.');
@@ -522,12 +526,27 @@ export function AdminDashboardPage() {
         }
 
         try {
-          const optimized = await compressImage(file, 1280, 800, 0.82);
-          if (optimized) {
-            setUploadedPhotos((prev) => [...prev, optimized]);
+          // Compression haute résolution 2048x1536 qualité 90% pour un rendu net et fidèle
+          const optimizedBlob = await compressImageToBlob(file, 2048, 1536, 0.90);
+          const uploadedUrl = await uploadMediaFile(optimizedBlob, {
+            userId: adminOwnerId,
+            listingId: 'admin_listing',
+            category: 'photos'
+          });
+
+          if (uploadedUrl) {
+            setUploadedPhotos((prev) => [...prev, uploadedUrl]);
+          } else {
+            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            setUploadedPhotos((prev) => [...prev, dataUrl]);
           }
         } catch (err) {
-          console.warn('Erreur compression image:', err);
+          console.warn('Erreur téléversement image admin:', err);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setUploadedPhotos((prev) => [...prev, event.target.result]);
+          };
+          reader.readAsDataURL(file);
         }
       }
     } finally {
@@ -549,8 +568,8 @@ export function AdminDashboardPage() {
     }
   };
 
-  // Video handlers (short tour video, max 25MB)
-  const handleVideoUpload = (e) => {
+  // Video handlers (short tour video, max 50MB ou lien web)
+  const handleVideoUpload = async (e) => {
     setVideoError('');
     const file = e.target.files?.[0];
     if (!file) return;
@@ -561,22 +580,55 @@ export function AdminDashboardPage() {
     }
 
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 25) {
-      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité, la taille maximale est de 25 Mo.`);
+    if (sizeMB > 50) {
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo.`);
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
+    setIsUploadingVideo(true);
+    try {
+      const adminOwnerId = user?.id || 'admin';
+      const persistentUrl = await uploadMediaFile(file, {
+        userId: adminOwnerId,
+        listingId: 'admin_listing',
+        category: 'videos'
+      });
+      const objectUrl = URL.createObjectURL(file);
+      setUploadedVideo({
+        url: persistentUrl,
+        previewUrl: objectUrl,
+        name: file.name,
+        sizeMB: sizeMB.toFixed(1)
+      });
+    } catch (err) {
+      console.warn('Erreur téléversement vidéo admin:', err);
+      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien URL (YouTube, Drive, etc.).');
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleAddVideoUrl = () => {
+    const trimmed = videoUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setVideoError('Veuillez entrer une adresse URL valide commençant par https://');
+      return;
+    }
+    const embedInfo = parseVideoEmbed(trimmed);
     setUploadedVideo({
-      url: objectUrl,
-      name: file.name,
-      sizeMB: sizeMB.toFixed(1)
+      url: trimmed,
+      previewUrl: trimmed,
+      name: embedInfo?.serviceName ? `Vidéo ${embedInfo.serviceName}` : 'Vidéo en ligne',
+      sizeMB: 'Web'
     });
+    setVideoUrlInput('');
+    setVideoError('');
   };
 
   const handleRemoveVideo = () => {
-    if (uploadedVideo?.url && uploadedVideo.url.startsWith('blob:')) {
-      URL.revokeObjectURL(uploadedVideo.url);
+    if (uploadedVideo?.previewUrl && uploadedVideo.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(uploadedVideo.previewUrl);
     }
     setUploadedVideo(null);
     setVideoError('');
@@ -3538,7 +3590,7 @@ export function AdminDashboardPage() {
                       4. Visite Vidéo d'Aperçu (Optionnelle)
                     </label>
                     <p className="text-[11px] text-foreground/60">
-                      Vidéo immersive courte (15 à 45 sec, 25 Mo max)
+                      Téléversez un clip vidéo (MP4/WebM jusqu'à 50 Mo) ou collez un lien vidéo (Google Drive, YouTube, Vimeo, lien direct).
                     </p>
                   </div>
 
@@ -3550,26 +3602,47 @@ export function AdminDashboardPage() {
                   )}
 
                   {!uploadedVideo ? (
-                    <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
-                      <input
-                        type="file"
-                        id="admin-video-upload"
-                        accept="video/mp4,video/webm,video/quicktime"
-                        onChange={handleVideoUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
-                        <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
-                          <FontAwesomeIcon icon={faVideo} />
+                    <div className="space-y-3">
+                      <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
+                        <input
+                          type="file"
+                          id="admin-video-upload"
+                          accept="video/mp4,video/webm,video/quicktime"
+                          disabled={isUploadingVideo}
+                          onChange={handleVideoUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                        />
+                        <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
+                          <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
+                            <FontAwesomeIcon icon={isUploadingVideo ? faClock : faVideo} className={isUploadingVideo ? 'animate-spin' : ''} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">
+                              {isUploadingVideo ? 'Téléversement dans Supabase Storage...' : 'Sélectionner une vidéo d\'aperçu (.MP4 ou .WebM)'}
+                            </p>
+                            <p className="text-[10px] text-foreground/50">
+                              {isUploadingVideo ? 'Veuillez patienter pendant l\'envoi...' : 'Fichier vidéo jusqu\'à 50 Mo max (dossier structuré)'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-foreground">
-                            Sélectionner une vidéo d'aperçu (.MP4 ou .WebM)
-                          </p>
-                          <p className="text-[10px] text-foreground/50">
-                            Fichier vidéo léger recommandé : 25 Mo max
-                          </p>
-                        </div>
+                      </div>
+
+                      {/* Video URL Input */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="url"
+                          placeholder="Ou collez un lien Google Drive, YouTube, Vimeo..."
+                          value={videoUrlInput}
+                          onChange={(e) => setVideoUrlInput(e.target.value)}
+                          className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddVideoUrl}
+                          className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                        >
+                          Ajouter lien
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -3590,8 +3663,8 @@ export function AdminDashboardPage() {
                         </button>
                       </div>
 
-                      <div className="aspect-video w-full max-w-md mx-auto rounded-xl overflow-hidden bg-black shadow">
-                        <video src={uploadedVideo.url} controls className="w-full h-full object-contain" />
+                      <div className="w-full max-w-xl mx-auto rounded-xl overflow-hidden bg-black shadow">
+                        <ListingVideoPlayer videoUrl={uploadedVideo.url} compact={true} />
                       </div>
                     </div>
                   )}

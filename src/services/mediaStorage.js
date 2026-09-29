@@ -1,7 +1,11 @@
+import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+
 /**
- * Service de stockage persistant pour les médias lourds (vidéos, photos HD)
- * Utilise IndexedDB pour permettre la persistance des vidéos téléversées localement
- * sans être limité par le quota restreint de localStorage (5-10 Mo).
+ * Service de stockage persistant pour les médias (vidéos, photos HD)
+ * 1. Téléversement ordonné dans Supabase Storage (Bucket 'listings') :
+ *    Structure : <userId>/<listingId>/<category>/<filename>
+ * 2. Repli automatique persistant sur IndexedDB hors-ligne.
+ * 3. Détecteur universel de flux vidéo (YouTube, Vimeo, Google Drive, Dropbox, Dailymotion, MP4).
  */
 
 const DB_NAME = 'benin_beyond_media_db';
@@ -25,24 +29,61 @@ function openMediaDB() {
   });
 }
 
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+/**
+ * Construit un chemin de stockage hiérarchique et sécurisé par profil et par bien
+ * Format : <userId>/<listingId>/<category>/<timestamp>_<random>.<ext>
+ * Exemple : user_d4f8b9e1/lst_17276012/photos/1727602000_a8f9d.webp
+ */
+export function buildStoragePath({
+  userId = 'partner',
+  listingId = 'general',
+  category = 'photos',
+  filename = ''
+}) {
+  const sanitize = (val) => String(val || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
+  const cleanUser = sanitize(userId) || 'partner';
+  const cleanListing = sanitize(listingId) || 'general';
+  const cleanCategory = sanitize(category) || 'photos';
+  
+  let ext = 'webp';
+  if (filename && filename.includes('.')) {
+    ext = filename.split('.').pop().toLowerCase();
+  } else if (category === 'videos') {
+    ext = 'mp4';
+  }
+
+  const cleanName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+  return `${cleanUser}/${cleanListing}/${cleanCategory}/${cleanName}`;
+}
 
 /**
- * Enregistre un fichier média (vidéo, image) en priorité dans Supabase Storage (Bucket 'listings')
- * avec repli automatique vers IndexedDB si le bucket n'est pas encore créé.
+ * Téléverse un fichier (Image ou Vidéo) dans Supabase Storage dans un dossier structuré
  * @param {File|Blob} file 
- * @param {string} optionalId 
- * @returns {Promise<string>} Retourne soit l'URL publique Supabase, soit "idb:<id>"
+ * @param {Object} options { userId, listingId, category }
+ * @returns {Promise<string>} Retourne l'URL publique Supabase ou l'identifiant IndexedDB
  */
-export async function saveMediaBlob(file, optionalId = null) {
-  // 1. Priorité absolue : Téléversement direct dans le Bucket Supabase Storage
-  if (isSupabaseConfigured && supabase && file && file.name) {
+export async function uploadMediaFile(file, options = {}) {
+  const {
+    userId = 'partner',
+    listingId = 'general',
+    category = 'photos' // 'photos' | 'videos'
+  } = options;
+
+  if (!file) return '';
+
+  // 1. Envoi prioritaire vers Supabase Storage dans le dossier approprié
+  if (isSupabaseConfigured && supabase) {
     try {
-      const ext = file.name.split('.').pop() || 'mp4';
-      const cleanFileName = `video_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      const storagePath = buildStoragePath({
+        userId,
+        listingId,
+        category,
+        filename: file.name || (category === 'videos' ? 'video.mp4' : 'photo.webp')
+      });
+
       const { data, error } = await supabase.storage
         .from('listings')
-        .upload(cleanFileName, file, {
+        .upload(storagePath, file, {
           cacheControl: '3600',
           upsert: true
         });
@@ -50,18 +91,40 @@ export async function saveMediaBlob(file, optionalId = null) {
       if (!error && data?.path) {
         const { data: { publicUrl } } = supabase.storage
           .from('listings')
-          .getPublicUrl(cleanFileName);
+          .getPublicUrl(data.path);
 
         if (publicUrl) {
           return publicUrl;
         }
+      } else if (error) {
+        console.warn('Supabase storage upload error:', error.message);
       }
-    } catch (supabaseErr) {
-      console.warn('Tentative Supabase Storage (fallback IndexedDB) :', supabaseErr?.message || supabaseErr);
+    } catch (err) {
+      console.warn('Exception upload Supabase Storage (repli IndexedDB) :', err?.message || err);
     }
   }
 
-  // 2. Repli persistant local dans IndexedDB (garantit que rien n'est perdu hors-ligne)
+  // 2. Repli persistant sur IndexedDB si hors-ligne ou bucket temporairement restreint
+  return saveMediaBlob(file, null, options);
+}
+
+/**
+ * Enregistre un fichier média (vidéo, image) avec repli IndexedDB
+ */
+export async function saveMediaBlob(file, optionalId = null, options = {}) {
+  // Tentative directe dans Supabase Storage si possible
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const uploadedUrl = await uploadMediaFile(file, options);
+      if (uploadedUrl && uploadedUrl.startsWith('http')) {
+        return uploadedUrl;
+      }
+    } catch (e) {
+      console.warn('Fallback IndexedDB saveMediaBlob:', e);
+    }
+  }
+
+  // Stockage IndexedDB local
   try {
     const db = await openMediaDB();
     const id = optionalId || `media_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -71,8 +134,8 @@ export async function saveMediaBlob(file, optionalId = null) {
       const record = {
         id,
         blob: file,
-        name: file.name || 'video.mp4',
-        type: file.type || 'video/mp4',
+        name: file.name || 'media_file',
+        type: file.type || (options.category === 'videos' ? 'video/mp4' : 'image/webp'),
         size: file.size || 0,
         createdAt: new Date().toISOString()
       };
@@ -82,7 +145,6 @@ export async function saveMediaBlob(file, optionalId = null) {
     });
   } catch (err) {
     console.warn('Erreur sauvegarde média IndexedDB, fallback FileReader:', err);
-    // 3. Dernier repli : FileReader DataURL
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
@@ -118,12 +180,12 @@ export async function getMediaBlob(id) {
   }
 }
 
-// Cache mémoire des ObjectURLs créés pour éviter les fuites de mémoire
+// Cache mémoire des ObjectURLs créés pour libérer les ressources proprement
 const activeObjectUrls = new Map();
 
 /**
  * Résout une URL vidéo pour le lecteur HTML5 ou iframe
- * Gère les protocoles "idb:", "data:", "http(s):" et YouTube/Vimeo
+ * Gère les protocoles "idb:", "data:", "http(s):" et services tiers
  */
 export async function resolveVideoUrl(videoUrl) {
   if (!videoUrl || typeof videoUrl !== 'string') return '';
@@ -145,47 +207,82 @@ export async function resolveVideoUrl(videoUrl) {
     return '';
   }
 
-  // Si c'est une data URL ou une URL http(s)
-  if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-
-  // Si c'est un ancien blob URL qui a peut-être expiré, on vérifie s'il existe dans IndexedDB par hasard
-  if (trimmed.startsWith('blob:')) {
-    return trimmed;
-  }
-
   return trimmed;
 }
 
 /**
- * Détecte si l'URL vidéo est un lien externe intégrable (YouTube ou Vimeo)
+ * Détecte intelligemment la plateforme vidéo et construit l'URL de lecture intégrée optimale.
+ * Supporte :
+ * - YouTube (standard, shorts, embed, youtu.be, m.youtube)
+ * - Vimeo
+ * - Google Drive (conversion automatique en lecteur /preview)
+ * - Dropbox (conversion automatique en flux direct raw=1)
+ * - Dailymotion
+ * - Fichiers MP4 / WebM / Cloud / Supabase Storage directs
  */
 export function parseVideoEmbed(url) {
   if (!url || typeof url !== 'string') return null;
 
   const trimmed = url.trim();
 
-  // Détection YouTube (youtube.com/watch?v=..., youtu.be/..., youtube.com/shorts/...)
-  const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/ ]{11})/i);
+  // 1. Détection YouTube (toutes variantes y compris shorts, youtu.be, m.youtube)
+  const ytMatch = trimmed.match(
+    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/i
+  );
   if (ytMatch && ytMatch[1]) {
     return {
       type: 'youtube',
+      serviceName: 'YouTube',
       embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?autoplay=0&rel=0&modestbranding=1`
     };
   }
 
-  // Détection Vimeo
-  const vimeoMatch = trimmed.match(/(?:vimeo\.com\/)(\d+)/i);
+  // 2. Détection Google Drive (ex: drive.google.com/file/d/ID/view, open?id=ID)
+  const gDriveMatch = trimmed.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([a-zA-Z0-9_-]+)/i);
+  if (gDriveMatch && gDriveMatch[1]) {
+    return {
+      type: 'gdrive',
+      serviceName: 'Google Drive',
+      embedUrl: `https://drive.google.com/file/d/${gDriveMatch[1]}/preview`
+    };
+  }
+
+  // 3. Détection Vimeo
+  const vimeoMatch = trimmed.match(/(?:vimeo\.com\/(?:video\/)?|player\.vimeo\.com\/video\/)(\d+)/i);
   if (vimeoMatch && vimeoMatch[1]) {
     return {
       type: 'vimeo',
+      serviceName: 'Vimeo',
       embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=0`
     };
   }
 
+  // 4. Détection Dropbox (remplacement de ?dl=0 par ?raw=1 pour lecture directe)
+  if (trimmed.includes('dropbox.com')) {
+    let directDropbox = trimmed.replace(/[?&]dl=[01]/, '');
+    directDropbox += directDropbox.includes('?') ? '&raw=1' : '?raw=1';
+    return {
+      type: 'html5',
+      serviceName: 'Dropbox',
+      url: directDropbox
+    };
+  }
+
+  // 5. Détection Dailymotion
+  const dailyMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/i);
+  if (dailyMatch && dailyMatch[1]) {
+    return {
+      type: 'dailymotion',
+      serviceName: 'Dailymotion',
+      embedUrl: `https://www.dailymotion.com/embed/video/${dailyMatch[1]}`
+    };
+  }
+
+  // 6. Flux HTML5 standard (MP4, WebM, Supabase Storage, CDN, etc.)
   return {
     type: 'html5',
+    serviceName: 'Lecteur direct',
     url: trimmed
   };
 }
+

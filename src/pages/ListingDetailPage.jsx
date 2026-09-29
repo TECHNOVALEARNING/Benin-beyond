@@ -33,6 +33,7 @@ export function ListingDetailPage() {
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState('photos'); // 'photos' | 'video'
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [imageFitMode, setImageFitMode] = useState('contain'); // 'contain' (vue entière nette) | 'cover' (plein cadre)
 
   // Booking widget form state
   const today = new Date().toISOString().split('T')[0];
@@ -169,26 +170,38 @@ export function ListingDetailPage() {
           {/* Main Viewer Card */}
           <div className="relative h-[48vh] sm:h-[62vh] max-h-[620px] min-h-[360px] w-full overflow-hidden rounded-2xl md:rounded-3xl bg-neutral-950 border border-foreground/10 shadow-2xl">
             {activeMediaTab === 'video' && listing.video_url ? (
-              <div className="h-full w-full p-2 sm:p-4">
+              <div className="h-full w-full">
                 <ListingVideoPlayer
                   videoUrl={listing.video_url}
                   poster={gallery[0]}
                   title={listing.title}
+                  compact={true}
                 />
               </div>
             ) : (
               <div
-                className="relative h-full w-full cursor-zoom-in group select-none"
+                className="relative h-full w-full cursor-zoom-in group select-none flex items-center justify-center overflow-hidden bg-neutral-950"
                 onClick={() => setIsLightboxOpen(true)}
               >
+                {/* Halo d'ambiance flou en arrière-plan (remplit élégamment les bordures sans déformation) */}
+                <img
+                  src={gallery[activePhotoIdx]}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-35 scale-110 pointer-events-none select-none transition-all duration-700"
+                />
+
+                {/* Photo Principale Nette & Non Tronquée */}
                 <img
                   src={gallery[activePhotoIdx]}
                   alt={`${listing.title} — Photo ${activePhotoIdx + 1}`}
-                  className="h-full w-full object-cover object-center transition-all duration-500 group-hover:scale-102"
+                  className={`relative z-10 h-full w-full select-none transition-all duration-500 drop-shadow-2xl ${
+                    imageFitMode === 'cover' ? 'object-cover' : 'object-contain'
+                  }`}
                 />
 
                 {/* Subtle vignette shadow */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
+                <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
 
                 {/* Flèche Précédent */}
                 {gallery.length > 1 && (
@@ -221,8 +234,20 @@ export function ListingDetailPage() {
                   </span>
                 </div>
 
-                {/* Bouton Agrandir Lightbox */}
-                <div className="absolute bottom-4 right-4 z-20">
+                {/* Commandes Bas Droite (Mode Cadrage + Agrandir) */}
+                <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImageFitMode((prev) => (prev === 'contain' ? 'cover' : 'contain'));
+                    }}
+                    className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
+                    title={imageFitMode === 'contain' ? 'Remplir tout le cadre' : 'Afficher l’image entière (sans découpe)'}
+                  >
+                    <span>{imageFitMode === 'contain' ? 'Plein cadre' : 'Vue entière'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={(e) => {
