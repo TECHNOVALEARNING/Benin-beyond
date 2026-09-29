@@ -17,12 +17,14 @@ import {
   faPrint,
   faArrowUpRightFromSquare,
   faXmark,
-  faShieldHalved
+  faShieldHalved,
+  faTrash
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
-import { getBookings } from '../services/bookingService';
+import { getBookings, deleteBooking } from '../services/bookingService';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -87,6 +89,32 @@ export function ClientDashboardPage() {
     e.preventDefault();
     setProfileSaved(true);
     setTimeout(() => setProfileSaved(false), 3000);
+  };
+
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirmer',
+    cancelText: 'Annuler',
+    variant: 'danger',
+    onConfirm: null
+  });
+
+  const handleDeleteBooking = (bookingId, bookingRef) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer la réservation",
+      message: `Voulez-vous supprimer définitivement la réservation "${bookingRef || bookingId}" de votre compte ?`,
+      confirmText: "Supprimer définitivement",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setUserBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
+        await deleteBooking(bookingId);
+      }
+    });
   };
 
   const totalSpent = userBookings.reduce((sum, b) => sum + (Number(b.total_amount) || Number(b.gross_amount) || 0), 0);
@@ -336,13 +364,23 @@ export function ClientDashboardPage() {
 
                         {/* Bottom Actions */}
                         <div className="mt-6 pt-4 border-t border-foreground/5 flex items-center justify-between gap-2">
-                          <button
-                            onClick={() => setSelectedVoucher(b)}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-xs font-semibold text-foreground transition-all"
-                          >
-                            <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
-                            <span>Voucher & Reçu</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedVoucher(b)}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-xs font-semibold text-foreground transition-all"
+                            >
+                              <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
+                              <span>Voucher & Reçu</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBooking(b.id || b.booking_ref, b.booking_ref)}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 dark:border-rose-900/50 bg-rose-500/10 hover:bg-rose-600 hover:text-white px-3 py-2 text-xs font-semibold text-rose-600 transition-all"
+                              title="Supprimer la réservation"
+                            >
+                              <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                              <span>Supprimer</span>
+                            </button>
+                          </div>
 
                           {b.listing_id && (
                             <Link
@@ -591,6 +629,18 @@ export function ClientDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

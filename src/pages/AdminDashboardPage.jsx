@@ -50,7 +50,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings, activateOwnerListings } from '../services/listingService';
-import { getBookings, updateBookingStatus } from '../services/bookingService';
+import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
@@ -851,6 +851,26 @@ export function AdminDashboardPage() {
       setSelectedBookingModal((prev) => ({ ...prev, status: newStatus }));
     }
     showToast(`Réservation mise à jour : Statut "${newStatus}".`);
+  };
+
+  const handleDeleteBookingItem = (bookingId, bookingRef) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer la réservation",
+      message: `Voulez-vous supprimer définitivement la réservation "${bookingRef || bookingId}" ? Cette action effacera la réservation du système.`,
+      confirmText: "Supprimer définitivement",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
+        if (selectedBookingModal && (selectedBookingModal.id === bookingId || selectedBookingModal.booking_ref === bookingId)) {
+          setSelectedBookingModal(null);
+        }
+        showToast(`La réservation "${bookingRef || bookingId}" a été supprimée.`);
+        await deleteBooking(bookingId);
+      }
+    });
   };
 
   const handleApprovePayout = (payoutId) => {
@@ -2044,6 +2064,13 @@ export function AdminDashboardPage() {
                                     Valider
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => handleDeleteBookingItem(b.id || b.booking_ref, b.booking_ref)}
+                                  className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 transition-colors"
+                                  title="Supprimer la réservation"
+                                >
+                                  <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -3224,14 +3251,14 @@ export function AdminDashboardPage() {
                   <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block mb-3">
                     1. Catégorie du bien
                   </label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <button
                       type="button"
                       onClick={() => {
                         setFormType('stay');
                         setFormPriceUnit('nuit');
                       }}
-                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'stay'
                           ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
                           : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
@@ -3240,9 +3267,9 @@ export function AdminDashboardPage() {
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                         <FontAwesomeIcon icon={faHouse} className="text-primary text-base" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm text-foreground">Hébergement</p>
-                        <p className="text-[11px] text-foreground/60">Villa, Appartement, Loft lagune</p>
+                        <p className="text-[11px] text-foreground/60 leading-snug">Villa, Appartement, Loft lagune</p>
                       </div>
                     </button>
 
@@ -3252,7 +3279,7 @@ export function AdminDashboardPage() {
                         setFormType('drive');
                         setFormPriceUnit('jour');
                       }}
-                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'drive'
                           ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
                           : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
@@ -3261,9 +3288,9 @@ export function AdminDashboardPage() {
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                         <FontAwesomeIcon icon={faCar} className="text-primary text-base" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm text-foreground">Véhicule</p>
-                        <p className="text-[11px] text-foreground/60">SUV VIP, Berline ou Vente certifiée</p>
+                        <p className="text-[11px] text-foreground/60 leading-snug">SUV VIP, Berline ou Vente certifiée</p>
                       </div>
                     </button>
                   </div>
@@ -4004,21 +4031,38 @@ export function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-6 flex items-center justify-between gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  window.print();
+                  const target = selectedBookingModal;
+                  setSelectedBookingModal(null);
+                  handleDeleteBookingItem(target.id || target.booking_ref, target.booking_ref);
                 }}
-                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                className="rounded-xl border border-rose-500/30 text-rose-600 hover:bg-rose-50 px-3.5 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5"
               >
-                Imprimer le Reçu
+                <FontAwesomeIcon icon={faTrash} />
+                <span>Supprimer la réservation</span>
               </button>
-              <button
-                onClick={() => setSelectedBookingModal(null)}
-                className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/95 transition-all shadow-md"
-              >
-                Fermer
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.print();
+                  }}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                >
+                  Imprimer le Reçu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBookingModal(null)}
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/95 transition-all shadow-md"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -148,6 +148,33 @@ export async function updateBookingStatus(bookingId, newStatus) {
   }
 }
 
+export async function deleteBooking(bookingId) {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
+    const bookings = raw ? JSON.parse(raw) : [];
+    const filtered = bookings.filter(
+      (b) => b.id !== bookingId && b.booking_ref !== bookingId
+    );
+    localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(filtered));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('bookings')
+          .delete()
+          .or(`id.eq.${bookingId},booking_ref.eq.${bookingId}`);
+      } catch (err) {
+        console.warn('Supabase booking delete error:', err);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Erreur suppression réservation:', err);
+    return false;
+  }
+}
+
 export async function createBooking(bookingPayload) {
   const bookingRef = bookingPayload.booking_ref || `BB-${Math.floor(Math.random() * 900000 + 100000)}`;
   const gross = Number(bookingPayload.gross_amount || bookingPayload.total_amount || bookingPayload.total_price || 85000);

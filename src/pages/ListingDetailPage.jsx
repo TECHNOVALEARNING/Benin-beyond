@@ -498,34 +498,70 @@ export function ListingDetailPage() {
             )}
 
             {/* Date Pickers */}
-            <div className="mt-5 space-y-4">
+            <div className="mt-5 space-y-3">
               {isDaily && (
-                <div className="grid grid-cols-2 gap-2 rounded-lg border border-foreground/15 p-2 bg-background">
-                  <div>
-                    <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                      <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Arrivée
-                    </label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      min={today}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="mt-1 w-full bg-transparent text-xs font-medium outline-none text-foreground cursor-pointer"
-                    />
+                <>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-foreground/15 p-2 bg-background">
+                    <div>
+                      <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
+                        <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Arrivée
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        min={today}
+                        onChange={(e) => {
+                          const newStart = e.target.value;
+                          setStartDate(newStart);
+                          if (new Date(endDate) <= new Date(newStart)) {
+                            const nextDay = new Date(new Date(newStart).getTime() + 86400000);
+                            setEndDate(nextDay.toISOString().split('T')[0]);
+                          }
+                        }}
+                        className="mt-1 w-full bg-transparent text-xs font-medium outline-none text-foreground cursor-pointer"
+                      />
+                    </div>
+                    <div className="border-l border-foreground/15 pl-2">
+                      <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
+                        <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Départ
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        min={startDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="mt-1 w-full bg-transparent text-xs font-medium outline-none text-foreground cursor-pointer"
+                      />
+                    </div>
                   </div>
-                  <div className="border-l border-foreground/15 pl-2">
-                    <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                      <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Départ
-                    </label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      min={startDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="mt-1 w-full bg-transparent text-xs font-medium outline-none text-foreground cursor-pointer"
-                    />
+
+                  {/* Quick duration presets */}
+                  <div className="flex items-center justify-between text-xs px-1">
+                    <span className="text-[11px] text-foreground/60 font-medium">
+                      Durée : <strong className="text-primary font-mono">{duration} {listing.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}</strong>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 7].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const start = new Date(startDate || today);
+                            const end = new Date(start.getTime() + num * 86400000);
+                            setEndDate(end.toISOString().split('T')[0]);
+                          }}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                            duration === num
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-muted/40 text-foreground/70 border-foreground/10 hover:border-foreground/30'
+                          }`}
+                        >
+                          {num} {listing.price_unit === 'nuit' ? 'n' : 'j'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
               {/* Guests */}

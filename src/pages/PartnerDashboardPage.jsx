@@ -57,7 +57,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { addListing, updateListing, deleteListing, getListings, getCustomListings } from '../services/listingService';
-import { getBookings, updateBookingStatus } from '../services/bookingService';
+import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -138,7 +138,15 @@ export function PartnerDashboardPage() {
   const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
-  const [confirmDeleteModal, setConfirmDeleteModal] = useState({ isOpen: false, id: null, title: '' });
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirmer',
+    cancelText: 'Annuler',
+    variant: 'danger',
+    onConfirm: null
+  });
 
   // Edit Listing Modal state
   const [editingListingModal, setEditingListingModal] = useState(null);
@@ -330,6 +338,41 @@ export function PartnerDashboardPage() {
     }
   };
 
+  const handleDeleteBookingItem = (bookingId, bookingRef) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer la réservation",
+      message: `Voulez-vous supprimer définitivement la réservation "${bookingRef || bookingId}" ? Cette action effacera la réservation du système.`,
+      confirmText: "Supprimer définitivement",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
+        if (selectedBookingModal && (selectedBookingModal.id === bookingId || selectedBookingModal.booking_ref === bookingId)) {
+          setSelectedBookingModal(null);
+        }
+        await deleteBooking(bookingId);
+      }
+    });
+  };
+
+  const handleDeleteListingItem = (listingId, listingTitle) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer l'annonce",
+      message: `Voulez-vous supprimer définitivement l'annonce "${listingTitle || listingId}" ? Cette action est irréversible.`,
+      confirmText: "Supprimer définitivement",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        await deleteListing(listingId);
+        setListings((prev) => prev.filter((item) => item.id !== listingId));
+      }
+    });
+  };
+
   // Photo handlers (with automated client-side compression)
   const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
   const handlePhotoUpload = async (e) => {
@@ -463,21 +506,6 @@ export function PartnerDashboardPage() {
     setVideoError('');
   };
 
-  const handleDeleteListingItem = (id, title = '') => {
-    setConfirmDeleteModal({
-      isOpen: true,
-      id,
-      title: title || 'cette annonce'
-    });
-  };
-
-  const handleConfirmDeleteListing = async () => {
-    const id = confirmDeleteModal.id;
-    if (!id) return;
-    setConfirmDeleteModal({ isOpen: false, id: null, title: '' });
-    setListings((prev) => prev.filter((item) => item.id !== id));
-    await deleteListing(id);
-  };
 
   // ==========================================
   // GESTION DE LA MODIFICATION D'UNE ANNONCE
@@ -1502,6 +1530,13 @@ export function PartnerDashboardPage() {
                                 >
                                   Détails
                                 </button>
+                                <button
+                                  onClick={() => handleDeleteBookingItem(b.id || b.booking_ref, b.booking_ref)}
+                                  className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-500/10 p-1.5 text-xs text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                                  title="Supprimer la réservation"
+                                >
+                                  <FontAwesomeIcon icon={faTrash} />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1844,14 +1879,14 @@ export function PartnerDashboardPage() {
                   <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block mb-3">
                     1. Catégorie de publication
                   </label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <button
                       type="button"
                       onClick={() => {
                         setFormType('stay');
                         setFormPriceUnit('nuit');
                       }}
-                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'stay'
                           ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
                           : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
@@ -1860,9 +1895,9 @@ export function PartnerDashboardPage() {
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                         <FontAwesomeIcon icon={faHouse} className="text-primary text-base" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm text-foreground">Hébergement</p>
-                        <p className="text-[11px] text-foreground/60">Villa, Appartement, Loft bord de mer</p>
+                        <p className="text-[11px] text-foreground/60 leading-snug">Villa, Appartement, Loft bord de mer</p>
                       </div>
                     </button>
 
@@ -1872,7 +1907,7 @@ export function PartnerDashboardPage() {
                         setFormType('drive');
                         setFormPriceUnit('jour');
                       }}
-                      className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
+                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'drive'
                           ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
                           : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
@@ -1881,9 +1916,9 @@ export function PartnerDashboardPage() {
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                         <FontAwesomeIcon icon={faCar} className="text-primary text-base" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm text-foreground">Véhicule</p>
-                        <p className="text-[11px] text-foreground/60">Location SUV, Berline ou Vente certifiée</p>
+                        <p className="text-[11px] text-foreground/60 leading-snug">Location SUV, Berline ou Vente certifiée</p>
                       </div>
                     </button>
                   </div>
@@ -3222,7 +3257,7 @@ export function PartnerDashboardPage() {
                   1. Catégorie & Mode de Transaction
                 </label>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -3235,10 +3270,10 @@ export function PartnerDashboardPage() {
                         : 'border-foreground/15 bg-background text-foreground/70 hover:border-foreground/30'
                     }`}
                   >
-                    <FontAwesomeIcon icon={faHouse} className="text-primary text-lg" />
-                    <div>
+                    <FontAwesomeIcon icon={faHouse} className="text-primary text-lg shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-xs text-foreground">Hébergement</p>
-                      <p className="text-[10px] text-foreground/60">Villa, Appartement, Hôtel</p>
+                      <p className="text-[10px] text-foreground/60 leading-snug">Villa, Appartement, Hôtel</p>
                     </div>
                   </button>
 
@@ -3254,10 +3289,10 @@ export function PartnerDashboardPage() {
                         : 'border-foreground/15 bg-background text-foreground/70 hover:border-foreground/30'
                     }`}
                   >
-                    <FontAwesomeIcon icon={faCar} className="text-primary text-lg" />
-                    <div>
+                    <FontAwesomeIcon icon={faCar} className="text-primary text-lg shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-xs text-foreground">Véhicule</p>
-                      <p className="text-[10px] text-foreground/60">SUV, Berline, Minibus</p>
+                      <p className="text-[10px] text-foreground/60 leading-snug">SUV, Berline, Minibus</p>
                     </div>
                   </button>
                 </div>
@@ -3874,25 +3909,52 @@ export function PartnerDashboardPage() {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-2 flex items-center justify-end gap-2.5">
+            <div className="pt-2 flex items-center justify-between gap-2.5">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                onClick={() => {
+                  const target = selectedBookingModal;
+                  handleDeleteBookingItem(target.id || target.booking_ref, target.booking_ref);
+                }}
+                className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/40 text-rose-600 px-3 py-2 text-xs font-semibold hover:bg-rose-600 hover:text-white transition-colors flex items-center gap-1.5"
+                title="Supprimer cette réservation"
               >
-                Imprimer Reçu
+                <FontAwesomeIcon icon={faTrash} className="text-xs" />
+                <span>Supprimer la réservation</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setSelectedBookingModal(null)}
-                className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all shadow"
-              >
-                Fermer
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                >
+                  Imprimer Reçu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBookingModal(null)}
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all shadow"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );

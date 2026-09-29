@@ -7,7 +7,7 @@ import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function CartPage() {
-  const { items, removeItem, subtotal } = useCart();
+  const { items, removeItem, updateItem, subtotal } = useCart();
 
   if (items.length === 0) {
     return (
@@ -90,18 +90,54 @@ export function CartPage() {
                       </button>
                     </div>
 
-                    <div className="mt-2 text-xs text-foreground/50">
-                      {item.price_unit === 'nuit'
-                        ? `${duration} nuit(s)`
-                        : item.price_unit === 'jour'
-                        ? `${duration} jour(s)`
-                        : 'Prestation unique'}
-                      {item.guests ? ` · ${item.guests} voyageur(s)` : ''}
+                    {/* Duration / Quantity Adjuster */}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      {(item.price_unit === 'nuit' || item.price_unit === 'jour') ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-foreground/60 font-medium">Durée :</span>
+                          <div className="inline-flex items-center rounded-lg border border-foreground/15 bg-background overflow-hidden shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDuration = Math.max(1, duration - 1);
+                                updateItem(index, { nights: newDuration, days: newDuration, qty: newDuration });
+                              }}
+                              disabled={duration <= 1}
+                              className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted disabled:opacity-30 transition-colors"
+                              title="Diminuer d'un jour/nuit"
+                            >
+                              -
+                            </button>
+                            <span className="px-3 py-1 text-xs font-bold text-foreground min-w-[3.5rem] text-center font-mono bg-muted/30">
+                              {duration} {item.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDuration = duration + 1;
+                                updateItem(index, { nights: newDuration, days: newDuration, qty: newDuration });
+                              }}
+                              className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted transition-colors"
+                              title="Augmenter d'un jour/nuit"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-foreground/50">Prestation unique</span>
+                      )}
+
+                      {item.guests && (
+                        <span className="text-xs text-foreground/50">
+                          · {item.guests} voyageur(s)
+                        </span>
+                      )}
                     </div>
 
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <span className="text-sm text-foreground/60">
-                        {formatPrice(item.price)} / {item.price_unit}
+                    <div className="mt-auto flex items-center justify-between pt-3 border-t border-foreground/5">
+                      <span className="text-xs text-foreground/60">
+                        {formatPrice(item.price)} × {duration} {item.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}
                       </span>
                       <span className="font-heading text-lg font-bold text-primary">
                         {formatPrice(itemTotal)}
