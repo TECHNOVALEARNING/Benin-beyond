@@ -51,8 +51,7 @@ import {
   faBan,
   faCheck,
   faPen,
-  faSpinner,
-  faStar
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -267,6 +266,18 @@ export function PartnerDashboardPage() {
     };
   }, [bookings]);
 
+  // Durée moyenne réelle de séjour calculée sur les réservations effectives
+  const avgStayDuration = useMemo(() => {
+    if (bookings.length === 0) return 0;
+    const totalDays = bookings.reduce((sum, b) => {
+      const items = Array.isArray(b.items) ? b.items : [];
+      const first = items[0] || {};
+      const count = Number(first.nights || first.days || first.qty || 1);
+      return sum + count;
+    }, 0);
+    return Math.round((totalDays / bookings.length) * 10) / 10;
+  }, [bookings]);
+
   // Statistiques mensuelles réelles du partenaire
   const monthlyPartnerStats = useMemo(() => {
     if (bookings.length === 0) return [];
@@ -338,24 +349,6 @@ export function PartnerDashboardPage() {
     }
   };
 
-  const handleDeleteBookingItem = (bookingId, bookingRef) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Supprimer la réservation",
-      message: `Voulez-vous supprimer définitivement la réservation "${bookingRef || bookingId}" ? Cette action effacera la réservation du système.`,
-      confirmText: "Supprimer définitivement",
-      cancelText: "Annuler",
-      variant: "danger",
-      onConfirm: async () => {
-        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        setBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
-        if (selectedBookingModal && (selectedBookingModal.id === bookingId || selectedBookingModal.booking_ref === bookingId)) {
-          setSelectedBookingModal(null);
-        }
-        await deleteBooking(bookingId);
-      }
-    });
-  };
 
   const handleDeleteListingItem = (listingId, listingTitle) => {
     setConfirmDialog({
@@ -1215,12 +1208,10 @@ export function PartnerDashboardPage() {
                       <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-foreground/5 text-xs">
                         <div className="flex items-center gap-2.5">
                           <FontAwesomeIcon icon={faCheckCircle} className="text-emerald-600" />
-                          <span>Note moyenne avis voyageurs</span>
+                          <span>Avis clients vérifiés</span>
                         </div>
-                        <span className="font-bold text-foreground">
-                          {listings.length > 0
-                            ? (bookings.length > 0 ? '5.0 / 5 (Avis récents)' : 'Nouveau Partenaire Certifié')
-                            : 'Aucun avis'}
+                        <span className="font-semibold text-foreground/75">
+                          {bookings.length > 0 ? 'En cours' : 'Aucun avis'}
                         </span>
                       </div>
                     </div>
@@ -1529,13 +1520,6 @@ export function PartnerDashboardPage() {
                                   className="rounded-lg border border-foreground/15 bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition-colors"
                                 >
                                   Détails
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteBookingItem(b.id || b.booking_ref, b.booking_ref)}
-                                  className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-500/10 p-1.5 text-xs text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-sm"
-                                  title="Supprimer la réservation"
-                                >
-                                  <FontAwesomeIcon icon={faTrash} />
                                 </button>
                               </div>
                             </td>
@@ -2610,20 +2594,22 @@ export function PartnerDashboardPage() {
                 <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
                   <p className="text-xs text-foreground/60 mb-1">Durée moyenne de séjour</p>
                   <p className="font-heading text-2xl font-bold text-foreground">
-                    {bookings.length > 0 ? '3 nuits' : '0 nuit'}
+                    {bookings.length > 0
+                      ? `${avgStayDuration} ${avgStayDuration > 1 ? 'jours / nuits' : 'jour / nuit'}`
+                      : '0 jour'}
                   </p>
                   <p className="text-[11px] text-foreground/60 mt-1">
-                    {bookings.length > 0 ? 'Clients diaspora & nationaux' : 'En attente de réservations'}
+                    {bookings.length > 0 ? 'Calculée sur vos réservations réelles' : 'En attente de réservations'}
                   </p>
                 </div>
 
                 <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Satisfaction globale</p>
-                  <p className="font-heading text-2xl font-bold text-primary">
-                    {listings.length > 0 ? (bookings.length > 0 ? '5.0 / 5' : 'Nouveau') : 'N/A'}
+                  <p className="text-xs text-foreground/60 mb-1">Avis Clients</p>
+                  <p className="font-heading text-lg font-bold text-foreground">
+                    {bookings.length > 0 ? 'En cours de collecte' : 'Aucun avis'}
                   </p>
-                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                    {bookings.length > 0 ? 'Badge Hôte Certifié' : 'Compte propriétaire vérifié'}
+                  <p className="text-[11px] text-foreground/50 mt-1">
+                    {bookings.length > 0 ? 'Retours des voyageurs vérifiés' : 'En attente des premiers séjours'}
                   </p>
                 </div>
               </div>
@@ -3909,21 +3895,7 @@ export function PartnerDashboardPage() {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-2 flex items-center justify-between gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  const target = selectedBookingModal;
-                  handleDeleteBookingItem(target.id || target.booking_ref, target.booking_ref);
-                }}
-                className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/40 text-rose-600 px-3 py-2 text-xs font-semibold hover:bg-rose-600 hover:text-white transition-colors flex items-center gap-1.5"
-                title="Supprimer cette réservation"
-              >
-                <FontAwesomeIcon icon={faTrash} className="text-xs" />
-                <span>Supprimer la réservation</span>
-              </button>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -3939,7 +3911,6 @@ export function PartnerDashboardPage() {
                   Fermer
                 </button>
               </div>
-            </div>
           </div>
         </div>
       )}

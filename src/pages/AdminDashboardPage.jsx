@@ -45,12 +45,14 @@ import {
   faUpload,
   faImage,
   faPlus,
-  faPen
+  faPen,
+  faStar
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings, activateOwnerListings } from '../services/listingService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
+import { getReviews, deleteReview } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
@@ -91,6 +93,9 @@ export function AdminDashboardPage() {
   const [packs, setPacks] = useState([]);
   const [events, setEvents] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [reviewsList, setReviewsList] = useState([]);
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [compressingPhotos, setCompressingPhotos] = useState(false);
@@ -209,18 +214,20 @@ export function AdminDashboardPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [allListings, allBookings, allPacks, allEvents, allUsers] = await Promise.all([
+      const [allListings, allBookings, allPacks, allEvents, allUsers, allReviews] = await Promise.all([
         getListings({ includePending: true }),
         getBookings(),
         getPacks(),
         getEvents(),
-        getUsers()
+        getUsers(),
+        getReviews()
       ]);
       setListings(allListings || []);
       setBookings(allBookings || []);
       setPacks(allPacks || []);
       setEvents(allEvents || []);
       setUsersList(allUsers || []);
+      setReviewsList(allReviews || []);
 
       // Récupération des partenaires réels depuis le registre unifié
       const ownerUsers = (allUsers || []).filter((u) => u.role === 'owner' || u.role === 'partner');
@@ -873,6 +880,23 @@ export function AdminDashboardPage() {
     });
   };
 
+  const handleDeleteReviewItem = (reviewId, authorName) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Supprimer l'avis client",
+      message: `Voulez-vous supprimer définitivement cet avis de ${authorName || 'ce voyageur'} ? Cette action le retirera de la base de données et de l'affichage public.`,
+      confirmText: "Supprimer l'avis",
+      cancelText: "Annuler",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setReviewsList((prev) => prev.filter((r) => r.id !== reviewId));
+        showToast("L'avis voyageur a été supprimé avec succès.");
+        await deleteReview(reviewId);
+      }
+    });
+  };
+
   const handleApprovePayout = (payoutId) => {
     setPayouts((prev) =>
       prev.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p))
@@ -1031,6 +1055,19 @@ export function AdminDashboardPage() {
     return { total, clients, owners, suspended };
   }, [usersList]);
 
+  const filteredReviews = useMemo(() => {
+    return reviewsList.filter((rev) => {
+      const matchSearch =
+        !reviewSearch ||
+        rev.author_name?.toLowerCase().includes(reviewSearch.toLowerCase()) ||
+        rev.author_email?.toLowerCase().includes(reviewSearch.toLowerCase()) ||
+        rev.comment?.toLowerCase().includes(reviewSearch.toLowerCase());
+      const matchRating =
+        reviewRatingFilter === 'all' || String(rev.rating) === String(reviewRatingFilter);
+      return matchSearch && matchRating;
+    });
+  }, [reviewsList, reviewSearch, reviewRatingFilter]);
+
   const navGroups = [
     {
       title: 'SUPERVISION & GOUVERNANCE',
@@ -1072,6 +1109,13 @@ export function AdminDashboardPage() {
           icon: faCalendarCheck,
           badge: events.length > 0 ? `${events.length} publiés` : null,
           badgeColor: 'bg-primary/20 text-primary border-primary/30'
+        },
+        {
+          key: 'reviews',
+          label: 'Avis & Retours Clients',
+          icon: faStar,
+          badge: reviewsList.length > 0 ? `${reviewsList.length} avis` : null,
+          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
         }
       ]
     },
@@ -3969,6 +4013,162 @@ export function AdminDashboardPage() {
                     <FontAwesomeIcon icon={faCirclePlus} />
                     <span>Publier un nouveau bien</span>
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION: AVIS & RETOURS CLIENTS (AUTHENTIQUES ET MODÉRABLES) */}
+          {/* ========================================================================= */}
+          {currentSection === 'reviews' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-xl font-bold text-foreground flex items-center gap-2">
+                    <FontAwesomeIcon icon={faStar} className="text-amber-400" />
+                    <span>Avis & Retours d'Expérience Clients</span>
+                  </h2>
+                  <p className="text-xs text-foreground/60">
+                    Consultez, modérez et gérez les retours authentiques laissés par les voyageurs après séjour ({reviewsList.length} avis enregistrés)
+                  </p>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Total Avis Reçus</span>
+                  <div className="mt-1 text-2xl font-bold text-foreground font-heading">{reviewsList.length}</div>
+                  <span className="text-[11px] text-foreground/50">Retours vérifiés après réservation</span>
+                </div>
+
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Note Moyenne Globale</span>
+                  <div className="mt-1 text-2xl font-bold text-amber-500 font-heading flex items-center gap-1.5">
+                    {reviewsList.length > 0
+                      ? `${(reviewsList.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviewsList.length).toFixed(1)} / 5`
+                      : 'Aucun avis'}
+                    {reviewsList.length > 0 && <FontAwesomeIcon icon={faStar} className="text-amber-400 text-lg" />}
+                  </div>
+                  <span className="text-[11px] text-foreground/50">Moyenne calculée en temps réel</span>
+                </div>
+
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Taux de Satisfaction</span>
+                  <div className="mt-1 text-2xl font-bold text-emerald-500 font-heading">
+                    {reviewsList.length > 0
+                      ? `${Math.round((reviewsList.filter(r => (Number(r.rating) || 0) >= 4).length / reviewsList.length) * 100)}%`
+                      : '—'}
+                  </div>
+                  <span className="text-[11px] text-foreground/50">Notes 4 étoiles et 5 étoiles</span>
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/40 text-xs" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom de voyageur, email, contenu du commentaire..."
+                    value={reviewSearch}
+                    onChange={(e) => setReviewSearch(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <select
+                  value={reviewRatingFilter}
+                  onChange={(e) => setReviewRatingFilter(e.target.value)}
+                  className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                >
+                  <option value="all">Toutes les notes</option>
+                  <option value="5">5 Étoiles (Excellent)</option>
+                  <option value="4">4 Étoiles (Très bien)</option>
+                  <option value="3">3 Étoiles (Moyen)</option>
+                  <option value="2">2 Étoiles (Décevant)</option>
+                  <option value="1">1 Étoile (Insatisfaisant)</option>
+                </select>
+              </div>
+
+              {/* Reviews List */}
+              {filteredReviews.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
+                  <FontAwesomeIcon icon={faStar} className="h-10 w-10 text-foreground/20 mb-3" />
+                  <h4 className="font-heading text-base font-bold text-foreground">
+                    Aucun avis client pour le moment
+                  </h4>
+                  <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
+                    Dès que les voyageurs auront terminé leur séjour ou confirmé leur réservation, ils pourront laisser leur retour authentique depuis leur espace client.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredReviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm hover:border-foreground/20 transition-all flex flex-col md:flex-row md:items-start justify-between gap-4"
+                    >
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase">
+                            {rev.author_name ? rev.author_name.charAt(0) : 'V'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-heading text-sm font-bold text-foreground">
+                                {rev.author_name || 'Voyageur'}
+                              </span>
+                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
+                                Client Vérifié
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-foreground/50">{rev.author_email || 'Email non renseigné'}</span>
+                          </div>
+                        </div>
+
+                        {/* Stars */}
+                        <div className="flex items-center gap-1 text-amber-400 text-sm">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <FontAwesomeIcon
+                              key={star}
+                              icon={faStar}
+                              className={star <= (Number(rev.rating) || 5) ? 'text-amber-400' : 'text-foreground/20'}
+                            />
+                          ))}
+                          <span className="ml-2 text-xs font-bold text-foreground">
+                            {rev.rating} / 5
+                          </span>
+                        </div>
+
+                        {/* Comment */}
+                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5">
+                          "{rev.comment || 'Aucun commentaire écrit'}"
+                        </p>
+
+                        <div className="flex items-center gap-4 text-[10px] text-foreground/45 pt-1">
+                          <span>Publié le : {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date récente'}</span>
+                          {rev.listing_id && <span>Bien Réf : {rev.listing_id}</span>}
+                          {rev.pack_id && <span>Pack Réf : {rev.pack_id}</span>}
+                          {rev.booking_id && <span>Réservation : {rev.booking_id}</span>}
+                        </div>
+                      </div>
+
+                      {/* Action: Delete review */}
+                      <div className="shrink-0 flex md:flex-col items-end justify-between gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-foreground/10">
+                        <button
+                          onClick={() => handleDeleteReviewItem(rev.id, rev.author_name)}
+                          className="rounded-xl border border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                          title="Supprimer cet avis client de la base"
+                        >
+                          <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                          <span>Supprimer l'avis</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

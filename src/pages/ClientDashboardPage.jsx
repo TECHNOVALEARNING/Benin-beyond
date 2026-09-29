@@ -18,13 +18,14 @@ import {
   faArrowUpRightFromSquare,
   faXmark,
   faShieldHalved,
-  faTrash
+  faStar,
+  faCheck
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
-import { getBookings, deleteBooking } from '../services/bookingService';
+import { getBookings } from '../services/bookingService';
+import { submitReview } from '../services/reviewService';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { ConfirmModal } from '../components/ConfirmModal';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -91,30 +92,56 @@ export function ClientDashboardPage() {
     setTimeout(() => setProfileSaved(false), 3000);
   };
 
-  const [confirmDialog, setConfirmDialog] = useState({
+  const [reviewModal, setReviewModal] = useState({
     isOpen: false,
-    title: '',
-    message: '',
-    confirmText: 'Confirmer',
-    cancelText: 'Annuler',
-    variant: 'danger',
-    onConfirm: null
+    booking: null,
+    rating: 5,
+    comment: '',
+    submitted: false,
+    submitting: false
   });
 
-  const handleDeleteBooking = (bookingId, bookingRef) => {
-    setConfirmDialog({
+  const handleOpenReviewModal = (booking) => {
+    setReviewModal({
       isOpen: true,
-      title: "Supprimer la réservation",
-      message: `Voulez-vous supprimer définitivement la réservation "${bookingRef || bookingId}" de votre compte ?`,
-      confirmText: "Supprimer définitivement",
-      cancelText: "Annuler",
-      variant: "danger",
-      onConfirm: async () => {
-        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        setUserBookings((prev) => prev.filter((b) => b.id !== bookingId && b.booking_ref !== bookingId));
-        await deleteBooking(bookingId);
-      }
+      booking,
+      rating: 5,
+      comment: '',
+      submitted: false,
+      submitting: false
     });
+  };
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!reviewModal.booking || !reviewModal.comment.trim()) return;
+
+    setReviewModal((prev) => ({ ...prev, submitting: true }));
+    await submitReview({
+      booking_id: reviewModal.booking.id || reviewModal.booking.booking_ref,
+      listing_id: reviewModal.booking.listing_id,
+      author_name: user?.name || reviewModal.booking.customer_name || 'Voyageur Bénin Beyond',
+      author_email: user?.email || reviewModal.booking.customer_email || '',
+      rating: reviewModal.rating,
+      comment: reviewModal.comment.trim()
+    });
+
+    setReviewModal((prev) => ({
+      ...prev,
+      submitting: false,
+      submitted: true
+    }));
+
+    setTimeout(() => {
+      setReviewModal({
+        isOpen: false,
+        booking: null,
+        rating: 5,
+        comment: '',
+        submitted: false,
+        submitting: false
+      });
+    }, 2000);
   };
 
   const totalSpent = userBookings.reduce((sum, b) => sum + (Number(b.total_amount) || Number(b.gross_amount) || 0), 0);
@@ -373,12 +400,12 @@ export function ClientDashboardPage() {
                               <span>Voucher & Reçu</span>
                             </button>
                             <button
-                              onClick={() => handleDeleteBooking(b.id || b.booking_ref, b.booking_ref)}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 dark:border-rose-900/50 bg-rose-500/10 hover:bg-rose-600 hover:text-white px-3 py-2 text-xs font-semibold text-rose-600 transition-all"
-                              title="Supprimer la réservation"
+                              onClick={() => handleOpenReviewModal(b)}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 hover:bg-accent hover:text-black border border-accent/40 px-3.5 py-2 text-xs font-semibold text-accent transition-all shadow-xs"
+                              title="Partager votre expérience et laisser un avis vérifié"
                             >
-                              <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                              <span>Supprimer</span>
+                              <FontAwesomeIcon icon={faStar} className="h-3 w-3" />
+                              <span>Donner mon avis</span>
                             </button>
                           </div>
 
@@ -630,17 +657,117 @@ export function ClientDashboardPage() {
         </div>
       )}
 
-      {/* Confirmation Dialog Modal */}
-      <ConfirmModal
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        confirmText={confirmDialog.confirmText}
-        cancelText={confirmDialog.cancelText}
-        variant={confirmDialog.variant}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
-      />
+      {/* Modal : Rédiger un avis client vérifié */}
+      {reviewModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent">
+                  <FontAwesomeIcon icon={faStar} className="text-base" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Votre avis sur le séjour
+                  </h3>
+                  <p className="text-[11px] text-foreground/50">
+                    Réf. {reviewModal.booking?.booking_ref}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewModal((prev) => ({ ...prev, isOpen: false }))}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {reviewModal.submitted ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-xl">
+                  <FontAwesomeIcon icon={faCheck} />
+                </div>
+                <h4 className="font-heading font-bold text-base text-foreground">
+                  Merci pour votre retour d'expérience !
+                </h4>
+                <p className="text-xs text-foreground/60 max-w-xs mx-auto">
+                  Votre avis vérifié a été enregistré avec succès et sera partagé avec la communauté Bénin Beyond.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReview} className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-foreground/80 mb-1.5">
+                    Bien concerné :
+                  </p>
+                  <p className="text-sm font-bold text-foreground bg-muted/40 p-2.5 rounded-xl border border-foreground/5">
+                    {reviewModal.booking?.listing_title || 'Expérience Bénin Beyond'}
+                  </p>
+                </div>
+
+                {/* Rating selection (1 to 5 stars) */}
+                <div>
+                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                    Votre note globale (sur 5) :
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewModal((prev) => ({ ...prev, rating: star }))}
+                        className="p-1 text-2xl transition-transform hover:scale-110"
+                      >
+                        <FontAwesomeIcon
+                          icon={faStar}
+                          className={star <= reviewModal.rating ? 'text-accent' : 'text-foreground/20'}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs font-bold text-foreground ml-2">
+                      {reviewModal.rating} / 5
+                    </span>
+                  </div>
+                </div>
+
+                {/* Comment textarea */}
+                <div>
+                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+                    Votre commentaire & impressions :
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={reviewModal.comment}
+                    onChange={(e) => setReviewModal((prev) => ({ ...prev, comment: e.target.value }))}
+                    placeholder="Partagez votre avis sur l'accueil, la propreté, le confort, la localisation ou la ponctualité..."
+                    className="w-full rounded-2xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reviewModal.submitting || !reviewModal.comment.trim()}
+                    className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all disabled:opacity-50"
+                  >
+                    {reviewModal.submitting ? 'Envoi en cours…' : 'Publier mon avis'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

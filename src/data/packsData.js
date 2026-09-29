@@ -13,8 +13,6 @@ export const SAMPLE_DEMO_PACKS = [
     savings: 15000,
     location: "Cotonou & Littoral",
     badge: "Offre Privilège",
-    rating: 4.9,
-    reviewsCount: 38,
     included: [
       {
         type: "Hébergement",
@@ -50,8 +48,6 @@ export const SAMPLE_DEMO_PACKS = [
     savings: 14000,
     location: "Ouidah & Route des Pêches",
     badge: "Coup de Cœur",
-    rating: 4.8,
-    reviewsCount: 29,
     included: [
       {
         type: "Hébergement",
@@ -87,8 +83,6 @@ export const SAMPLE_DEMO_PACKS = [
     savings: 35000,
     location: "Cotonou — Natitingou — Pendjari",
     badge: "Aventure Signature",
-    rating: 5.0,
-    reviewsCount: 16,
     included: [
       {
         type: "Hébergement",
@@ -123,8 +117,6 @@ export const SAMPLE_DEMO_PACKS = [
     savings: 8000,
     location: "Cotonou Plateau & Marina",
     badge: "Business & Confort",
-    rating: 4.7,
-    reviewsCount: 22,
     included: [
       {
         type: "Hébergement",

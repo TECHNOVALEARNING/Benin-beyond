@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faLocationDot,
-  faStar,
   faCircleCheck,
   faCalendarDays,
   faUsers,
@@ -152,15 +151,6 @@ export function PackDetailPage() {
                 <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-primary" />
                 <span className="font-medium">{pack.location}</span>
               </div>
-              {pack.rating > 0 && (
-                <div className="flex items-center gap-1.5 text-accent font-semibold text-sm">
-                  <FontAwesomeIcon icon={faStar} className="h-3.5 w-3.5 text-accent" />
-                  <span className="text-foreground font-bold">{pack.rating}</span>
-                  {pack.reviewsCount > 0 && (
-                    <span className="text-foreground/50 text-xs">({pack.reviewsCount} avis vérifiés)</span>
-                  )}
-                </div>
-              )}
             </div>
 
             <h1 className="font-heading mt-3 text-2xl sm:text-3xl font-bold text-foreground">
