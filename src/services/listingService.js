@@ -214,9 +214,9 @@ export async function getListings(options = {}) {
   // Filtrer les types de biens gérés (stay & drive)
   const valid = all.filter((item) => item.type === 'stay' || item.type === 'drive');
 
-  // Si appel public (includePending: false), masquer impérativement les annonces en attente ou rejetées
+  // Si appel public (includePending: false), masquer impérativement les annonces en attente, suspendues ou rejetées
   if (!includePending) {
-    return valid.filter((item) => item.status === 'active' || !item.status);
+    return valid.filter((item) => item.status === 'active');
   }
 
   // Si appel d'administration ou partenaire, renvoyer tout pour la modération
@@ -489,6 +489,9 @@ export async function updateListingStatus(id, newStatus, rejectionReason = '') {
       status: newStatus,
       rejection_reason: rejectionReason || custom[index].rejection_reason || ''
     };
+    saveCustomListings(custom);
+  } else {
+    custom.push({ id, status: newStatus, rejection_reason: rejectionReason || '' });
     saveCustomListings(custom);
   }
 

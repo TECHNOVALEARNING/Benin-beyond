@@ -62,6 +62,7 @@ import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
 import { uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
+import { getTimeBasedGreeting } from '../utils/dateUtils';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -251,19 +252,28 @@ export function AdminDashboardPage() {
         balance: 0
       })));
 
+      let fetchedPayouts = [];
       if (isSupabaseConfigured && supabase) {
         try {
           const { data: pData } = await supabase
             .from('payouts')
             .select('*')
             .order('created_at', { ascending: false });
-          setPayouts(pData || []);
+          fetchedPayouts = pData || [];
         } catch {
-          setPayouts([]);
+          fetchedPayouts = [];
         }
-      } else {
-        setPayouts([]);
       }
+      try {
+        const localP = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
+        const existingIds = new Set(fetchedPayouts.map((p) => p.id));
+        localP.forEach((lp) => {
+          if (!existingIds.has(lp.id)) {
+            fetchedPayouts.push(lp);
+          }
+        });
+      } catch {}
+      setPayouts(fetchedPayouts);
     } catch (err) {
       console.error('Erreur chargement admin:', err);
     } finally {
@@ -797,6 +807,17 @@ export function AdminDashboardPage() {
     showToast("L'annonce a été approuvée et mise en ligne avec succès !");
   };
 
+  const handleSuspendListing = async (id) => {
+    setListings((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: 'suspended' } : item))
+    );
+    if (mediaAuditModal && mediaAuditModal.id === id) {
+      setMediaAuditModal((prev) => ({ ...prev, status: 'suspended' }));
+    }
+    await updateListingStatus(id, 'suspended');
+    showToast("L'annonce a été suspendue et retirée de la mise en ligne.");
+  };
+
   const handleOpenRejectionModal = (listing) => {
     setRejectionModalListing(listing);
     setRejectionPresetReason('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
@@ -897,17 +918,41 @@ export function AdminDashboardPage() {
     });
   };
 
-  const handleApprovePayout = (payoutId) => {
+  const handleApprovePayout = async (payoutId) => {
     setPayouts((prev) =>
       prev.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p))
     );
-    showToast(`Virement Mobile Money validé pour le partenaire !`);
+    try {
+      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
+      const updated = stored.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p));
+      localStorage.setItem('benin_beyond_payouts', JSON.stringify(updated));
+    } catch {}
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('payouts').update({ status: 'approved' }).eq('id', payoutId);
+      } catch (err) {
+        console.warn('Supabase payout approve error:', err);
+      }
+    }
+    showToast(`Virement validé pour le partenaire !`);
   };
 
-  const handleRejectPayout = (payoutId) => {
+  const handleRejectPayout = async (payoutId) => {
     setPayouts((prev) =>
       prev.map((p) => (p.id === payoutId ? { ...p, status: 'rejected' } : p))
     );
+    try {
+      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
+      const updated = stored.map((p) => (p.id === payoutId ? { ...p, status: 'rejected' } : p));
+      localStorage.setItem('benin_beyond_payouts', JSON.stringify(updated));
+    } catch {}
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('payouts').update({ status: 'rejected' }).eq('id', payoutId);
+      } catch (err) {
+        console.warn('Supabase payout reject error:', err);
+      }
+    }
     showToast(`Demande de versement rejetée.`);
   };
 
@@ -1318,7 +1363,7 @@ export function AdminDashboardPage() {
                   : allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
               </h1>
               <p className="text-[11px] text-foreground/60">
-                Supervision générale, gouvernance opérationnelle & création • Bénin Beyond
+                {getTimeBasedGreeting()}, {user?.name || 'Administrateur'} • Supervision générale & gouvernance opérationnelle Bénin Beyond
               </p>
             </div>
           </div>
@@ -2159,14 +2204,14 @@ export function AdminDashboardPage() {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-foreground">{po.partnerName}</span>
-                            <span className="text-xs text-foreground/60">({po.company})</span>
+                            <span className="font-bold text-sm text-foreground">{po.partnerName || po.partner_name || 'Partenaire'}</span>
+                            <span className="text-xs text-foreground/60">({po.company || 'Hôte / Loueur'})</span>
                           </div>
                           <p className="text-xs text-foreground/70 mt-1">
                             Canal : <strong className="text-primary">{po.method}</strong> • Bénéficiaire : <span className="font-mono">{po.recipient}</span>
                           </p>
                           <p className="text-[11px] text-foreground/40 mt-0.5">
-                            Date demande : {po.date}
+                            Date demande : {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
                           </p>
                         </div>
 
@@ -4182,10 +4227,10 @@ export function AdminDashboardPage() {
       {/* ========================================================================= */}
       {selectedBookingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl">
+          <div className="printable-receipt relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl">
             <button
               onClick={() => setSelectedBookingModal(null)}
-              className="absolute right-4 top-4 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+              className="absolute right-4 top-4 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground no-print"
             >
               <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
             </button>
@@ -4231,7 +4276,7 @@ export function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3">
+            <div className="mt-6 flex items-center justify-between gap-3 no-print">
               <button
                 type="button"
                 onClick={() => {

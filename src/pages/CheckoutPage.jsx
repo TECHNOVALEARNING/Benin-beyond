@@ -157,7 +157,7 @@ export function CheckoutPage() {
   if (confirmedBooking) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16 md:px-12">
-        <ScrollReveal delay={0} y={24} scale={0.96} className="overflow-hidden rounded-2xl border border-foreground/10 bg-card shadow-2xl shadow-foreground/5">
+        <ScrollReveal delay={0} y={24} scale={0.96} className="printable-receipt overflow-hidden rounded-2xl border border-foreground/10 bg-card shadow-2xl shadow-foreground/5">
           {/* Header Banner */}
           <div className="bg-secondary px-8 py-10 text-center text-secondary-foreground">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg">
@@ -207,7 +207,7 @@ export function CheckoutPage() {
               </span>
             </div>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row no-print">
               <button
                 onClick={() => window.print()}
                 className="flex-1 rounded-full border border-foreground/20 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"

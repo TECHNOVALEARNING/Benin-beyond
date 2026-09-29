@@ -300,3 +300,113 @@
   animation: fadeIn 0.2s ease-out forwards;
 }
 
+/* ========================================================================= */
+/* IMPRESSION PROFESSIONNELLE DES REÇUS & BONS DE RÉSERVATION (MEDIA PRINT) */
+/* ========================================================================= */
+@media print {
+  /* Réinitialiser les marges de la page d'impression */
+  @page {
+    margin: 1.2cm;
+    size: auto;
+  }
+
+  /* Forcer le fond blanc et le texte sombre pour une impression nette et économe */
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Masquer tous les composants superflus du site : navbar, footer, sidebar, boutons, filtres, toasts */
+  header,
+  nav,
+  aside,
+  footer,
+  button,
+  .no-print,
+  .fixed.inset-0,
+  [role="dialog"] > div:first-child,
+  [data-no-print="true"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Masquer tous les enfants de body sauf la zone désignée pour l'impression */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Rendre visible uniquement le reçu ou le bon de voyage */
+  #printable-voucher,
+  #printable-voucher *,
+  .printable-receipt,
+  .printable-receipt * {
+    visibility: visible !important;
+  }
+
+  /* Positionner le reçu proprement en haut de la page imprimée */
+  #printable-voucher,
+  .printable-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 24px 28px !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    z-index: 99999 !important;
+  }
+
+  /* Rétablir les contrastes et supprimer les fonds sombres des cartes imbriquées */
+  .printable-receipt div,
+  #printable-voucher div {
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .printable-receipt h1,
+  .printable-receipt h2,
+  .printable-receipt h3,
+  .printable-receipt h4,
+  #printable-voucher h1,
+  #printable-voucher h2,
+  #printable-voucher h3,
+  #printable-voucher h4 {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+  }
+
+  .printable-receipt p,
+  .printable-receipt span,
+  .printable-receipt strong,
+  .printable-receipt td,
+  .printable-receipt th,
+  #printable-voucher p,
+  #printable-voucher span,
+  #printable-voucher strong,
+  #printable-voucher td,
+  #printable-voucher th {
+    color: #1e293b !important;
+  }
+
+  /* Masquer explicitement les boutons à l'intérieur du conteneur de reçu */
+  .printable-receipt button,
+  #printable-voucher button {
+    display: none !important;
+  }
+}
+
+

@@ -62,6 +62,8 @@ import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { saveMediaBlob, uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
+import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { getTimeBasedGreeting } from '../utils/dateUtils';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -173,11 +175,22 @@ export function PartnerDashboardPage() {
   const [editIsSaving, setEditIsSaving] = useState(false);
   const [editSuccessAlert, setEditSuccessAlert] = useState('');
 
-  // Payout request modal state
-  const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [payoutMethod, setPayoutMethod] = useState('mtn_momo');
-  const [payoutPhone, setPayoutPhone] = useState('+229 97 00 00 00');
-  const [payoutSuccess, setPayoutSuccess] = useState(false);
+  // Payout request integrated in-page state
+  const [payoutViewMode, setPayoutViewMode] = useState('summary'); // 'summary' | 'form'
+  const [payoutChannel, setPayoutChannel] = useState('mobile_money'); // 'mobile_money' | 'bank_transfer'
+  const [momoOperator, setMomoOperator] = useState('mtn'); // 'mtn' | 'moov' | 'celtiis'
+  const [momoPhone, setMomoPhone] = useState(user?.phone || '+229 97 00 00 00');
+  const [momoRecipientName, setMomoRecipientName] = useState(user?.name || '');
+  const [bankName, setBankName] = useState('Bank of Africa (BOA Bénin)');
+  const [bankCustomName, setBankCustomName] = useState('');
+  const [bankIban, setBankIban] = useState('');
+  const [bankAccountHolder, setBankAccountHolder] = useState(user?.company || user?.name || '');
+  const [bankSwift, setBankSwift] = useState('');
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+  const [payoutSuccessMessage, setPayoutSuccessMessage] = useState('');
+  const [payoutError, setPayoutError] = useState('');
+  const [partnerPayouts, setPartnerPayouts] = useState([]);
 
   useEffect(() => {
     if (!user) {
@@ -242,10 +255,138 @@ export function PartnerDashboardPage() {
 
       setListings(myPartnerListings);
       setBookings(myPartnerBookings);
+
+      // Chargement des demandes de versement de ce partenaire
+      let myPayouts = [];
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: pData } = await supabase
+            .from('payouts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (pData) {
+            myPayouts = pData.filter((p) =>
+              (user.id && p.partner_id && String(p.partner_id) === String(user.id)) ||
+              (user.email && p.partner_email && p.partner_email.toLowerCase() === user.email.toLowerCase())
+            );
+          }
+        } catch {
+          myPayouts = [];
+        }
+      }
+      try {
+        const localP = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
+        const existingIds = new Set(myPayouts.map((p) => p.id));
+        localP.forEach((lp) => {
+          const isMine =
+            (user.id && lp.partner_id && String(lp.partner_id) === String(user.id)) ||
+            (user.email && lp.partner_email && lp.partner_email.toLowerCase() === user.email.toLowerCase()) ||
+            (!lp.partner_id && !lp.partner_email);
+          if (isMine && !existingIds.has(lp.id)) {
+            myPayouts.push(lp);
+          }
+        });
+      } catch {}
+      setPartnerPayouts(myPayouts);
     } catch (err) {
       console.error('Erreur chargement dashboard:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRequestPayout = async (e) => {
+    e.preventDefault();
+    setPayoutError('');
+    setPayoutSuccessMessage('');
+
+    const maxAvailable = financials.net;
+    const requestedAmount = payoutAmount ? parseInt(payoutAmount, 10) : maxAvailable;
+
+    if (!requestedAmount || requestedAmount <= 0) {
+      setPayoutError('Veuillez spécifier un montant de retrait supérieur à 0 FCFA.');
+      return;
+    }
+
+    if (maxAvailable > 0 && requestedAmount > maxAvailable) {
+      setPayoutError(`Le montant demandé (${formatPrice(requestedAmount)}) dépasse votre solde disponible (${formatPrice(maxAvailable)}).`);
+      return;
+    }
+
+    let methodLabel = '';
+    let recipientInfo = '';
+
+    if (payoutChannel === 'mobile_money') {
+      const operatorName = momoOperator === 'mtn' ? 'MTN Mobile Money' : momoOperator === 'moov' ? 'Moov Money Bénin' : 'Celtiis Cash';
+      if (!momoPhone || momoPhone.trim().length < 8) {
+        setPayoutError('Veuillez saisir un numéro de téléphone mobile Bénin valide (ex: +229 97 00 00 00).');
+        return;
+      }
+      methodLabel = operatorName;
+      recipientInfo = `${momoPhone.trim()} — Titulaire : ${momoRecipientName.trim() || user?.name || 'Propriétaire'}`;
+    } else {
+      const finalBank = bankName === 'Autre banque' ? (bankCustomName.trim() || 'Banque UEMOA') : bankName;
+      if (!bankIban || bankIban.trim().length < 6) {
+        setPayoutError('Veuillez renseigner le numéro de compte bancaire, IBAN ou RIB.');
+        return;
+      }
+      if (!bankAccountHolder || bankAccountHolder.trim().length < 2) {
+        setPayoutError('Veuillez renseigner le nom complet ou la raison sociale du titulaire du compte bancaire.');
+        return;
+      }
+      methodLabel = `Virement Bancaire (${finalBank})`;
+      recipientInfo = `${finalBank} • RIB/IBAN : ${bankIban.trim()} (Titulaire : ${bankAccountHolder.trim()}${bankSwift ? ` | BIC: ${bankSwift.trim()}` : ''})`;
+    }
+
+    setPayoutSubmitting(true);
+    const newPayoutObj = {
+      id: `po_${Date.now()}`,
+      partner_id: user?.id || 'partner',
+      partner_name: user?.name || 'Partenaire Hôte',
+      partnerName: user?.name || 'Partenaire Hôte',
+      partner_email: user?.email || '',
+      company: user?.company || 'Partenaire Bénin Beyond',
+      method: methodLabel,
+      recipient: recipientInfo,
+      amount: requestedAmount,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    };
+
+    try {
+      // 1. Sauvegarde locale persistante
+      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
+      stored.unshift(newPayoutObj);
+      localStorage.setItem('benin_beyond_payouts', JSON.stringify(stored));
+
+      // 2. Sauvegarde Supabase
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('payouts').insert({
+            id: newPayoutObj.id,
+            partner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
+            partner_name: newPayoutObj.partner_name,
+            company: newPayoutObj.company,
+            method: newPayoutObj.method,
+            recipient: newPayoutObj.recipient,
+            amount: newPayoutObj.amount,
+            status: 'pending',
+            created_at: newPayoutObj.created_at
+          });
+        } catch (sErr) {
+          console.warn('Supabase payout insert notice:', sErr);
+        }
+      }
+
+      setPartnerPayouts((prev) => [newPayoutObj, ...prev]);
+      setPayoutSuccessMessage(`Votre demande de versement de ${formatPrice(requestedAmount)} via ${methodLabel} a été transmise avec succès à l'administration financière Bénin Beyond !`);
+      setPayoutViewMode('summary');
+      setPayoutAmount('');
+    } catch (err) {
+      setPayoutError(err.message || 'Erreur lors de la transmission de la demande.');
+    } finally {
+      setPayoutSubmitting(false);
     }
   };
 
@@ -1019,6 +1160,30 @@ export function PartnerDashboardPage() {
           {currentSection === 'overview' && (
             <div className="space-y-8">
               
+              {/* Welcome Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-foreground/10">
+                <div>
+                  <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
+                    {getTimeBasedGreeting()}, {user?.name || 'Partenaire Hôte'}
+                  </h2>
+                  <p className="text-xs text-foreground/60 mt-0.5">
+                    Bienvenue sur votre espace de gestion des réservations et des revenus Bénin Beyond.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      handleSetSection('finances');
+                      setPayoutViewMode('form');
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 px-3.5 py-2 text-xs font-bold transition-all"
+                  >
+                    <FontAwesomeIcon icon={faHandHoldingDollar} />
+                    <span>Demande de virement</span>
+                  </button>
+                </div>
+              </div>
+              
               {/* KYC Status Notice Banner */}
               {!user?.verified && (
                 <div className={`rounded-2xl border p-4 flex items-start gap-3.5 shadow-sm ${
@@ -1090,7 +1255,10 @@ export function PartnerDashboardPage() {
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-[11px] text-primary/80 font-medium">Prêt pour virement</span>
                     <button
-                      onClick={() => setShowPayoutModal(true)}
+                      onClick={() => {
+                        handleSetSection('finances');
+                        setPayoutViewMode('form');
+                      }}
                       className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
                     >
                       <span>Retirer</span>
@@ -2442,114 +2610,613 @@ export function PartnerDashboardPage() {
           {/* SECTION E : SOLDE & FINANCES (FINANCIALS & PAYOUTS) */}
           {/* ========================================================================= */}
           {currentSection === 'finances' && (
-            <div className="space-y-8">
-              <div>
-                <h2 className="font-heading text-xl font-bold text-foreground">
-                  Gestion Financière & Virements
-                </h2>
-                <p className="text-xs text-foreground/60">
-                  Consultez la ventilation des sommes brutes, des commissions prélevées et déclenchez vos retraits
-                </p>
-              </div>
-
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Montant Brut Réservé</p>
-                  <p className="font-heading text-3xl font-bold text-foreground">
-                    {formatPrice(financials.gross)}
-                  </p>
-                  <p className="text-[11px] text-foreground/50 mt-2">
-                    Somme totale versée par les voyageurs
+            <div className="space-y-8 animate-fadeIn">
+              
+              {/* Header with Navigation Pills */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-foreground/10">
+                <div>
+                  <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
+                    Gestion Financière & Règlements
+                  </h2>
+                  <p className="text-xs text-foreground/60 mt-1">
+                    Suivez vos encaissements réels, commissions plateforme et gérez vos virements vers Mobile Money ou compte bancaire.
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Commissions Bénin Beyond (10%)</p>
-                  <p className="font-heading text-3xl font-bold text-accent">
-                    -{formatPrice(financials.commission)}
-                  </p>
-                  <p className="text-[11px] text-foreground/50 mt-2">
-                    Frais techniques, sécurité & conciergerie
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-6 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-primary mb-1">Solde Net Disponible</p>
-                    <p className="font-heading text-3xl font-bold text-primary">
-                      {formatPrice(financials.net)}
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
                   <button
-                    onClick={() => setShowPayoutModal(true)}
-                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
+                    type="button"
+                    onClick={() => {
+                      setPayoutViewMode('summary');
+                      setPayoutSuccessMessage('');
+                      setPayoutError('');
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                      payoutViewMode === 'summary'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-muted border border-foreground/10 text-foreground/75 hover:bg-muted/80'
+                    }`}
+                  >
+                    Vue d'ensemble
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayoutViewMode('form');
+                      setPayoutSuccessMessage('');
+                      setPayoutError('');
+                      if (!payoutAmount) setPayoutAmount(String(financials.net));
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      payoutViewMode === 'form'
+                        ? 'bg-primary text-white shadow-sm ring-2 ring-primary/30'
+                        : 'bg-accent/20 text-accent-foreground border border-accent/40 hover:bg-accent/30'
+                    }`}
                   >
                     <FontAwesomeIcon icon={faHandHoldingDollar} />
-                    <span>Demander un virement</span>
+                    <span>Demander un versement</span>
                   </button>
                 </div>
               </div>
 
-              {/* Simulated Payout Options */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm space-y-4">
-                <h3 className="font-heading text-base font-bold text-foreground">
-                  Canaux de Retrait Pris en Charge
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  {[
-                    { title: 'MTN Mobile Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
-                    { title: 'Moov Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
-                    { title: 'Celtiis Cash', fee: 'Sans frais', delay: 'Instantané' },
-                    { title: 'Virement Bancaire (UBA, BOA, etc.)', fee: 'Sans frais', delay: '24h ouvrées' }
-                  ].map((m, idx) => (
-                    <div key={idx} className="p-4 rounded-xl border border-foreground/10 bg-muted/30 text-xs">
-                      <p className="font-bold text-foreground">{m.title}</p>
-                      <p className="text-[11px] text-emerald-700 font-semibold mt-1">{m.fee}</p>
-                      <p className="text-[10px] text-foreground/50 mt-0.5">Délai : {m.delay}</p>
+              {/* Feedback Success / Error */}
+              {payoutSuccessMessage && (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-start justify-between gap-3 animate-fadeIn">
+                  <div className="flex items-start gap-2.5">
+                    <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-bold text-sm">Demande enregistrée avec succès !</p>
+                      <p className="mt-0.5 font-normal text-emerald-900/80 dark:text-emerald-200/80 leading-relaxed">
+                        {payoutSuccessMessage}
+                      </p>
                     </div>
-                  ))}
+                  </div>
+                  <button
+                    onClick={() => setPayoutSuccessMessage('')}
+                    className="text-emerald-700 hover:text-emerald-900 p-1"
+                  >
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </div>
+              )}
+
+              {payoutError && (
+                <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs font-semibold text-rose-800 dark:text-rose-200 flex items-start justify-between gap-3 animate-fadeIn">
+                  <div className="flex items-start gap-2.5">
+                    <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
+                    <span>{payoutError}</span>
+                  </div>
+                  <button
+                    onClick={() => setPayoutError('')}
+                    className="text-rose-700 hover:text-rose-900 p-1"
+                  >
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </div>
+              )}
+
+              {/* VIEW 1 : FORMULAIRE INTÉGRÉ DE DEMANDE DE VERSEMENT */}
+              {payoutViewMode === 'form' && (
+                <div className="rounded-3xl border border-foreground/15 bg-card p-6 sm:p-8 shadow-md space-y-6 animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-foreground/10 pb-4">
+                    <div>
+                      <h3 className="font-heading text-lg font-bold text-foreground flex items-center gap-2">
+                        <FontAwesomeIcon icon={faHandHoldingDollar} className="text-primary" />
+                        <span>Nouvelle Demande de Versement</span>
+                      </h3>
+                      <p className="text-xs text-foreground/60 mt-0.5">
+                        Choisissez votre canal de versement sécurisé (Mobile Money instantané ou Virement bancaire UEMOA).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPayoutViewMode('summary')}
+                      className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                    >
+                      Retour au solde
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleRequestPayout} className="space-y-6">
+                    {/* Rappel du solde disponible */}
+                    <div className="rounded-2xl bg-primary/5 border border-primary/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs text-foreground/60 block">Solde Net Disponible pour Retrait :</span>
+                        <span className="font-heading text-2xl font-black text-primary font-mono">
+                          {formatPrice(financials.net)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-foreground/60 flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={faShieldHalved} className="text-primary" />
+                        <span>Frais de retrait : <strong>0 FCFA</strong> (Pris en charge par Bénin Beyond)</span>
+                      </div>
+                    </div>
+
+                    {/* Étape 1 : Choix du Canal */}
+                    <div>
+                      <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2.5">
+                        1. Choisissez votre canal de versement
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Mobile Money */}
+                        <div
+                          onClick={() => setPayoutChannel('mobile_money')}
+                          className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-start gap-3.5 ${
+                            payoutChannel === 'mobile_money'
+                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm'
+                              : 'border-foreground/10 bg-background hover:border-foreground/25'
+                          }`}
+                        >
+                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            payoutChannel === 'mobile_money' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
+                          }`}>
+                            <FontAwesomeIcon icon={faPhone} className="text-sm" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-xs">
+                            <p className="font-bold text-foreground text-sm flex items-center justify-between">
+                              <span>Mobile Money Bénin</span>
+                              {payoutChannel === 'mobile_money' && (
+                                <FontAwesomeIcon icon={faCircleCheck} className="text-primary" />
+                              )}
+                            </p>
+                            <p className="text-foreground/60 mt-0.5">
+                              MTN MoMo • Moov Money • Celtiis Cash
+                            </p>
+                            <span className="inline-block mt-2 rounded-full bg-emerald-500/15 text-emerald-700 px-2 py-0.5 text-[10px] font-bold">
+                              Instantané • 0 FCFA de frais
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Virement Bancaire */}
+                        <div
+                          onClick={() => setPayoutChannel('bank_transfer')}
+                          className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-start gap-3.5 ${
+                            payoutChannel === 'bank_transfer'
+                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm'
+                              : 'border-foreground/10 bg-background hover:border-foreground/25'
+                          }`}
+                        >
+                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            payoutChannel === 'bank_transfer' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
+                          }`}>
+                            <FontAwesomeIcon icon={faBuilding} className="text-sm" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-xs">
+                            <p className="font-bold text-foreground text-sm flex items-center justify-between">
+                              <span>Virement Bancaire</span>
+                              {payoutChannel === 'bank_transfer' && (
+                                <FontAwesomeIcon icon={faCircleCheck} className="text-primary" />
+                              )}
+                            </p>
+                            <p className="text-foreground/60 mt-0.5">
+                              BOA, Ecobank, Coris, UBA, SGB, etc.
+                            </p>
+                            <span className="inline-block mt-2 rounded-full bg-blue-500/15 text-blue-700 px-2 py-0.5 text-[10px] font-bold">
+                              Délai 24h ouvrées • IBAN / RIB
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Étape 2 : Champs dynamiques selon le canal choisi */}
+                    {payoutChannel === 'mobile_money' ? (
+                      <div className="rounded-2xl border border-foreground/10 bg-muted/20 p-5 space-y-4">
+                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          2. Coordonnées Mobile Money
+                        </p>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground mb-1.5">
+                            Opérateur Mobile Bénin :
+                          </label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { key: 'mtn', label: 'MTN MoMo', badge: 'Recommandé' },
+                              { key: 'moov', label: 'Moov Money', badge: 'Actif' },
+                              { key: 'celtiis', label: 'Celtiis Cash', badge: 'Actif' }
+                            ].map((op) => (
+                              <button
+                                key={op.key}
+                                type="button"
+                                onClick={() => setMomoOperator(op.key)}
+                                className={`p-3 rounded-xl border text-xs text-center transition-all ${
+                                  momoOperator === op.key
+                                    ? 'border-primary bg-primary/10 font-bold text-primary shadow-xs'
+                                    : 'border-foreground/10 bg-background text-foreground/70 hover:border-foreground/20'
+                                }`}
+                              >
+                                <span>{op.label}</span>
+                                <span className="block text-[10px] opacity-60 mt-0.5">{op.badge}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Numéro Mobile Bénin (+229) : *
+                            </label>
+                            <input
+                              type="tel"
+                              value={momoPhone}
+                              onChange={(e) => setMomoPhone(e.target.value)}
+                              placeholder="+229 97 00 00 00"
+                              required
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            />
+                            <p className="text-[10px] text-foreground/50 mt-1">Format international ou 8 chiffres</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Nom complet du titulaire de la ligne : *
+                            </label>
+                            <input
+                              type="text"
+                              value={momoRecipientName}
+                              onChange={(e) => setMomoRecipientName(e.target.value)}
+                              placeholder="ex: Jean Dossou"
+                              required
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            />
+                            <p className="text-[10px] text-foreground/50 mt-1">Doit concorder avec le nom enregistré sur la carte SIM</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-foreground/10 bg-muted/20 p-5 space-y-4">
+                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          2. Coordonnées Bancaires (RIB / IBAN)
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Établissement Bancaire : *
+                            </label>
+                            <select
+                              value={bankName}
+                              onChange={(e) => setBankName(e.target.value)}
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            >
+                              <option value="Bank of Africa (BOA Bénin)">Bank of Africa (BOA Bénin)</option>
+                              <option value="Ecobank Bénin">Ecobank Bénin</option>
+                              <option value="Coris Bank International Bénin">Coris Bank International Bénin</option>
+                              <option value="BGFI Bank Bénin">BGFI Bank Bénin</option>
+                              <option value="United Bank for Africa (UBA Bénin)">United Bank for Africa (UBA Bénin)</option>
+                              <option value="Société Générale Bénin (SGB)">Société Générale Bénin (SGB)</option>
+                              <option value="NSIA Banque Bénin">NSIA Banque Bénin</option>
+                              <option value="Orabank Bénin">Orabank Bénin</option>
+                              <option value="BIIC (Banque Internationale pour l'Industrie et le Commerce)">BIIC Bénin</option>
+                              <option value="Autre banque">Autre banque UEMOA</option>
+                            </select>
+                          </div>
+
+                          {bankName === 'Autre banque' && (
+                            <div>
+                              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                                Nom de la Banque : *
+                              </label>
+                              <input
+                                type="text"
+                                value={bankCustomName}
+                                onChange={(e) => setBankCustomName(e.target.value)}
+                                placeholder="Nom officiel de votre établissement"
+                                required
+                                className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                              />
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Nom ou Raison Sociale du Titulaire : *
+                            </label>
+                            <input
+                              type="text"
+                              value={bankAccountHolder}
+                              onChange={(e) => setBankAccountHolder(e.target.value)}
+                              placeholder="ex: Jean Dossou ou SARL Prestige"
+                              required
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Numéro de Compte / IBAN / RIB : *
+                            </label>
+                            <input
+                              type="text"
+                              value={bankIban}
+                              onChange={(e) => setBankIban(e.target.value)}
+                              placeholder="ex: BJ061 01001 00123456789 01"
+                              required
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            />
+                            <p className="text-[10px] text-foreground/50 mt-1">Relevé d'Identité Bancaire officiel</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1.5">
+                              Code SWIFT / BIC (optionnel) :
+                            </label>
+                            <input
+                              type="text"
+                              value={bankSwift}
+                              onChange={(e) => setBankSwift(e.target.value)}
+                              placeholder="ex: AFRIRJBJ"
+                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Étape 3 : Montant à retirer */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          3. Montant à transférer (FCFA) :
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPayoutAmount(String(financials.net))}
+                            className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20"
+                          >
+                            100% Tout
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPayoutAmount(String(Math.round(financials.net * 0.5)))}
+                            className="px-2 py-0.5 rounded-md bg-muted text-foreground/70 text-[10px] font-bold hover:bg-muted/80"
+                          >
+                            50%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPayoutAmount(String(Math.round(financials.net * 0.25)))}
+                            className="px-2 py-0.5 rounded-md bg-muted text-foreground/70 text-[10px] font-bold hover:bg-muted/80"
+                          >
+                            25%
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={payoutAmount}
+                          onChange={(e) => setPayoutAmount(e.target.value)}
+                          placeholder={String(financials.net || 100000)}
+                          max={financials.net > 0 ? financials.net : undefined}
+                          min={1000}
+                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 pr-16 text-sm font-bold text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        />
+                        <span className="absolute right-3.5 top-3 text-xs font-bold text-foreground/50">
+                          FCFA
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Récapitulatif Final */}
+                    <div className="rounded-2xl border border-foreground/10 bg-card p-4 space-y-2 text-xs">
+                      <div className="flex justify-between text-foreground/70">
+                        <span>Montant demandé :</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {formatPrice(payoutAmount ? parseInt(payoutAmount, 10) : financials.net)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-emerald-700 font-semibold">
+                        <span>Frais de transfert :</span>
+                        <span>0 FCFA (Offerts)</span>
+                      </div>
+                      <div className="flex justify-between text-foreground font-bold text-sm pt-2 border-t border-foreground/10">
+                        <span>Net viré sur votre compte :</span>
+                        <span className="font-mono text-primary text-base">
+                          {formatPrice(payoutAmount ? parseInt(payoutAmount, 10) : financials.net)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Boutons d'action */}
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setPayoutViewMode('summary')}
+                        className="rounded-xl border border-foreground/15 px-5 py-2.5 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={payoutSubmitting}
+                        className="rounded-xl bg-primary hover:bg-primary/95 text-white px-6 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {payoutSubmitting ? (
+                          <>
+                            <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
+                            <span>Transmission...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FontAwesomeIcon icon={faCheck} className="h-3.5 w-3.5" />
+                            <span>Valider la demande de virement</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* VIEW 2 : RÉCAPITULATIF FINANCIER & HISTORIQUE */}
+              <div className="space-y-8">
+                {/* 3 Cartes de synthèse */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                  <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
+                    <p className="text-xs text-foreground/60 mb-1">Montant Brut Réservé</p>
+                    <p className="font-heading text-3xl font-bold text-foreground">
+                      {formatPrice(financials.gross)}
+                    </p>
+                    <p className="text-[11px] text-foreground/50 mt-2">
+                      Somme totale versée par les voyageurs
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
+                    <p className="text-xs text-foreground/60 mb-1">Commissions Bénin Beyond (10%)</p>
+                    <p className="font-heading text-3xl font-bold text-accent">
+                      -{formatPrice(financials.commission)}
+                    </p>
+                    <p className="text-[11px] text-foreground/50 mt-2">
+                      Frais techniques, sécurité & conciergerie
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-primary/25 bg-primary/5 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-primary mb-1">Solde Net Disponible</p>
+                      <p className="font-heading text-3xl font-bold text-primary">
+                        {formatPrice(financials.net)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPayoutViewMode('form');
+                        setPayoutSuccessMessage('');
+                        setPayoutError('');
+                        if (!payoutAmount) setPayoutAmount(String(financials.net));
+                      }}
+                      className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
+                    >
+                      <FontAwesomeIcon icon={faHandHoldingDollar} />
+                      <span>Demander un virement</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Historique des Demandes de Versement de ce Partenaire */}
+                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-heading text-base font-bold text-foreground flex items-center gap-2">
+                      <FontAwesomeIcon icon={faWallet} className="text-primary" />
+                      <span>Historique de vos Demandes de Retrait</span>
+                    </h3>
+                    <span className="text-xs text-foreground/50">
+                      {partnerPayouts.length} demande(s)
+                    </span>
+                  </div>
+
+                  {partnerPayouts.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
+                      Aucune demande de retrait effectuée pour le moment. Votre solde reste conservé en toute sécurité.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {partnerPayouts.map((po) => (
+                        <div
+                          key={po.id}
+                          className="rounded-xl border border-foreground/10 bg-muted/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-foreground">{po.method}</span>
+                              <span className="text-[10px] text-foreground/40 font-mono">({po.id})</span>
+                            </div>
+                            <p className="text-foreground/70 mt-0.5">
+                              Bénéficiaire : <span className="font-mono text-foreground">{po.recipient}</span>
+                            </p>
+                            <p className="text-[10px] text-foreground/45 mt-0.5">
+                              Demandé le : {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
+                            </p>
+                          </div>
+
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0">
+                            <span className="font-heading text-base font-bold text-foreground font-mono">
+                              {formatPrice(po.amount)}
+                            </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              po.status === 'approved'
+                                ? 'bg-emerald-500/15 text-emerald-700'
+                                : po.status === 'rejected'
+                                ? 'bg-rose-500/15 text-rose-700'
+                                : 'bg-amber-500/15 text-amber-700'
+                            }`}>
+                              {po.status === 'approved' ? '✓ Virement exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente de validation'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Simulated Payout Options */}
+                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm space-y-4">
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Canaux de Retrait Pris en Charge
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    {[
+                      { title: 'MTN Mobile Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
+                      { title: 'Moov Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
+                      { title: 'Celtiis Cash', fee: 'Sans frais', delay: 'Instantané' },
+                      { title: 'Virement Bancaire (UBA, BOA, etc.)', fee: 'Sans frais', delay: '24h ouvrées' }
+                    ].map((m, idx) => (
+                      <div key={idx} className="p-4 rounded-xl border border-foreground/10 bg-muted/30 text-xs">
+                        <p className="font-bold text-foreground">{m.title}</p>
+                        <p className="text-[11px] text-emerald-700 font-semibold mt-1">{m.fee}</p>
+                        <p className="text-[10px] text-foreground/50 mt-0.5">Délai : {m.delay}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Transactions History */}
+                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
+                  <h3 className="font-heading text-base font-bold text-foreground mb-4">
+                    Historique des Règlements par Réservation
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-foreground/10 text-foreground/60">
+                        <tr>
+                          <th className="pb-3 font-semibold">Référence</th>
+                          <th className="pb-3 font-semibold">Client</th>
+                          <th className="pb-3 font-semibold">Canal</th>
+                          <th className="pb-3 font-semibold">Brut</th>
+                          <th className="pb-3 font-semibold">Commission</th>
+                          <th className="pb-3 font-semibold">Net</th>
+                          <th className="pb-3 font-semibold">Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-foreground/5">
+                        {bookings.map((b) => (
+                          <tr key={b.id}>
+                            <td className="py-3 font-mono font-bold text-foreground">{b.booking_ref}</td>
+                            <td className="py-3 text-foreground">{b.customer_name}</td>
+                            <td className="py-3 text-foreground/70">{b.payment_method}</td>
+                            <td className="py-3 font-mono font-bold text-foreground">{formatPrice(b.gross_amount)}</td>
+                            <td className="py-3 font-mono text-foreground/60">-{formatPrice(b.commission_amount)}</td>
+                            <td className="py-3 font-mono font-bold text-primary">{formatPrice(b.net_amount)}</td>
+                            <td className="py-3">
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                Validé
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
-              {/* Transactions History */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                <h3 className="font-heading text-base font-bold text-foreground mb-4">
-                  Historique des Règlements par Réservation
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-foreground/10 text-foreground/60">
-                      <tr>
-                        <th className="pb-3 font-semibold">Référence</th>
-                        <th className="pb-3 font-semibold">Client</th>
-                        <th className="pb-3 font-semibold">Canal</th>
-                        <th className="pb-3 font-semibold">Brut</th>
-                        <th className="pb-3 font-semibold">Commission</th>
-                        <th className="pb-3 font-semibold">Net</th>
-                        <th className="pb-3 font-semibold">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-foreground/5">
-                      {bookings.map((b) => (
-                        <tr key={b.id}>
-                          <td className="py-3 font-mono font-bold text-foreground">{b.booking_ref}</td>
-                          <td className="py-3 text-foreground">{b.customer_name}</td>
-                          <td className="py-3 text-foreground/70">{b.payment_method}</td>
-                          <td className="py-3 font-mono font-bold text-foreground">{formatPrice(b.gross_amount)}</td>
-                          <td className="py-3 font-mono text-foreground/60">-{formatPrice(b.commission_amount)}</td>
-                          <td className="py-3 font-mono font-bold text-primary">{formatPrice(b.net_amount)}</td>
-                          <td className="py-3">
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                              Validé
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           )}
 
@@ -2796,112 +3463,7 @@ export function PartnerDashboardPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 4. MODAL : DEMANDE DE RETRAIT (PAYOUT REQUEST) */}
-      {/* ========================================================================= */}
-      {showPayoutModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-md rounded-3xl border border-foreground/10 shadow-2xl p-6 sm:p-8 space-y-5 animate-fadeIn">
-            
-            <div className="flex items-center justify-between border-b border-foreground/10 pb-3">
-              <h3 className="font-heading text-lg font-bold text-foreground">
-                Demande de Virement
-              </h3>
-              <button
-                onClick={() => {
-                  setShowPayoutModal(false);
-                  setPayoutSuccess(false);
-                }}
-                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground"
-              >
-                <FontAwesomeIcon icon={faXmark} />
-              </button>
-            </div>
 
-            {payoutSuccess ? (
-              <div className="py-6 text-center space-y-3">
-                <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-xl">
-                  <FontAwesomeIcon icon={faCheckCircle} />
-                </div>
-                <h4 className="font-heading text-base font-bold text-foreground">
-                  Demande de Virement Transmise !
-                </h4>
-                <p className="text-xs text-foreground/65 max-w-xs mx-auto">
-                  Votre versement de <strong>{formatPrice(financials.net)}</strong> a été initié vers {payoutPhone}. Vous recevrez la notification sous peu.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowPayoutModal(false);
-                    setPayoutSuccess(false);
-                  }}
-                  className="mt-4 rounded-full bg-primary px-6 py-2 text-xs font-bold text-white shadow"
-                >
-                  Fermer
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4 text-xs">
-                <div>
-                  <p className="text-foreground/60">Montant net disponible :</p>
-                  <p className="font-heading text-2xl font-bold text-primary font-mono mt-0.5">
-                    {formatPrice(financials.net)}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-foreground block mb-1.5">
-                    Sélectionnez le canal de versement :
-                  </label>
-                  <select
-                    value={payoutMethod}
-                    onChange={(e) => setPayoutMethod(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none"
-                  >
-                    <option value="mtn_momo">MTN Mobile Money Bénin</option>
-                    <option value="moov_money">Moov Money Bénin</option>
-                    <option value="celtiis_cash">Celtiis Cash</option>
-                    <option value="bank">Virement Bancaire (RIB / IBAN)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-foreground block mb-1.5">
-                    Numéro de compte / Mobile de réception :
-                  </label>
-                  <input
-                    type="text"
-                    value={payoutPhone}
-                    onChange={(e) => setPayoutPhone(e.target.value)}
-                    placeholder="+229 97 00 00 00"
-                    className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="p-3 rounded-xl bg-muted/50 text-[11px] text-foreground/60">
-                  <FontAwesomeIcon icon={faShieldHalved} className="text-primary mr-1.5" />
-                  <span>Transfert sécurisé sans frais de commission additionnels.</span>
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setShowPayoutModal(false)}
-                    className="rounded-xl border border-foreground/15 px-4 py-2 font-semibold text-foreground/70 hover:bg-muted"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => setPayoutSuccess(true)}
-                    className="rounded-xl bg-primary px-5 py-2 font-bold text-white shadow hover:bg-primary/90"
-                  >
-                    Valider le virement
-                  </button>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* 5. MODAL : APERÇU DU BIEN EN DIRECT (LIVE PREVIEW SANS QUITTER LE DASHBOARD) */}
@@ -3754,7 +4316,7 @@ export function PartnerDashboardPage() {
       {/* ========================================================================= */}
       {selectedBookingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5">
+          <div className="printable-receipt relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
               <div className="flex items-center gap-2.5">
@@ -3773,7 +4335,7 @@ export function PartnerDashboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedBookingModal(null)}
-                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground no-print"
               >
                 <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
               </button>
@@ -3883,7 +4445,7 @@ export function PartnerDashboardPage() {
             </div>
 
             {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2.5">
+              <div className="flex items-center justify-end gap-2.5 no-print">
                 <button
                   type="button"
                   onClick={() => window.print()}

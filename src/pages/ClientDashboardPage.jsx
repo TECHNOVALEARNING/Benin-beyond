@@ -26,6 +26,7 @@ import { getBookings } from '../services/bookingService';
 import { submitReview } from '../services/reviewService';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { getTimeBasedGreeting } from '../utils/dateUtils';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -242,7 +243,7 @@ export function ClientDashboardPage() {
                   Tableau de bord personnel
                 </span>
                 <h1 className="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  Bonjour, {displayName}
+                  {getTimeBasedGreeting()}, {displayName}
                 </h1>
                 <p className="mt-1 text-sm text-secondary-foreground/75 max-w-xl">
                   Retrouvez l’ensemble de vos réservations, téléchargez vos reçus officiels et préparez vos déplacements au Bénin en toute sérénité.
@@ -602,13 +603,13 @@ export function ClientDashboardPage() {
           <div className="relative w-full max-w-xl rounded-3xl bg-card border border-foreground/10 p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
             <button
               onClick={() => setSelectedVoucher(null)}
-              className="absolute right-4 top-4 rounded-full p-2 text-foreground/40 hover:bg-foreground/10 hover:text-foreground transition-colors"
+              className="absolute right-4 top-4 rounded-full p-2 text-foreground/40 hover:bg-foreground/10 hover:text-foreground transition-colors no-print"
             >
               <FontAwesomeIcon icon={faXmark} className="h-5 w-5" />
             </button>
 
             {/* Voucher Body (Print-ready) */}
-            <div id="printable-voucher" className="border-2 border-dashed border-foreground/20 rounded-2xl p-6 bg-background">
+            <div id="printable-voucher" className="printable-receipt border-2 border-dashed border-foreground/20 rounded-2xl p-6 bg-background">
               {/* Header */}
               <div className="flex items-start justify-between border-b border-foreground/10 pb-4">
                 <div>
@@ -673,7 +674,7 @@ export function ClientDashboardPage() {
             </div>
 
             {/* Print Action Buttons */}
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-6 flex items-center justify-end gap-3 no-print">
               <button
                 onClick={() => setSelectedVoucher(null)}
                 className="rounded-full px-5 py-2 text-xs font-semibold text-foreground/70 hover:bg-foreground/10"
