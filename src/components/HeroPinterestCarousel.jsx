@@ -7,7 +7,8 @@ import {
   faArrowRight,
   faChevronLeft,
   faChevronRight,
-  faGaugeHigh
+  faGaugeHigh,
+  faRightFromBracket
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 
@@ -55,7 +56,7 @@ const DESTINATIONS = [
 ];
 
 export function HeroPinterestCarousel() {
-  const { user, role } = useAuth();
+  const { user, role, logout } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [prevIndex, setPrevIndex] = useState(0);
   const [isWiping, setIsWiping] = useState(false);
@@ -158,47 +159,59 @@ export function HeroPinterestCarousel() {
             Bénin Beyond
           </Link>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            {user ? (
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Espace Propriétaire : toujours accessible pour devenir hôte / partenaire */}
+            {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
               <Link
-                to={
-                  role === 'admin' || user?.role === 'admin'
-                    ? '/admin'
-                    : role === 'partner' || user?.role === 'partner'
-                    ? '/dashboard/partner'
-                    : '/dashboard/client'
-                }
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-xs font-bold text-black shadow-lg hover:bg-white hover:text-black transition-all active:scale-95"
-                title="Accéder à votre tableau de bord"
+                to="/register?type=owner"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
+                title="Devenir propriétaire ou gestionnaire partenaire sur Bénin Beyond"
               >
-                <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5" />
-                <span>
-                  {role === 'admin' || user?.role === 'admin'
-                    ? 'Cockpit Admin'
-                    : role === 'partner' || user?.role === 'partner'
-                    ? 'Dashboard Hôte'
-                    : 'Mon Espace'}
-                </span>
+                <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
+                <span>Espace Propriétaire</span>
               </Link>
-            ) : (
-              <>
+            )}
+
+            {user ? (
+              <div className="flex items-center gap-1.5">
                 <Link
-                  to="/register?type=owner"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
-                  title="Devenir propriétaire ou gestionnaire partenaire sur Bénin Beyond"
+                  to={
+                    role === 'admin' || user?.role === 'admin'
+                      ? '/admin'
+                      : role === 'partner' || user?.role === 'partner'
+                      ? '/dashboard/partner'
+                      : '/dashboard/client'
+                  }
+                  className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-xs font-bold text-black shadow-lg hover:bg-white hover:text-black transition-all active:scale-95"
+                  title="Accéder à votre tableau de bord"
                 >
-                  <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
-                  <span>Espace Propriétaire</span>
+                  <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5" />
+                  <span>
+                    {role === 'admin' || user?.role === 'admin'
+                      ? 'Cockpit Admin'
+                      : role === 'partner' || user?.role === 'partner'
+                      ? 'Dashboard Hôte'
+                      : 'Mon Espace'}
+                  </span>
                 </Link>
 
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-xs font-bold text-black shadow-md hover:bg-accent hover:text-black transition-all active:scale-95"
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  title="Se déconnecter"
+                  className="h-7 w-7 rounded-full bg-white/10 hover:bg-rose-500/20 text-white/80 hover:text-rose-300 border border-white/20 flex items-center justify-center transition-all"
                 >
-                  <FontAwesomeIcon icon={faUser} className="h-3 w-3" />
-                  <span>Connexion</span>
-                </Link>
-              </>
+                  <FontAwesomeIcon icon={faRightFromBracket} className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-xs font-bold text-black shadow-md hover:bg-accent hover:text-black transition-all active:scale-95"
+              >
+                <FontAwesomeIcon icon={faUser} className="h-3 w-3" />
+                <span>Connexion</span>
+              </Link>
             )}
           </div>
         </div>

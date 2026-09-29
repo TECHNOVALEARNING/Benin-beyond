@@ -36,9 +36,33 @@ export function ClientDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
 
+  const getSafeString = (val, fallback = '') => {
+    if (!val) return fallback;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      return val.name || val.title || val.full_name || fallback;
+    }
+    return String(val);
+  };
+
+  const formatDateSafe = (dateVal) => {
+    if (!dateVal) return 'Date récente';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return 'Date récente';
+      return d.toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Date récente';
+    }
+  };
+
   // Editable profile state
-  const [profileName, setProfileName] = useState(user?.name || '');
-  const [profilePhone, setProfilePhone] = useState(user?.phone || '+229 97 00 00 00');
+  const [profileName, setProfileName] = useState(() => getSafeString(user?.name, ''));
+  const [profilePhone, setProfilePhone] = useState(() => getSafeString(user?.phone, '+229 97 00 00 00'));
   const [profileSaved, setProfileSaved] = useState(false);
 
   useEffect(() => {
@@ -144,6 +168,19 @@ export function ClientDashboardPage() {
     }, 2000);
   };
 
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="text-xs text-foreground/60">Redirection vers la page de connexion...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayName = getSafeString(user?.name, 'Voyageur');
+  const displayEmail = getSafeString(user?.email, 'client@beninbeyond.com');
   const totalSpent = userBookings.reduce((sum, b) => sum + (Number(b.total_amount) || Number(b.gross_amount) || 0), 0);
 
   return (
@@ -172,20 +209,22 @@ export function ClientDashboardPage() {
             <div className="flex items-center gap-2 border-l border-foreground/10 pl-3">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shadow-md">
-                  {user?.name?.[0]?.toUpperCase() || 'V'}
+                  {displayName.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden sm:block text-left">
-                  <p className="text-xs font-semibold leading-none">{user?.name || 'Voyageur'}</p>
-                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[140px]">{user?.email || 'client@beninbeyond.com'}</p>
+                  <p className="text-xs font-semibold leading-none">{displayName}</p>
+                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[140px]">{displayEmail}</p>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={handleLogout}
                 title="Se déconnecter"
-                className="ml-2 p-1.5 rounded-lg text-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                className="ml-2 px-3 py-1.5 rounded-xl border border-destructive/20 text-destructive hover:bg-destructive/10 text-xs font-semibold transition-colors flex items-center gap-1.5"
               >
-                <FontAwesomeIcon icon={faRightFromBracket} className="h-4 w-4" />
+                <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Déconnexion</span>
               </button>
             </div>
           </div>
@@ -203,7 +242,7 @@ export function ClientDashboardPage() {
                   Tableau de bord personnel
                 </span>
                 <h1 className="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  Bonjour, {user?.name || 'Cher Voyageur'}
+                  Bonjour, {displayName}
                 </h1>
                 <p className="mt-1 text-sm text-secondary-foreground/75 max-w-xl">
                   Retrouvez l’ensemble de vos réservations, téléchargez vos reçus officiels et préparez vos déplacements au Bénin en toute sérénité.
@@ -328,11 +367,7 @@ export function ClientDashboardPage() {
                               </span>
                               <span className="text-[11px] text-foreground/40">·</span>
                               <span className="text-[11px] text-foreground/50">
-                                {new Date(b.created_at || Date.now()).toLocaleDateString('fr-FR', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: 'numeric'
-                                })}
+                                {formatDateSafe(b.created_at)}
                               </span>
                             </div>
 
@@ -462,7 +497,7 @@ export function ClientDashboardPage() {
                   <input
                     type="email"
                     disabled
-                    value={user?.email || 'client@beninbeyond.com'}
+                    value={displayEmail}
                     className="w-full rounded-xl border border-foreground/10 bg-muted/60 px-4 py-2.5 text-sm text-foreground/50 cursor-not-allowed"
                   />
                 </div>

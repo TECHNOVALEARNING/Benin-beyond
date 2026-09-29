@@ -61,9 +61,17 @@ export async function getBookings() {
 
     // Normalisation complète pour garantir la visibilité côté Partenaire & Admin
     const normalized = mergedList.map((b) => {
-      const items = Array.isArray(b.items)
-        ? b.items
-        : (typeof b.items === 'string' ? JSON.parse(b.items || '[]') : []);
+      let items = [];
+      if (Array.isArray(b.items)) {
+        items = b.items;
+      } else if (typeof b.items === 'string') {
+        try {
+          const parsed = JSON.parse(b.items || '[]');
+          items = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          items = [];
+        }
+      }
       
       const firstItem = items[0] || {};
       const gross = Number(b.gross_amount || b.total_amount || b.total_price || 0);

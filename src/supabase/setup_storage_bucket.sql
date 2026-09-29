@@ -26,6 +26,7 @@ DROP POLICY IF EXISTS "Allow authenticated users to list all" ON storage.objects
 
 -- 3. Politique de lecture ciblée :
 -- Les utilisateurs connectés ne peuvent lister que les fichiers de leur propre dossier (ou dossiers publics partagés)
+DROP POLICY IF EXISTS "Users can list their own files in listings bucket" ON storage.objects;
 CREATE POLICY "Users can list their own files in listings bucket"
 ON storage.objects FOR SELECT
 TO authenticated
