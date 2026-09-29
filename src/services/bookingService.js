@@ -269,6 +269,28 @@ export async function createBooking(bookingPayload) {
 
       if (!error && data) {
         record.id = data.id;
+
+        // Enregistrement automatique de la transaction dans la table payments (Dépôt / Encaissement client)
+        try {
+          const methodLower = (record.payment_method || '').toLowerCase();
+          const cleanMethod = methodLower.includes('moov')
+            ? 'moov_money'
+            : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo');
+
+          await supabase.from('payments').insert([{
+            booking_id: data.id,
+            transaction_ref: `TXN-${bookingRef}`,
+            customer_email: record.customer_email,
+            amount: record.total_amount,
+            currency: 'XOF',
+            payment_method: cleanMethod,
+            payment_provider: 'fedapay',
+            status: 'completed',
+            paid_at: record.created_at
+          }]);
+        } catch (payErr) {
+          console.warn('Notice insertion transaction payment:', payErr?.message || payErr);
+        }
       } else if (error) {
         console.warn('Supabase booking insert notice:', error?.message || error);
       }
