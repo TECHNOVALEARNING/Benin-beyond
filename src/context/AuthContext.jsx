@@ -16,7 +16,8 @@ export const DEMO_USERS = {
     role: 'admin',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
     title: 'Super-Administrateur & Direction Générale',
-    verified: true
+    verified: true,
+    kyc_status: 'verified'
   },
   owner: {
     id: 'usr_owner_01',
@@ -25,7 +26,8 @@ export const DEMO_USERS = {
     role: 'owner',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
     company: 'Littoral Prestige Assets',
-    verified: true
+    verified: true,
+    kyc_status: 'verified'
   },
   client: {
     id: 'usr_client_01',
@@ -275,7 +277,9 @@ export function AuthProvider({ children }) {
         (assignedRole === 'admin'
           ? DEMO_USERS.admin.avatar
           : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'),
-      verified: assignedRole === 'admin' ? true : Boolean(profile?.verified || existingLocalUser?.verified),
+      verified: assignedRole === 'admin' ? true : Boolean(profile?.verified || existingLocalUser?.verified || profile?.kyc_status === 'verified' || existingLocalUser?.kyc_status === 'verified'),
+      kyc_status: assignedRole === 'admin' ? 'verified' : (profile?.kyc_status || existingLocalUser?.kyc_status || (profile?.verified || existingLocalUser?.verified ? 'verified' : 'pending')),
+      rejection_reason: profile?.rejection_reason || existingLocalUser?.rejection_reason || '',
       provider: authUser.app_metadata?.provider || 'google'
     };
 

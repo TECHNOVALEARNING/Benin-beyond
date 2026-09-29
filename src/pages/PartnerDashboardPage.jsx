@@ -62,6 +62,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
+  const isPartnerCertified = Boolean(user?.role === 'admin' || user?.verified || user?.kyc_status === 'verified');
 
   // Sidebar navigation state
   const [currentSection, setCurrentSection] = useState(() => {
@@ -409,13 +410,15 @@ export function PartnerDashboardPage() {
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme vérifié par Bénin Beyond.',
-      badge: formSubcategory === 'hotel' ? `${roomsCount || 1} chambre(s) dispo` : 'En attente de modération',
+      badge: formSubcategory === 'hotel'
+        ? `${roomsCount || 1} chambre(s) dispo`
+        : (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente de certification KYC'),
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
-      status: 'pending', // Pending admin audit
-      owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
-      owner_name: user?.name || 'Propriétaire Certifié',
+      status: isPartnerCertified ? 'active' : 'pending', // Les hôtes certifiés sont publiés directement en ligne
+      owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : (user?.id || null),
+      owner_name: user?.name || (isPartnerCertified ? 'Propriétaire Certifié' : 'Partenaire Hôte'),
       owner_email: user?.email || '',
       availability: {
         type: availabilityType,
@@ -426,7 +429,12 @@ export function PartnerDashboardPage() {
     });
 
     setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
-    setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle a été transmise aux modérateurs de Bénin Beyond pour validation.`);
+    
+    if (isPartnerCertified) {
+      setPublishSuccess(`Félicitations ! L'annonce "${newListing.title}" a été publiée avec succès et est immédiatement en ligne sur le site.`);
+    } else {
+      setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle sera automatiquement mise en ligne dès la validation de votre profil hôte (KYC).`);
+    }
 
     // Reset form
     setFormTitle('');
@@ -1255,7 +1263,7 @@ export function PartnerDashboardPage() {
                         {item.status === 'pending' ? (
                           <span className="rounded-full bg-amber-500/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow flex items-center gap-1">
                             <FontAwesomeIcon icon={faClock} className="text-[9px]" />
-                            <span>En modération</span>
+                            <span>{isPartnerCertified ? 'En cours de publication' : 'En attente KYC'}</span>
                           </span>
                         ) : item.status === 'refused' ? (
                           <button
@@ -1372,58 +1380,109 @@ export function PartnerDashboardPage() {
                 </p>
               </div>
 
-              {/* CHARTE D'EXCELLENCE VISUELLE & AVERTISSEMENT MODÉRATION */}
-              <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-6 space-y-4 shadow-sm">
-                <div className="flex items-center gap-3 text-amber-900 font-bold text-sm">
-                  <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
-                    <FontAwesomeIcon icon={faShieldHalved} className="text-base" />
+              {/* CHARTE DE PUBLICATION ET STATUT DE CERTIFICATION HÔTE */}
+              {isPartnerCertified ? (
+                <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-6 space-y-4 shadow-sm">
+                  <div className="flex items-center gap-3 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
+                    <div className="h-9 w-9 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0">
+                      <FontAwesomeIcon icon={faCircleCheck} className="text-base" />
+                    </div>
+                    <div>
+                      <span className="block text-xs uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold">Hôte Certifié Bénin Beyond</span>
+                      <h3 className="font-heading text-sm sm:text-base font-bold text-foreground">
+                        Mise en Ligne Immédiate de vos Annonces
+                      </h3>
+                    </div>
                   </div>
-                  <div>
-                    <span className="block text-xs uppercase tracking-widest text-amber-800 font-bold">Standard de Luxe Bénin Beyond</span>
-                    <h3 className="font-heading text-sm sm:text-base font-bold text-amber-950">
-                      Charte d'Excellence Visuelle & Contrôle de Modération
-                    </h3>
+
+                  <p className="text-xs text-foreground/80 leading-relaxed">
+                    Votre profil partenaire est <strong>certifié conforme (KYC validé)</strong>. Toute annonce que vous publiez est <strong>mise en ligne instantanément</strong> sans délai d'attente ni modération préalable. Veillez simplement au respect de notre charte de prestige visuel :
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
+                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
+                        <FontAwesomeIcon icon={faCamera} className="text-emerald-600 text-xs" />
+                        <span>Photos Nettes (1080p)</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/70 leading-snug">
+                        Prises de jour, nettes, lumineuses et en format horizontal pour attirer les clients.
+                      </p>
+                    </div>
+
+                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
+                        <FontAwesomeIcon icon={faVideo} className="text-emerald-600 text-xs" />
+                        <span>Vidéo Visite Réelle</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/70 leading-snug">
+                        Courte vidéo (15 à 45 sec, max 25 Mo) montrant le bien ou le véhicule avec authenticité.
+                      </p>
+                    </div>
+
+                    <div className="bg-emerald-500/10 p-3.5 rounded-2xl border border-emerald-500/25 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-300">
+                        <FontAwesomeIcon icon={faCheck} className="text-emerald-600 text-xs" />
+                        <span>Publication Directe</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/75 leading-snug">
+                        Votre annonce est visible par tous les voyageurs dès que vous cliquez sur Publier.
+                      </p>
+                    </div>
                   </div>
                 </div>
-
-                <p className="text-xs text-amber-950/85 leading-relaxed">
-                  Afin de garantir le prestige de notre marketplace et rassurer les voyageurs internationaux et la diaspora, 
-                  <strong> chaque bien soumis est rigoureusement audité par notre équipe de modération</strong>. 
-                  Vous devez fournir vos propres photos et vidéos en conformité avec les règles ci-dessous :
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-amber-950">
-                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 flex flex-col justify-between space-y-1.5">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <FontAwesomeIcon icon={faCamera} className="text-amber-700 text-xs" />
-                      <span>Photos Nettes (1080p)</span>
+              ) : (
+                <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-6 space-y-4 shadow-sm">
+                  <div className="flex items-center gap-3 text-amber-900 dark:text-amber-300 font-bold text-sm">
+                    <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
+                      <FontAwesomeIcon icon={faClock} className="text-base" />
                     </div>
-                    <p className="text-[11px] text-foreground/70 leading-snug">
-                      Prises de jour, nettes, bien éclairées et en format horizontal. Aucune capture d'écran pixelisée.
-                    </p>
+                    <div>
+                      <span className="block text-xs uppercase tracking-widest text-amber-700 dark:text-amber-400 font-bold">Compte en Attente de Certification</span>
+                      <h3 className="font-heading text-sm sm:text-base font-bold text-foreground">
+                        Publication Automatique dès Validation de votre Profil (KYC)
+                      </h3>
+                    </div>
                   </div>
 
-                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 flex flex-col justify-between space-y-1.5">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <FontAwesomeIcon icon={faVideo} className="text-amber-700 text-xs" />
-                      <span>Vidéo Courte Légère</span>
-                    </div>
-                    <p className="text-[11px] text-foreground/70 leading-snug">
-                      Visite immersive courte (15 à 45 sec, max 25 Mo) montrant les pièces ou le véhicule.
-                    </p>
-                  </div>
+                  <p className="text-xs text-foreground/80 leading-relaxed">
+                    Votre dossier KYC est actuellement en cours d'examen. 
+                    <strong> Vous pouvez dès à présent créer et enregistrer vos annonces</strong> : elles seront <strong>automatiquement mises en ligne</strong> dès la certification de votre profil par l'administration.
+                  </p>
 
-                  <div className="bg-rose-500/10 p-3.5 rounded-2xl border border-rose-500/25 flex flex-col justify-between space-y-1.5">
-                    <div className="flex items-center gap-2 font-bold text-rose-800">
-                      <FontAwesomeIcon icon={faTriangleExclamation} className="text-rose-600 text-xs" />
-                      <span>Refus si non conforme</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
+                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
+                        <FontAwesomeIcon icon={faCamera} className="text-amber-600 text-xs" />
+                        <span>Photos Nettes (1080p)</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/70 leading-snug">
+                        Prises de jour, nettes, bien éclairées et en format horizontal.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-rose-950/80 leading-snug">
-                      Toute annonce floue, sombre ou de mauvaise qualité sera <strong>rejetée par l'admin</strong> avec motif.
-                    </p>
+
+                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
+                        <FontAwesomeIcon icon={faVideo} className="text-amber-600 text-xs" />
+                        <span>Vidéo Courte</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/70 leading-snug">
+                        Visite immersive courte (15 à 45 sec) pour valoriser votre bien.
+                      </p>
+                    </div>
+
+                    <div className="bg-amber-500/10 p-3.5 rounded-2xl border border-amber-500/25 flex flex-col justify-between space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                        <FontAwesomeIcon icon={faShieldHalved} className="text-amber-600 text-xs" />
+                        <span>Activation Automatique</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/75 leading-snug">
+                        Dès validation de votre KYC par l'admin, vos biens s'affichent publiquement sans action requise.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {publishSuccess && (
                 <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3 animate-fadeIn">
@@ -2474,7 +2533,7 @@ export function PartnerDashboardPage() {
                     </span>
                     {previewListingModal.status === 'pending' ? (
                       <span className="rounded-full bg-amber-500/90 text-white px-3 py-1 text-[11px] font-bold shadow">
-                        En modération
+                        {isPartnerCertified ? 'En cours de publication' : 'En attente de certification KYC'}
                       </span>
                     ) : previewListingModal.status === 'refused' ? (
                       <span className="rounded-full bg-rose-600 text-white px-3 py-1 text-[11px] font-bold shadow">

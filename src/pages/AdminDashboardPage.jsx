@@ -49,7 +49,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings, activateOwnerListings } from '../services/listingService';
 import { getBookings, updateBookingStatus } from '../services/bookingService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
@@ -817,6 +817,13 @@ export function AdminDashboardPage() {
   const handleVerifyPartnerKyc = async (partnerId, partnerEmail = '') => {
     try {
       await verifyPartnerKYC(partnerId, partnerEmail);
+
+      // Activation automatique et immédiate de toutes les annonces en attente du partenaire
+      const { activatedCount, updatedListings } = await activateOwnerListings(partnerId, partnerEmail);
+      if (activatedCount > 0 && Array.isArray(updatedListings)) {
+        setListings(updatedListings);
+      }
+
       setPartners((prev) =>
         prev.map((p) => (p.id === partnerId ? { ...p, kycStatus: 'verified', rejectionReason: '' } : p))
       );
@@ -830,7 +837,11 @@ export function AdminDashboardPage() {
       if (selectedKycModal && (selectedKycModal.id === partnerId || selectedKycModal.email === partnerEmail)) {
         setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'verified', rejectionReason: '' }));
       }
-      showToast('Partenaire certifié conforme (KYC validé avec succès).');
+      showToast(
+        activatedCount > 0
+          ? `Partenaire certifié avec succès ! ${activatedCount} annonce(s) en attente mise(s) en ligne automatiquement.`
+          : 'Partenaire certifié conforme (KYC validé avec succès).'
+      );
     } catch (err) {
       console.error('Erreur validation KYC:', err);
       showToast('Erreur lors de la validation du KYC.');

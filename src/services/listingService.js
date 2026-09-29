@@ -304,7 +304,7 @@ export async function addListing(listingData) {
             ? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80'
             : 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'
         ],
-    owner_id: dbOwnerId,
+    owner_id: listingData.owner_id || dbOwnerId,
     owner_name: listingData.owner_name || 'Partenaire Bénin Beyond',
     owner_email: listingData.owner_email || ''
   };
@@ -446,3 +446,70 @@ export function getOwnerListings(ownerEmailOrId) {
     (l) => l.owner_email === ownerEmailOrId || l.owner_id === ownerEmailOrId
   );
 }
+
+/**
+ * Active automatiquement toutes les annonces en attente d'un propriétaire lorsque son profil KYC est validé
+ */
+export async function activateOwnerListings(ownerId, ownerEmail = '') {
+  const cleanEmail = (ownerEmail || '').trim().toLowerCase();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // 1. Cache local instantané
+  const custom = getCustomListings();
+  let activatedCount = 0;
+  const updated = custom.map((item) => {
+    const matchId = Boolean(ownerId && (item.owner_id === ownerId || item.id === ownerId));
+    const matchEmail = Boolean(cleanEmail && item.owner_email && item.owner_email.trim().toLowerCase() === cleanEmail);
+    if ((matchId || matchEmail) && (item.status === 'pending' || item.status === 'in_review')) {
+      activatedCount++;
+      return {
+        ...item,
+        status: 'active',
+        badge: item.badge && !item.badge.toLowerCase().includes('attente') && !item.badge.toLowerCase().includes('modération')
+          ? item.badge
+          : 'Vérifié par Bénin Beyond',
+        rejection_reason: ''
+      };
+    }
+    return item;
+  });
+
+  if (activatedCount > 0) {
+    saveCustomListings(updated);
+  }
+
+  // 2. Base Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let targetOwnerId = ownerId && uuidRegex.test(ownerId) ? ownerId : null;
+      if (!targetOwnerId && cleanEmail) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        if (profile?.id) {
+          targetOwnerId = profile.id;
+        }
+      }
+
+      if (targetOwnerId) {
+        await supabase
+          .from('listings')
+          .update({
+            status: 'active',
+            badge: 'Vérifié par Bénin Beyond',
+            rejection_reason: null,
+            updated_date: new Date().toISOString()
+          })
+          .eq('owner_id', targetOwnerId)
+          .eq('status', 'pending');
+      }
+    } catch (err) {
+      console.warn('Erreur Supabase activateOwnerListings:', err);
+    }
+  }
+
+  return { activatedCount, updatedListings: updated };
+}
+
