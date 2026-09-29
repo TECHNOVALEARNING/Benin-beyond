@@ -78,8 +78,18 @@ ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAUL
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'paid';
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS check_in DATE;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS check_out DATE;
-ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS guests_count INTEGER DEFAULT 1;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS special_requests TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS owner_email TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS listing_id TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS listing_title TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS listing_image TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS dates TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS guests TEXT;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS gross_amount NUMERIC;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS net_amount NUMERIC;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'Mobile Money / Carte';
 
 -- 6. Table des Événements Culturels (si pas encore présente)
 CREATE TABLE IF NOT EXISTS public.events (

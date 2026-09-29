@@ -99,17 +99,34 @@ export function CheckoutPage() {
       });
     }
 
+    const firstItem = items[0] || {};
+    const formattedDates = firstItem.startDate && firstItem.endDate
+      ? `Du ${firstItem.startDate} au ${firstItem.endDate}`
+      : (firstItem.days ? `${firstItem.days} jour(s)` : (firstItem.nights ? `${firstItem.nights} nuit(s)` : 'Séjour / Prestation'));
+    
+    const formattedGuests = firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur';
+
     const payload = {
       booking_ref: bookingRef,
       customer_name: customer.name,
       customer_email: clientEmail,
       customer_phone: customer.phone,
       items: items,
+      listing_id: firstItem.listing_id || firstItem.listingId || firstItem.id || null,
+      listing_title: firstItem.title || 'Réservation Bénin Beyond',
+      listing_image: firstItem.image || firstItem.image_url || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+      location: firstItem.location || 'Cotonou, Bénin',
+      dates: formattedDates,
+      guests: formattedGuests,
+      owner_id: firstItem.owner_id || null,
+      owner_name: firstItem.owner_name || null,
+      owner_email: firstItem.owner_email || null,
       protection_options: selectedOptions,
       payment_method: paymentMethod,
       subtotal: subtotal,
       options_total: optionsTotal,
       total_amount: finalTotal,
+      gross_amount: finalTotal,
       status: 'confirmed'
     };
 

@@ -209,10 +209,28 @@ export function PartnerDashboardPage() {
       // Seules les réservations associées aux biens de ce partenaire sont prises en compte
       const myPartnerBookings = allBookings.filter((b) => {
         if (!user) return false;
+
+        // 1. Correspondance directe par ID ou Email de l'hôte
         const matchesOwnerId = Boolean(b.owner_id && user.id && String(b.owner_id) === String(user.id));
         const matchesOwnerEmail = Boolean(b.owner_email && user.email && b.owner_email.toLowerCase() === user.email.toLowerCase());
+
+        // 2. Correspondance directe par ID de l'annonce
         const matchesListingId = Boolean(b.listing_id && myListingIds.has(b.listing_id));
-        return matchesOwnerId || matchesOwnerEmail || matchesListingId;
+
+        // 3. Inspection approfondie des articles du panier de la réservation
+        const matchesInItems = Array.isArray(b.items) && b.items.some((item) => {
+          const itemListingId = item.listing_id || item.listingId || item.id;
+          const itemOwnerId = item.owner_id;
+          const itemOwnerEmail = item.owner_email;
+
+          const isMyListing = itemListingId && myListingIds.has(itemListingId);
+          const isMyOwnerId = itemOwnerId && user.id && String(itemOwnerId) === String(user.id);
+          const isMyOwnerEmail = itemOwnerEmail && user.email && itemOwnerEmail.toLowerCase() === user.email.toLowerCase();
+
+          return isMyListing || isMyOwnerId || isMyOwnerEmail;
+        });
+
+        return matchesOwnerId || matchesOwnerEmail || matchesListingId || matchesInItems;
       });
 
       setListings(myPartnerListings);
@@ -3718,6 +3736,160 @@ export function PartnerDashboardPage() {
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. MODAL DÉTAILS DE LA RÉSERVATION CLIENT */}
+      {/* ========================================================================= */}
+      {selectedBookingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <FontAwesomeIcon icon={faReceipt} className="text-base" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Détails de la Réservation
+                  </h3>
+                  <p className="text-[11px] font-mono text-primary font-bold">
+                    Réf. {selectedBookingModal.booking_ref}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBookingModal(null)}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Client Identity Card */}
+            <div className="p-4 rounded-2xl bg-muted/30 border border-foreground/10 space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/50">
+                Informations du Voyageur
+              </p>
+              <div className="flex items-center gap-3">
+                <img
+                  src={selectedBookingModal.customer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedBookingModal.customer_name || 'Client')}&background=0D8ABC&color=fff`}
+                  alt={selectedBookingModal.customer_name}
+                  className="h-12 w-12 rounded-full object-cover border border-foreground/10 shadow-sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-foreground text-sm truncate">
+                    {selectedBookingModal.customer_name}
+                  </p>
+                  <p className="text-xs text-foreground/70 flex items-center gap-1.5 mt-0.5">
+                    <FontAwesomeIcon icon={faPhone} className="text-[10px] text-primary" />
+                    <span>{selectedBookingModal.customer_phone || 'Non renseigné'}</span>
+                  </p>
+                  <p className="text-xs text-foreground/50 flex items-center gap-1.5 mt-0.5">
+                    <FontAwesomeIcon icon={faEnvelope} className="text-[10px] text-primary" />
+                    <span className="truncate">{selectedBookingModal.customer_email || 'Non renseigné'}</span>
+                  </p>
+                </div>
+              </div>
+
+              {selectedBookingModal.customer_phone && (
+                <div className="pt-2 flex items-center gap-2">
+                  <a
+                    href={`tel:${selectedBookingModal.customer_phone}`}
+                    className="flex-1 text-center rounded-xl bg-primary/10 hover:bg-primary/20 text-primary py-2 text-xs font-semibold transition-colors"
+                  >
+                    <FontAwesomeIcon icon={faPhone} className="mr-1.5" />
+                    Appeler le client
+                  </a>
+                  <a
+                    href={`https://wa.me/${selectedBookingModal.customer_phone.replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 py-2 text-xs font-semibold transition-colors"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Listing & Stay Details */}
+            <div className="p-4 rounded-2xl bg-muted/30 border border-foreground/10 space-y-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/50">
+                Bien Réservé & Période
+              </p>
+              <div className="flex items-center gap-3">
+                {selectedBookingModal.listing_image && (
+                  <img
+                    src={selectedBookingModal.listing_image}
+                    alt={selectedBookingModal.listing_title}
+                    className="h-12 w-16 rounded-xl object-cover border border-foreground/10 shrink-0"
+                  />
+                )}
+                <div>
+                  <p className="font-bold text-foreground text-xs line-clamp-1">
+                    {selectedBookingModal.listing_title}
+                  </p>
+                  <p className="text-[11px] text-foreground/60 flex items-center gap-1">
+                    <FontAwesomeIcon icon={faLocationDot} className="text-[10px] text-primary" />
+                    <span>{selectedBookingModal.location}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-foreground/10 text-xs">
+                <div>
+                  <span className="text-[10px] text-foreground/50 block">Période réservée</span>
+                  <span className="font-semibold text-foreground">{selectedBookingModal.dates}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-foreground/50 block">Nombre de voyageurs</span>
+                  <span className="font-semibold text-foreground">{selectedBookingModal.guests}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Details */}
+            <div className="p-4 rounded-2xl bg-card border border-foreground/10 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-foreground/60">Prix Brut Payé par le Voyageur :</span>
+                <span className="font-bold text-foreground font-mono">{formatPrice(selectedBookingModal.gross_amount)}</span>
+              </div>
+              <div className="flex justify-between text-foreground/60">
+                <span>Commission Plateforme (10%) :</span>
+                <span className="font-mono">-{formatPrice(selectedBookingModal.commission_amount)}</span>
+              </div>
+              <div className="flex justify-between text-primary font-bold text-sm pt-2 border-t border-foreground/10">
+                <span>Votre Revenu Net (90%) :</span>
+                <span className="font-mono text-base">{formatPrice(selectedBookingModal.net_amount)}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-foreground/50 pt-1">
+                <span>Mode de Paiement :</span>
+                <span>{selectedBookingModal.payment_method}</span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                Imprimer Reçu
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBookingModal(null)}
+                className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all shadow"
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         </div>
       )}

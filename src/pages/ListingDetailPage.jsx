@@ -31,7 +31,6 @@ export function ListingDetailPage() {
 
   // Gallery & Media states
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
-  const [activeMediaTab, setActiveMediaTab] = useState('photos'); // 'photos' | 'video'
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [imageFitMode, setImageFitMode] = useState('contain'); // 'contain' (vue entière nette) | 'cover' (plein cadre)
 
@@ -109,6 +108,8 @@ export function ListingDetailPage() {
 
     addItem({
       listingId: listing.id,
+      listing_id: listing.id,
+      id: listing.id,
       type: listing.type,
       title: listing.title,
       price: listing.price,
@@ -120,7 +121,10 @@ export function ListingDetailPage() {
       startDate: startDate,
       endDate: endDate,
       qty: 1,
-      location: listing.location
+      location: listing.location,
+      owner_id: listing.owner_id || null,
+      owner_name: listing.owner_name || listing.host?.name || null,
+      owner_email: listing.owner_email || null
     });
 
     setTimeout(() => {
@@ -167,147 +171,110 @@ export function ListingDetailPage() {
       {/* MASTER GALLERY & VIDEO HERO (PLEINE LARGEUR AVEC FLÈCHES) */}
       <ScrollReveal delay={0} y={15} scale={0.98}>
         <div className="space-y-3">
-          {/* Main Viewer Card */}
+          {/* Main Photo Viewer Card */}
           <div className="relative h-[48vh] sm:h-[62vh] max-h-[620px] min-h-[360px] w-full overflow-hidden rounded-2xl md:rounded-3xl bg-neutral-950 border border-foreground/10 shadow-2xl">
-            {activeMediaTab === 'video' && listing.video_url ? (
-              <div className="h-full w-full">
-                <ListingVideoPlayer
-                  videoUrl={listing.video_url}
-                  poster={gallery[0]}
-                  title={listing.title}
-                  compact={true}
-                />
-              </div>
-            ) : (
-              <div
-                className="relative h-full w-full cursor-zoom-in group select-none flex items-center justify-center overflow-hidden bg-neutral-950"
-                onClick={() => setIsLightboxOpen(true)}
-              >
-                {/* Halo d'ambiance flou en arrière-plan (remplit élégamment les bordures sans déformation) */}
-                <img
-                  src={gallery[activePhotoIdx]}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-35 scale-110 pointer-events-none select-none transition-all duration-700"
-                />
+            <div
+              className="relative h-full w-full cursor-zoom-in group select-none flex items-center justify-center overflow-hidden bg-neutral-950"
+              onClick={() => setIsLightboxOpen(true)}
+            >
+              {/* Halo d'ambiance flou en arrière-plan (remplit élégamment les bordures sans déformation) */}
+              <img
+                src={gallery[activePhotoIdx]}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover blur-3xl opacity-35 scale-110 pointer-events-none select-none transition-all duration-700"
+              />
 
-                {/* Photo Principale Nette & Non Tronquée */}
-                <img
-                  src={gallery[activePhotoIdx]}
-                  alt={`${listing.title} — Photo ${activePhotoIdx + 1}`}
-                  className={`relative z-10 h-full w-full select-none transition-all duration-500 drop-shadow-2xl ${
-                    imageFitMode === 'cover' ? 'object-cover' : 'object-contain'
-                  }`}
-                />
-
-                {/* Subtle vignette shadow */}
-                <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
-
-                {/* Flèche Précédent */}
-                {gallery.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={handlePrevPhoto}
-                    aria-label="Photo précédente"
-                    className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
-                  >
-                    <FontAwesomeIcon icon={faChevronLeft} className="text-base" />
-                  </button>
-                )}
-
-                {/* Flèche Suivant */}
-                {gallery.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={handleNextPhoto}
-                    aria-label="Photo suivante"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
-                  >
-                    <FontAwesomeIcon icon={faChevronRight} className="text-base" />
-                  </button>
-                )}
-
-                {/* Indicateur Compteur Photo */}
-                <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
-                  <span className="rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow">
-                    Photo {activePhotoIdx + 1} / {gallery.length}
-                  </span>
-                </div>
-
-                {/* Commandes Bas Droite (Mode Cadrage + Agrandir) */}
-                <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setImageFitMode((prev) => (prev === 'contain' ? 'cover' : 'contain'));
-                    }}
-                    className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
-                    title={imageFitMode === 'contain' ? 'Remplir tout le cadre' : 'Afficher l’image entière (sans découpe)'}
-                  >
-                    <span>{imageFitMode === 'contain' ? 'Plein cadre' : 'Vue entière'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsLightboxOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3.5 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
-                  >
-                    <FontAwesomeIcon icon={faExpand} className="text-xs" />
-                    <span>Agrandir</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Onglets Médias Haut Gauche (Photos / Vidéo) */}
-            <div className="absolute top-4 left-4 z-30 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveMediaTab('photos')}
-                className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shadow-md backdrop-blur-md border ${
-                  activeMediaTab === 'photos'
-                    ? 'bg-white text-neutral-950 border-white shadow-lg scale-102'
-                    : 'bg-black/60 text-white/80 border-white/15 hover:bg-black/80 hover:text-white'
+              {/* Photo Principale Nette & Non Tronquée */}
+              <img
+                src={gallery[activePhotoIdx]}
+                alt={`${listing.title} — Photo ${activePhotoIdx + 1}`}
+                className={`relative z-10 h-full w-full select-none transition-all duration-500 drop-shadow-2xl ${
+                  imageFitMode === 'cover' ? 'object-cover' : 'object-contain'
                 }`}
-              >
-                <FontAwesomeIcon icon={faImages} className="text-xs" />
-                <span>Photos ({gallery.length})</span>
-              </button>
+              />
 
-              {listing.video_url && (
+              {/* Subtle vignette shadow */}
+              <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
+
+              {/* Flèche Précédent */}
+              {gallery.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setActiveMediaTab('video')}
-                  className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shadow-md backdrop-blur-md border ${
-                    activeMediaTab === 'video'
-                      ? 'bg-accent text-neutral-950 border-accent shadow-lg scale-102 font-bold'
-                      : 'bg-black/60 text-accent border-accent/30 hover:bg-black/80 hover:border-accent'
-                  }`}
+                  onClick={handlePrevPhoto}
+                  aria-label="Photo précédente"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
                 >
-                  <FontAwesomeIcon icon={faVideo} className="text-xs animate-pulse" />
-                  <span>Visite Vidéo</span>
+                  <FontAwesomeIcon icon={faChevronLeft} className="text-base" />
                 </button>
               )}
+
+              {/* Flèche Suivant */}
+              {gallery.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleNextPhoto}
+                  aria-label="Photo suivante"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
+                >
+                  <FontAwesomeIcon icon={faChevronRight} className="text-base" />
+                </button>
+              )}
+
+              {/* Indicateur Compteur Photo */}
+              <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 pointer-events-none">
+                <span className="rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow">
+                  Photo {activePhotoIdx + 1} / {gallery.length}
+                </span>
+              </div>
+
+              {/* Commandes Bas Droite (Mode Cadrage + Agrandir) */}
+              <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImageFitMode((prev) => (prev === 'contain' ? 'cover' : 'contain'));
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
+                  title={imageFitMode === 'contain' ? 'Remplir tout le cadre' : 'Afficher l’image entière (sans découpe)'}
+                >
+                  <span>{imageFitMode === 'contain' ? 'Plein cadre' : 'Vue entière'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsLightboxOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3.5 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
+                >
+                  <FontAwesomeIcon icon={faExpand} className="text-xs" />
+                  <span>Agrandir</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Badge Photos Haut Gauche */}
+            <div className="absolute top-4 left-4 z-30 flex items-center gap-2 pointer-events-none">
+              <span className="flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-md backdrop-blur-md border bg-black/65 text-white border-white/20">
+                <FontAwesomeIcon icon={faImages} className="text-xs text-primary" />
+                <span>{gallery.length} photos</span>
+              </span>
             </div>
           </div>
 
-          {/* Bandeau de Miniatures Cliquables */}
+          {/* Bandeau de Miniatures Photos Cliquables */}
           {gallery.length > 1 && (
             <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin">
               {gallery.map((imgUrl, idx) => (
                 <button
                   key={idx}
                   type="button"
-                  onClick={() => {
-                    setActiveMediaTab('photos');
-                    setActivePhotoIdx(idx);
-                  }}
+                  onClick={() => setActivePhotoIdx(idx)}
                   className={`relative h-18 sm:h-20 w-28 sm:w-32 shrink-0 rounded-xl overflow-hidden transition-all duration-300 border ${
-                    activeMediaTab === 'photos' && activePhotoIdx === idx
+                    activePhotoIdx === idx
                       ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-102 shadow-md'
                       : 'border-foreground/15 opacity-65 hover:opacity-100 hover:border-foreground/40'
                   }`}
@@ -322,21 +289,6 @@ export function ListingDetailPage() {
                   </div>
                 </button>
               ))}
-
-              {listing.video_url && (
-                <button
-                  type="button"
-                  onClick={() => setActiveMediaTab('video')}
-                  className={`relative h-18 sm:h-20 w-28 sm:w-32 shrink-0 rounded-xl overflow-hidden transition-all duration-300 border flex flex-col items-center justify-center bg-black/90 text-accent ${
-                    activeMediaTab === 'video'
-                      ? 'border-accent ring-2 ring-accent ring-offset-2 ring-offset-background scale-102 shadow-md'
-                      : 'border-accent/40 opacity-75 hover:opacity-100'
-                  }`}
-                >
-                  <FontAwesomeIcon icon={faVideo} className="text-base sm:text-lg mb-1" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Vidéo</span>
-                </button>
-              )}
             </div>
           )}
         </div>
