@@ -25,13 +25,43 @@ function openMediaDB() {
   });
 }
 
+import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+
 /**
- * Enregistre un fichier média (vidéo, image) dans IndexedDB
+ * Enregistre un fichier média (vidéo, image) en priorité dans Supabase Storage (Bucket 'listings')
+ * avec repli automatique vers IndexedDB si le bucket n'est pas encore créé.
  * @param {File|Blob} file 
  * @param {string} optionalId 
- * @returns {Promise<string>} Retourne un identifiant persistant sous la forme "idb:<id>"
+ * @returns {Promise<string>} Retourne soit l'URL publique Supabase, soit "idb:<id>"
  */
 export async function saveMediaBlob(file, optionalId = null) {
+  // 1. Priorité absolue : Téléversement direct dans le Bucket Supabase Storage
+  if (isSupabaseConfigured && supabase && file && file.name) {
+    try {
+      const ext = file.name.split('.').pop() || 'mp4';
+      const cleanFileName = `video_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      const { data, error } = await supabase.storage
+        .from('listings')
+        .upload(cleanFileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (!error && data?.path) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('listings')
+          .getPublicUrl(cleanFileName);
+
+        if (publicUrl) {
+          return publicUrl;
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn('Tentative Supabase Storage (fallback IndexedDB) :', supabaseErr?.message || supabaseErr);
+    }
+  }
+
+  // 2. Repli persistant local dans IndexedDB (garantit que rien n'est perdu hors-ligne)
   try {
     const db = await openMediaDB();
     const id = optionalId || `media_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -52,7 +82,7 @@ export async function saveMediaBlob(file, optionalId = null) {
     });
   } catch (err) {
     console.warn('Erreur sauvegarde média IndexedDB, fallback FileReader:', err);
-    // Fallback: si IndexedDB échoue, conversion en DataURL si possible
+    // 3. Dernier repli : FileReader DataURL
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
