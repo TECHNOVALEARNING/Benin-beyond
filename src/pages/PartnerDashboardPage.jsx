@@ -3100,18 +3100,6 @@ export function PartnerDashboardPage() {
         </div>
       )}
 
-      {/* Modal de Confirmation de Suppression Pro */}
-      <ConfirmModal
-        isOpen={confirmDeleteModal.isOpen}
-        title="Retirer cette annonce"
-        message={`Voulez-vous vraiment retirer définitivement l'annonce "${confirmDeleteModal.title}" de la marketplace Bénin Beyond ? Cette action supprimera le bien du catalogue.`}
-        confirmText="Supprimer l'annonce"
-        cancelText="Annuler"
-        variant="danger"
-        onConfirm={handleConfirmDeleteListing}
-        onCancel={() => setConfirmDeleteModal({ isOpen: false, id: null, title: '' })}
-      />
-
       {/* ========================================================================= */}
       {/* 6. MODAL : MOTIF DE REFUS D'UNE ANNONCE */}
       {/* ========================================================================= */}
