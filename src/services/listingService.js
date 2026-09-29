@@ -378,6 +378,105 @@ export async function addListing(listingData) {
 }
 
 /**
+ * Met à jour complètement une annonce (titre, prix, photos, vidéo, description, etc.)
+ */
+export async function updateListing(id, updates = {}) {
+  if (!id) return null;
+
+  // 1. Cache local instantané
+  const custom = getCustomListings();
+  const index = custom.findIndex((item) => item.id === id);
+  let updatedListing = null;
+
+  if (index !== -1) {
+    const existing = custom[index];
+    updatedListing = {
+      ...existing,
+      ...updates,
+      id,
+      updated_date: new Date().toISOString()
+    };
+
+    if (updatedListing.gallery && Array.isArray(updatedListing.gallery) && updatedListing.gallery.length > 0) {
+      updatedListing.gallery = updatedListing.gallery.map((img) => sanitizeImage(img, updatedListing.type));
+    }
+
+    if (updates.description && !updates.summary) {
+      updatedListing.summary = updates.description.slice(0, 160);
+    }
+
+    custom[index] = updatedListing;
+    saveCustomListings(custom);
+  }
+
+  // 2. Base Supabase universelle
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const dbPayload = {};
+      const allowedFields = [
+        'title',
+        'type',
+        'subcategory',
+        'location',
+        'price',
+        'price_unit',
+        'rooms_count',
+        'available_from',
+        'available_to',
+        'status',
+        'rejection_reason',
+        'badge',
+        'featured',
+        'summary',
+        'description',
+        'specs',
+        'amenities',
+        'gallery',
+        'video_url'
+      ];
+
+      allowedFields.forEach((field) => {
+        if (updates[field] !== undefined) {
+          if (field === 'price' || field === 'rooms_count') {
+            dbPayload[field] = Number(updates[field]) || 0;
+          } else {
+            dbPayload[field] = updates[field];
+          }
+        }
+      });
+
+      if (updates.description && updates.summary === undefined) {
+        dbPayload.summary = updates.description.slice(0, 160);
+      }
+
+      dbPayload.updated_date = new Date().toISOString();
+
+      const queryPromise = supabase
+        .from('listings')
+        .update(dbPayload)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+      const { data, error } = await withTimeout(queryPromise, 4000);
+      if (!error && data) {
+        updatedListing = { ...(updatedListing || {}), ...data };
+        if (index !== -1) {
+          custom[index] = updatedListing;
+          saveCustomListings(custom);
+        }
+      } else if (error) {
+        console.warn('Supabase updateListing warning:', error.message);
+      }
+    } catch (err) {
+      console.warn('Exception Supabase updateListing:', err?.message || err);
+    }
+  }
+
+  return updatedListing;
+}
+
+/**
  * Met à jour le statut d'une annonce (Validation, suspension, refus)
  */
 export async function updateListingStatus(id, newStatus, rejectionReason = '') {
