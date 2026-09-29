@@ -132,11 +132,6 @@ export function PartnerDashboardPage() {
   const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
   const [photoError, setPhotoError] = useState('');
-  const [uploadedVideo, setUploadedVideo] = useState(null); // { url, previewUrl, name, sizeMB }
-  const [videoSourceType, setVideoSourceType] = useState('file'); // 'file' | 'url'
-  const [videoUrlInput, setVideoUrlInput] = useState('');
-  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
-  const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -167,11 +162,6 @@ export function PartnerDashboardPage() {
   const [editPhotoUrlInput, setEditPhotoUrlInput] = useState('');
   const [editPhotoError, setEditPhotoError] = useState('');
   const [editIsCompressingPhotos, setEditIsCompressingPhotos] = useState(false);
-  const [editVideoUrl, setEditVideoUrl] = useState('');
-  const [editVideoUrlInput, setEditVideoUrlInput] = useState('');
-  const [editVideoSourceType, setEditVideoSourceType] = useState('url'); // 'file' | 'url'
-  const [editVideoError, setEditVideoError] = useState('');
-  const [editIsUploadingVideo, setEditIsUploadingVideo] = useState(false);
   const [editIsSaving, setEditIsSaving] = useState(false);
   const [editSuccessAlert, setEditSuccessAlert] = useState('');
 
@@ -573,74 +563,6 @@ export function PartnerDashboardPage() {
     }
   };
 
-  // Video handlers (short tour video, max 50MB or web URL)
-  const handleVideoUpload = async (e) => {
-    setVideoError('');
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('video/')) {
-      setVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4 ou WebM.');
-      return;
-    }
-
-    const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 50) {
-      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo (durée recommandée : 15 à 60 secondes).`);
-      return;
-    }
-
-    setIsUploadingVideo(true);
-    try {
-      const ownerId = user?.id || 'partner';
-      // Téléversement ordonné dans le dossier vidéo du profil : <userId>/<listingId>/videos/<filename>
-      const persistentId = await uploadMediaFile(file, {
-        userId: ownerId,
-        listingId: 'new_listing',
-        category: 'videos'
-      });
-      const objectUrl = URL.createObjectURL(file);
-      setUploadedVideo({
-        url: persistentId,
-        previewUrl: objectUrl,
-        name: file.name,
-        sizeMB: sizeMB.toFixed(1)
-      });
-    } catch (err) {
-      console.warn('Erreur sauvegarde vidéo:', err);
-      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien web.');
-    } finally {
-      setIsUploadingVideo(false);
-    }
-  };
-
-  const handleAddVideoUrl = () => {
-    const trimmed = videoUrlInput.trim();
-    if (!trimmed) return;
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      setVideoError('Veuillez entrer une adresse URL valide commençant par https://');
-      return;
-    }
-    const embedInfo = parseVideoEmbed(trimmed);
-    setUploadedVideo({
-      url: trimmed,
-      previewUrl: trimmed,
-      name: embedInfo?.serviceName ? `Vidéo ${embedInfo.serviceName}` : 'Vidéo en ligne',
-      sizeMB: 'Web'
-    });
-    setVideoUrlInput('');
-    setVideoError('');
-  };
-
-  const handleRemoveVideo = () => {
-    if (uploadedVideo?.previewUrl && uploadedVideo.previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(uploadedVideo.previewUrl);
-    }
-    setUploadedVideo(null);
-    setVideoError('');
-  };
-
-
   // ==========================================
   // GESTION DE LA MODIFICATION D'UNE ANNONCE
   // ==========================================
@@ -662,10 +584,6 @@ export function PartnerDashboardPage() {
     setEditUploadedPhotos(Array.isArray(item.gallery) ? [...item.gallery] : []);
     setEditPhotoUrlInput('');
     setEditPhotoError('');
-    setEditVideoUrl(item.video_url || '');
-    setEditVideoUrlInput('');
-    setEditVideoSourceType('url');
-    setEditVideoError('');
     setEditSuccessAlert('');
   };
 
@@ -738,62 +656,10 @@ export function PartnerDashboardPage() {
     });
   };
 
-  const handleEditVideoUpload = async (e) => {
-    setEditVideoError('');
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('video/')) {
-      setEditVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4 ou WebM.');
-      return;
-    }
-
-    const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 50) {
-      setEditVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo.`);
-      return;
-    }
-
-    setEditIsUploadingVideo(true);
-    try {
-      const ownerId = user?.id || 'partner';
-      const listingId = editingListingModal?.id || 'listing';
-      const persistentId = await uploadMediaFile(file, {
-        userId: ownerId,
-        listingId: listingId,
-        category: 'videos'
-      });
-      setEditVideoUrl(persistentId);
-    } catch (err) {
-      console.warn('Erreur upload vidéo:', err);
-      setEditVideoError('Impossible de traiter la vidéo.');
-    } finally {
-      setEditIsUploadingVideo(false);
-    }
-  };
-
-  const handleEditAddVideoUrl = () => {
-    const trimmed = editVideoUrlInput.trim();
-    if (!trimmed) return;
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      setEditVideoError('Veuillez entrer une adresse URL valide (https://...)');
-      return;
-    }
-    setEditVideoUrl(trimmed);
-    setEditVideoUrlInput('');
-    setEditVideoError('');
-  };
-
-  const handleEditRemoveVideo = () => {
-    setEditVideoUrl('');
-    setEditVideoError('');
-  };
-
   const handleSaveListingEdit = async (e) => {
     e.preventDefault();
     if (!editingListingModal) return;
     setEditPhotoError('');
-    setEditVideoError('');
 
     if (editUploadedPhotos.length === 0) {
       setEditPhotoError("L'annonce doit comporter au moins une photo en haute résolution.");
@@ -839,7 +705,7 @@ export function PartnerDashboardPage() {
         available_from: editFormAvailableFrom || null,
         available_to: editFormAvailableTo || null,
         gallery: editUploadedPhotos,
-        video_url: editVideoUrl || null,
+        video_url: editingListingModal.video_url || null,
         status: nextStatus,
         rejection_reason: editingListingModal.status === 'refused' ? null : (editingListingModal.rejection_reason || null),
         badge: nextBadge,
@@ -881,7 +747,6 @@ export function PartnerDashboardPage() {
   const handlePublishSubmit = async (e) => {
     e.preventDefault();
     setPhotoError('');
-    setVideoError('');
 
     if (uploadedPhotos.length === 0) {
       setPhotoError("Vous devez ajouter au moins une photo en haute résolution de votre bien.");
@@ -915,7 +780,7 @@ export function PartnerDashboardPage() {
         : (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente de certification KYC'),
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
       gallery: finalGallery,
-      video_url: uploadedVideo?.url || null,
+      video_url: null,
       status: isPartnerCertified ? 'active' : 'pending', // Les hôtes certifiés sont publiés directement en ligne
       owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : (user?.id || null),
       owner_name: user?.name || (isPartnerCertified ? 'Propriétaire Certifié' : 'Partenaire Hôte'),
@@ -941,7 +806,6 @@ export function PartnerDashboardPage() {
     setFormPrice('');
     setFormDescription('');
     setUploadedPhotos([]);
-    setUploadedVideo(null);
     setFeaturedPhotoIndex(0);
     setAvailableFrom('');
     setAvailableTo('');
@@ -2411,134 +2275,6 @@ export function PartnerDashboardPage() {
                   )}
                 </div>
 
-                {/* 6. TÉLÉVERSEMENT DE VIDÉO COURTE D'APERÇU (Short Tour) */}
-                <div className="space-y-3 pt-3 border-t border-foreground/10">
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                      4. Visite Vidéo d'Aperçu (Optionnelle mais fortement recommandée)
-                    </label>
-                    <p className="text-[11px] text-foreground/60">
-                      Ajoutez une courte vidéo immersive (15 à 45 secondes, max 25 Mo) montrant l'intérieur ou les extérieurs
-                    </p>
-                  </div>
-
-                  {videoError && (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
-                      <FontAwesomeIcon icon={faTriangleExclamation} />
-                      <span>{videoError}</span>
-                    </div>
-                  )}
-
-                  {!uploadedVideo ? (
-                    <div className="space-y-3">
-                      {/* Video mode switcher tabs */}
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setVideoSourceType('file')}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
-                            videoSourceType === 'file'
-                              ? 'bg-primary text-white border-primary shadow-sm'
-                              : 'bg-muted/30 text-foreground/70 border-foreground/10 hover:bg-muted/60'
-                          }`}
-                        >
-                          Fichier Vidéo (MP4, WebM)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setVideoSourceType('url')}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
-                            videoSourceType === 'url'
-                              ? 'bg-primary text-white border-primary shadow-sm'
-                              : 'bg-muted/30 text-foreground/70 border-foreground/10 hover:bg-muted/60'
-                          }`}
-                        >
-                          Lien Web (YouTube, Vimeo, MP4)
-                        </button>
-                      </div>
-
-                      {videoSourceType === 'file' ? (
-                        <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
-                          <input
-                            type="file"
-                            id="host-video-upload"
-                            accept="video/mp4,video/webm,video/quicktime"
-                            onChange={handleVideoUpload}
-                            disabled={isUploadingVideo}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                          />
-                          <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
-                            <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
-                              <FontAwesomeIcon icon={faVideo} />
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-foreground">
-                                {isUploadingVideo ? 'Enregistrement de la vidéo en cours…' : 'Sélectionner une vidéo d\'aperçu (.MP4 ou .WebM)'}
-                              </p>
-                              <p className="text-[10px] text-foreground/50">
-                                Durée recommandée : 15 à 45 secondes (max 35 Mo)
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            value={videoUrlInput}
-                            onChange={(e) => setVideoUrlInput(e.target.value)}
-                            placeholder="https://www.youtube.com/watch?v=... ou https://vimeo.com/..."
-                            className="flex-1 rounded-xl border border-foreground/15 bg-background px-4 py-2.5 text-xs text-foreground placeholder:text-foreground/40 outline-none focus:border-primary"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddVideoUrl}
-                            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-all shrink-0"
-                          >
-                            Ajouter le lien
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-2xl border border-foreground/10 bg-background space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
-                          <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
-                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB})</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleRemoveVideo}
-                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                          <span>Supprimer la vidéo</span>
-                        </button>
-                      </div>
-
-                      {/* Integrated HTML5 / Web Video Preview Player */}
-                      <div className="aspect-video w-full max-w-md mx-auto rounded-xl overflow-hidden bg-black shadow">
-                        {uploadedVideo.previewUrl?.includes('youtube') || uploadedVideo.previewUrl?.includes('youtu.be') ? (
-                          <iframe
-                            src={uploadedVideo.previewUrl.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube-nocookie.com/embed/')}
-                            title="Aperçu vidéo"
-                            className="h-full w-full border-0"
-                            allowFullScreen
-                          />
-                        ) : (
-                          <video
-                            src={uploadedVideo.previewUrl}
-                            controls
-                            className="w-full h-full object-contain"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 {/* Submit button */}
                 <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
                   <button
@@ -2591,7 +2327,7 @@ export function PartnerDashboardPage() {
                 </div>
 
                 <p className="text-[11px] text-foreground/60 leading-normal">
-                  Conseil : Reprenez des photos horizontales lumineuses en plein jour ou filmez une courte vidéo claire afin de soumettre à nouveau votre bien.
+                  Conseil : Reprenez des photos horizontales lumineuses en plein jour sous plusieurs angles nets afin de soumettre à nouveau votre bien.
                 </p>
 
                 <div className="pt-2 flex justify-end">
@@ -4087,109 +3823,7 @@ export function PartnerDashboardPage() {
                 </div>
               </div>
 
-              {/* 6. Vidéo de présentation */}
-              <div className="space-y-3 pt-2 border-t border-foreground/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                      4. Visite Vidéo d'Aperçu
-                    </label>
-                    <p className="text-[11px] text-foreground/60">
-                      Lien YouTube, Vimeo, ou court fichier vidéo MP4
-                    </p>
-                  </div>
-                </div>
-
-                {editVideoError && (
-                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
-                    <FontAwesomeIcon icon={faTriangleExclamation} />
-                    <span>{editVideoError}</span>
-                  </div>
-                )}
-
-                {editVideoUrl ? (
-                  <div className="p-3.5 rounded-2xl bg-muted/40 border border-foreground/10 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-accent/20 text-accent flex items-center justify-center shrink-0">
-                        <FontAwesomeIcon icon={faVideo} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate">
-                          Vidéo configurée
-                        </p>
-                        <p className="text-[11px] text-foreground/60 font-mono truncate">
-                          {editVideoUrl.length > 50 ? `${editVideoUrl.slice(0, 48)}…` : editVideoUrl}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleEditRemoveVideo}
-                      className="rounded-xl border border-rose-200 text-rose-600 px-3 py-1.5 text-xs font-semibold hover:bg-rose-50 transition-colors shrink-0"
-                    >
-                      Retirer la vidéo
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditVideoSourceType('url')}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                          editVideoSourceType === 'url' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
-                        }`}
-                      >
-                        Lien Web (YouTube, Vimeo)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditVideoSourceType('file')}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                          editVideoSourceType === 'file' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
-                        }`}
-                      >
-                        Fichier MP4/WebM
-                      </button>
-                    </div>
-
-                    {editVideoSourceType === 'url' ? (
-                      <div className="flex gap-2">
-                        <input
-                          type="url"
-                          placeholder="https://www.youtube.com/watch?v=... ou https://vimeo.com/..."
-                          value={editVideoUrlInput}
-                          onChange={(e) => setEditVideoUrlInput(e.target.value)}
-                          className="flex-1 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleEditAddVideoUrl}
-                          className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow hover:bg-primary/90"
-                        >
-                          Valider le lien
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="relative border-2 border-dashed border-foreground/20 rounded-2xl p-4 text-center bg-muted/10">
-                        <input
-                          type="file"
-                          accept="video/mp4,video/webm"
-                          onChange={handleEditVideoUpload}
-                          disabled={editIsUploadingVideo}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                        />
-                        <FontAwesomeIcon icon={faVideo} className="text-accent text-lg mb-1" />
-                        <p className="text-xs font-semibold text-foreground">
-                          {editIsUploadingVideo ? 'Enregistrement de la vidéo…' : 'Choisir une vidéo (.MP4, max 35 Mo)'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* 7. Caractéristiques & Description */}
+              {/* 4. Caractéristiques & Description */}
               <div className="space-y-4 pt-2 border-t border-foreground/10">
                 <div>
                   <label className="text-xs font-semibold text-foreground/80 block mb-1">
