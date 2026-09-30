@@ -30,21 +30,35 @@ export function RegisterPage() {
   const location = useLocation();
   const { register, loginWithGoogle, user } = useAuth();
 
-  // Onboarding Step State: 1 = Identité, 2 = Activité & Enseigne, 3 = Dossier KYC (IFU/RCCM/CIP)
+  const searchParams = new URLSearchParams(location.search);
+  const typeParam = searchParams.get('type') || '';
+  const emailParam = searchParams.get('email') || '';
+
+  // Type de compte : 'client' (Voyageur) ou 'owner' (Partenaire Hébergement/Mobilité)
+  const [accountType, setAccountType] = useState(() => (typeParam === 'owner' || typeParam === 'partner' ? 'owner' : 'client'));
+
+  // Formulaire Voyageur (Client)
+  const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState(() => emailParam);
+  const [clientPhone, setClientPhone] = useState('+229 ');
+  const [clientPassword, setClientPassword] = useState('');
+  const [clientConfirmPassword, setClientConfirmPassword] = useState('');
+
+  // Onboarding Step State (Partenaire) : 1 = Identité, 2 = Activité & Enseigne, 3 = Dossier KYC (IFU/RCCM/CIP)
   const [step, setStep] = useState(1);
 
-  // Étape 1 : Identité & Contact
+  // Étape 1 : Identité & Contact (Partenaire)
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => emailParam);
   const [phone, setPhone] = useState('+229 ');
   const [password, setPassword] = useState('');
 
-  // Étape 2 : Structure & Activité
+  // Étape 2 : Structure & Activité (Partenaire)
   const [company, setCompany] = useState('');
   const [partnerType, setPartnerType] = useState('stay'); // 'stay' | 'drive' | 'both'
   const [city, setCity] = useState('Cotonou');
 
-  // Étape 3 : Conformité Légale & KYC
+  // Étape 3 : Conformité Légale & KYC (Partenaire)
   const [legalStatus, setLegalStatus] = useState('company'); // 'company' | 'individual'
   const [taxId, setTaxId] = useState(''); // Numéro IFU au Bénin
   const [rccm, setRccm] = useState(''); // RCCM
@@ -174,6 +188,64 @@ export function RegisterPage() {
     }
   };
 
+  const handleClientSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+
+    if (!clientName.trim() || !clientEmail.trim() || !clientPassword) {
+      setError('Veuillez renseigner votre nom, e-mail et mot de passe.');
+      return;
+    }
+    if (clientPassword.length < 6) {
+      setError('Le mot de passe doit comporter au moins 6 caractères.');
+      return;
+    }
+    if (clientPassword !== clientConfirmPassword) {
+      setError('Les deux mots de passe saisis ne sont pas identiques.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await register({
+        name: clientName,
+        email: clientEmail,
+        phone: clientPhone,
+        role: 'client',
+        password: clientPassword
+      });
+
+      if (res.success) {
+        setSuccessMsg('Votre compte Voyageur a été créé avec succès ! Accès à votre espace...');
+        setTimeout(() => {
+          navigate('/dashboard/client', { replace: true });
+        }, 500);
+      } else {
+        setError(res.error || "Impossible d'enregistrer votre compte.");
+      }
+    } catch (err) {
+      setError("Une erreur est survenue lors de l'enregistrement de votre compte.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClientGoogleRegister = async () => {
+    setError('');
+    setLoadingGoogle(true);
+    try {
+      const res = await loginWithGoogle('client');
+      if (res?.error) {
+        setError(res.error);
+      }
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la connexion Google');
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
   return (
     <div className="relative min-h-[92vh] w-full flex items-center justify-center px-4 py-16">
       {/* Background Ambience */}
@@ -183,86 +255,313 @@ export function RegisterPage() {
       <div className="relative z-10 w-full max-w-xl">
         <ScrollReveal delay={0} y={20}>
           
-          {/* Header */}
-          <div className="text-center mb-8 flex flex-col items-center">
-            <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
-              <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
-              <span className="font-heading text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
-                Bénin Beyond
-              </span>
-            </Link>
-            <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-accent/20 border border-accent/40 text-accent text-[11px] font-bold uppercase tracking-wider">
-              <FontAwesomeIcon icon={faBuilding} className="h-3 w-3" />
-              <span>Espace Propriétaire & Partenaire</span>
-            </div>
-            <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
-              Créer votre compte Partenaire
-            </h1>
-            <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
-              Rejoignez le réseau officiel de prestige au Bénin pour vos résidences de standing et flottes de véhicules d'exception.
-            </p>
+          {/* Account Type Selector Tab */}
+          <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-card/85 border border-foreground/10 mb-6 backdrop-blur-md shadow-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setAccountType('client');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all ${
+                accountType === 'client'
+                  ? 'bg-primary text-white shadow-md'
+                  : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <FontAwesomeIcon icon={faCompass} />
+              <span>Compte Voyageur</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountType('owner');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all ${
+                accountType === 'owner'
+                  ? 'bg-primary text-white shadow-md'
+                  : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <FontAwesomeIcon icon={faBuilding} />
+              <span>Compte Partenaire Pro</span>
+            </button>
           </div>
 
-          {/* Stepper Wizard Indicator */}
-          <div className="flex items-center justify-between mb-8 px-2 sm:px-6">
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step >= 1 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
-                }`}
-              >
-                1
+          {accountType === 'client' ? (
+            <>
+              {/* Header Voyageur */}
+              <div className="text-center mb-8 flex flex-col items-center">
+                <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
+                  <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
+                  <span className="font-heading text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Bénin Beyond
+                  </span>
+                </Link>
+                <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold uppercase tracking-wider">
+                  <FontAwesomeIcon icon={faCompass} className="h-3 w-3" />
+                  <span>Espace Voyageur Privilège</span>
+                </div>
+                <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
+                  Créer votre compte Voyageur
+                </h1>
+                <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
+                  Réservez vos résidences de prestige, véhicules d'exception et packs au Bénin en direct.
+                </p>
               </div>
-              <span className={`text-xs font-semibold hidden sm:inline ${step === 1 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
-                Identité
-              </span>
-            </div>
-            
-            <div className={`flex-1 h-0.5 mx-3 transition-colors ${step >= 2 ? 'bg-primary' : 'bg-foreground/15'}`} />
 
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step >= 2 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
-                }`}
-              >
-                2
-              </div>
-              <span className={`text-xs font-semibold hidden sm:inline ${step === 2 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
-                Votre Enseigne
-              </span>
-            </div>
+              {/* Main Card Voyageur */}
+              <div className="rounded-3xl border border-foreground/10 bg-card/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+                {error && (
+                  <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center justify-between gap-2.5 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                    {error.includes('déjà associé') && (
+                      <Link to="/login" className="font-bold underline text-primary shrink-0 ml-2">
+                        Se connecter
+                      </Link>
+                    )}
+                  </div>
+                )}
+                {successMsg && (
+                  <div className="mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2.5 animate-fadeIn">
+                    <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
+                    <span>{successMsg}</span>
+                  </div>
+                )}
 
-            <div className={`flex-1 h-0.5 mx-3 transition-colors ${step >= 3 ? 'bg-primary' : 'bg-foreground/15'}`} />
+                {/* Google Quick Button */}
+                <button
+                  type="button"
+                  onClick={handleClientGoogleRegister}
+                  disabled={loadingGoogle || loading}
+                  className="w-full flex items-center justify-center gap-3 rounded-xl border border-foreground/15 bg-white text-gray-800 py-3 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-60"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                  </svg>
+                  <span>{loadingGoogle ? 'Connexion Google...' : "S'inscrire avec Google"}</span>
+                </button>
 
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step >= 3 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
-                }`}
-              >
-                3
-              </div>
-              <span className={`text-xs font-semibold hidden sm:inline ${step === 3 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
-                Conformité KYC
-              </span>
-            </div>
-          </div>
+                <div className="relative my-5 flex items-center justify-center">
+                  <div className="w-full border-t border-foreground/10" />
+                  <span className="absolute bg-card px-3 text-[11px] font-medium uppercase tracking-wider text-foreground/50">
+                    ou avec votre e-mail
+                  </span>
+                </div>
 
-          {/* Main Card */}
-          <div className="rounded-3xl border border-foreground/10 bg-card/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-            {error && (
-              <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center gap-2.5 animate-fadeIn">
-                <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
+                <form onSubmit={handleClientSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-foreground mb-1">
+                      Nom et prénom(s) *
+                    </label>
+                    <div className="relative">
+                      <FontAwesomeIcon icon={faUser} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                      <input
+                        type="text"
+                        required
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                        placeholder="Ex: Amina Koffi"
+                        className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-foreground mb-1">
+                      Adresse e-mail personnelle *
+                    </label>
+                    <div className="relative">
+                      <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                      <input
+                        type="email"
+                        required
+                        value={clientEmail}
+                        onChange={(e) => setClientEmail(e.target.value)}
+                        placeholder="votre.email@domaine.com"
+                        className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-foreground mb-1">
+                      Numéro Téléphone / WhatsApp *
+                    </label>
+                    <div className="relative">
+                      <FontAwesomeIcon icon={faPhone} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                      <input
+                        type="tel"
+                        required
+                        value={clientPhone}
+                        onChange={(e) => setClientPhone(e.target.value)}
+                        placeholder="+229 97 00 00 00"
+                        className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-foreground mb-1">
+                        Mot de passe *
+                      </label>
+                      <div className="relative">
+                        <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                        <input
+                          type="password"
+                          required
+                          value={clientPassword}
+                          onChange={(e) => setClientPassword(e.target.value)}
+                          placeholder="Min. 6 caractères"
+                          className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-foreground mb-1">
+                        Confirmer mot de passe *
+                      </label>
+                      <div className="relative">
+                        <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                        <input
+                          type="password"
+                          required
+                          value={clientConfirmPassword}
+                          onChange={(e) => setClientConfirmPassword(e.target.value)}
+                          placeholder="Répéter le mot de passe"
+                          className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || loadingGoogle}
+                    className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-bold text-white shadow-md hover:bg-primary/95 active:scale-[0.98] transition-all disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <>
+                        <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
+                        <span>Création du compte...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Créer mon compte Voyageur</span>
+                        <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                <div className="mt-5 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
+                  <span>Vous possédez déjà un compte ? </span>
+                  <Link to="/login" className="font-bold text-primary hover:underline">
+                    Se connecter
+                  </Link>
+                </div>
               </div>
-            )}
-            {successMsg && (
-              <div className="mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs text-emerald-700 font-semibold flex items-center gap-2.5 animate-fadeIn">
-                <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
-                <span>{successMsg}</span>
+            </>
+          ) : (
+            <>
+              {/* Header Partenaire */}
+              <div className="text-center mb-8 flex flex-col items-center">
+                <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
+                  <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
+                  <span className="font-heading text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    Bénin Beyond
+                  </span>
+                </Link>
+                <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-accent/20 border border-accent/40 text-accent text-[11px] font-bold uppercase tracking-wider">
+                  <FontAwesomeIcon icon={faBuilding} className="h-3 w-3" />
+                  <span>Espace Propriétaire & Partenaire</span>
+                </div>
+                <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
+                  Créer votre compte Partenaire
+                </h1>
+                <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
+                  Rejoignez le réseau officiel de prestige au Bénin pour vos résidences de standing et flottes de véhicules d'exception.
+                </p>
               </div>
-            )}
+
+              {/* Stepper Wizard Indicator */}
+              <div className="flex items-center justify-between mb-8 px-2 sm:px-6">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      step >= 1 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
+                    }`}
+                  >
+                    1
+                  </div>
+                  <span className={`text-xs font-semibold hidden sm:inline ${step === 1 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
+                    Identité
+                  </span>
+                </div>
+                
+                <div className={`flex-1 h-0.5 mx-3 transition-colors ${step >= 2 ? 'bg-primary' : 'bg-foreground/15'}`} />
+
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      step >= 2 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
+                    }`}
+                  >
+                    2
+                  </div>
+                  <span className={`text-xs font-semibold hidden sm:inline ${step === 2 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
+                    Votre Enseigne
+                  </span>
+                </div>
+
+                <div className={`flex-1 h-0.5 mx-3 transition-colors ${step >= 3 ? 'bg-primary' : 'bg-foreground/15'}`} />
+
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      step >= 3 ? 'bg-primary text-white shadow-md' : 'bg-muted text-foreground/40 border border-foreground/10'
+                    }`}
+                  >
+                    3
+                  </div>
+                  <span className={`text-xs font-semibold hidden sm:inline ${step === 3 ? 'text-primary font-bold' : 'text-foreground/60'}`}>
+                    Conformité KYC
+                  </span>
+                </div>
+              </div>
+
+              {/* Main Card Partenaire */}
+              <div className="rounded-3xl border border-foreground/10 bg-card/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+                {error && (
+                  <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center justify-between gap-2.5 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                    {error.includes('déjà associé') && (
+                      <Link to="/login" className="font-bold underline text-primary shrink-0 ml-2">
+                        Se connecter
+                      </Link>
+                    )}
+                  </div>
+                )}
+                {successMsg && (
+                  <div className="mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs text-emerald-700 font-semibold flex items-center gap-2.5 animate-fadeIn">
+                    <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
+                    <span>{successMsg}</span>
+                  </div>
+                )}
 
             {/* ========================================================================= */}
             {/* STEP 1 : IDENTITÉ & CONTACT */}
@@ -678,31 +977,72 @@ export function RegisterPage() {
               </form>
             )}
           </div>
+            </>
+          )}
 
-          {/* Traveler Reassurance Banner at bottom */}
+          {/* Contextual Reassurance Banner at bottom */}
           <div className="mt-8 rounded-2xl border border-foreground/10 bg-card/60 p-4 text-center backdrop-blur-sm">
-            <p className="text-xs text-foreground/70">
-              <span className="font-bold text-foreground">Vous êtes un voyageur ?</span> Vous n'avez pas besoin de créer de compte ici.
-            </p>
-            <p className="text-[11px] text-foreground/50 mt-0.5">
-              Votre Espace Voyageur est activé automatiquement dès votre première réservation !
-            </p>
-            <div className="mt-3 flex items-center justify-center gap-3">
-              <Link
-                to="/explore"
-                className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
-              >
-                <span>Explorer les villas & véhicules</span>
-                <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
-              </Link>
-              <span className="text-foreground/30">•</span>
-              <Link
-                to="/login"
-                className="text-xs font-semibold text-foreground/70 hover:text-foreground hover:underline"
-              >
-                Déjà client ? Se connecter
-              </Link>
-            </div>
+            {accountType === 'client' ? (
+              <>
+                <p className="text-xs text-foreground/70">
+                  <span className="font-bold text-foreground">Vous êtes propriétaire de résidences de standing ou loueur de véhicules ?</span>
+                </p>
+                <p className="text-[11px] text-foreground/50 mt-0.5">
+                  Publiez vos annonces et développez votre activité sur la plateforme n°1 au Bénin.
+                </p>
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountType('owner');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-xs font-bold text-accent hover:underline flex items-center gap-1"
+                  >
+                    <span>Passer en Espace Partenaire Pro</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
+                  </button>
+                  <span className="text-foreground/30">•</span>
+                  <Link
+                    to="/login"
+                    className="text-xs font-semibold text-foreground/70 hover:text-foreground hover:underline"
+                  >
+                    Déjà inscrit ? Se connecter
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-foreground/70">
+                  <span className="font-bold text-foreground">Vous êtes un voyageur ?</span> Vous pouvez réserver ou créer un compte client en 1 clic.
+                </p>
+                <p className="text-[11px] text-foreground/50 mt-0.5">
+                  Votre Espace Voyageur vous permet de suivre vos réservations et reçus en direct.
+                </p>
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountType('client');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                  >
+                    <span>Créer un compte Voyageur</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
+                  </button>
+                  <span className="text-foreground/30">•</span>
+                  <Link
+                    to="/login"
+                    className="text-xs font-semibold text-foreground/70 hover:text-foreground hover:underline"
+                  >
+                    Déjà client ? Se connecter
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
 
         </ScrollReveal>

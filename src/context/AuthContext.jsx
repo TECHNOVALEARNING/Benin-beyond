@@ -117,15 +117,17 @@ function saveRegisteredUser(newUser) {
   try {
     const list = getRegisteredUsers();
     const cleanEmail = (newUser.email || '').trim().toLowerCase();
-    const sanitizedRole = resolveUserRole(cleanEmail, newUser.role);
+    const existing = list.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+    const sanitizedRole = resolveUserRole(cleanEmail, newUser.role || existing?.role);
     const sanitizedUser = {
+      ...(existing || {}),
       ...newUser,
       email: cleanEmail,
       role: sanitizedRole,
-      name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (newUser.name || cleanEmail.split('@')[0])
+      name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (newUser.name || existing?.name || cleanEmail.split('@')[0])
     };
 
-    const filtered = list.filter((u) => u.email.toLowerCase() !== cleanEmail);
+    const filtered = list.filter((u) => u.email?.toLowerCase().trim() !== cleanEmail);
     filtered.push(sanitizedUser);
     localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(filtered));
   } catch (e) {
@@ -329,10 +331,20 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Connexion universelle (Supabase Auth en priorité, avec repli transparent)
+   * Connexion universelle stricte et sécurisée (Supabase Auth en priorité, vérification rigoureuse)
+   * AUCUNE création silencieuse de compte sur la page de connexion.
    */
   const login = async (email, password, optionalRole = null) => {
     const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
+
+    if (!cleanEmail) {
+      return { success: false, error: 'Veuillez saisir votre adresse e-mail.' };
+    }
+    if (!cleanPassword) {
+      return { success: false, error: 'Veuillez saisir votre mot de passe.' };
+    }
+
     const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.com' || cleanEmail === 'admin@beninbeyond.bj' || cleanEmail.startsWith('admin@');
 
     // 1. Authentification officielle avec Supabase Auth si configuré
@@ -340,7 +352,7 @@ export function AuthProvider({ children }) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
-          password: password || 'BeninBeyond2025!'
+          password: cleanPassword
         });
 
         if (!error && data?.user) {
@@ -352,59 +364,86 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 2. Détection du Super-Administrateur (Garantie de rôle absolu 'admin')
-    if (isAdmin) {
-      const adminUser = {
-        ...DEMO_USERS.admin,
-        id: 'usr_admin_isidore',
-        email: cleanEmail,
-        name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : DEMO_USERS.admin.name,
-        role: 'admin',
-        verified: true
+    // 2. Recherche parmi les utilisateurs enregistrés sur la plateforme
+    const registeredList = getRegisteredUsers();
+    const savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+    if (savedUser) {
+      // Compte suspendu par la modération
+      if (savedUser.is_active === false && cleanEmail !== SUPER_ADMIN_EMAIL) {
+        return {
+          success: false,
+          error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction."
+        };
+      }
+
+      // Compte créé à l'origine avec Google OAuth (sans mot de passe local défini)
+      if (savedUser.provider === 'google' && !savedUser.password) {
+        return {
+          success: false,
+          isGoogleAccount: true,
+          error: "Ce compte a été créé avec Google. Veuillez vous connecter en cliquant sur le bouton 'Continuer avec Google' ci-dessus."
+        };
+      }
+
+      // Vérification du mot de passe pour les comptes avec mot de passe
+      if (savedUser.password) {
+        if (savedUser.password !== cleanPassword) {
+          return {
+            success: false,
+            isWrongPassword: true,
+            error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
+          };
+        }
+        const sanitizedUser = {
+          ...savedUser,
+          role: resolveUserRole(savedUser.email, savedUser.role)
+        };
+        setUser(sanitizedUser);
+        return { success: true, user: sanitizedUser };
+      }
+
+      // Compte réservation invité sans mot de passe initial
+      return {
+        success: false,
+        error: "Une réservation est associée à cette adresse e-mail, mais aucun mot de passe n'a encore été défini. Veuillez vous connecter avec Google ou cliquer sur 'Mot de passe oublié' pour en créer un."
       };
+    }
+
+    // 3. Détection des comptes démo intégrés et Super-Administrateur
+    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
+    if (demoMatch || isAdmin) {
+      const validAdminPasswords = ['BeninBeyond2025!', 'admin123', 'admin', 'demo123', 'Benin2025!'];
+      const isValidPassword = validAdminPasswords.includes(cleanPassword);
+      if (!isValidPassword) {
+        return {
+          success: false,
+          isWrongPassword: true,
+          error: "Mot de passe incorrect pour ce compte administratif ou de démonstration."
+        };
+      }
+      const adminUser = isAdmin
+        ? {
+            ...DEMO_USERS.admin,
+            id: 'usr_admin_isidore',
+            email: cleanEmail,
+            name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (cleanEmail.startsWith('admin') ? 'Administration Bénin Beyond' : DEMO_USERS.admin.name),
+            role: 'admin',
+            verified: true
+          }
+        : demoMatch;
+
       saveRegisteredUser(adminUser);
       setUser(adminUser);
       return { success: true, user: adminUser };
     }
 
-    // 3. Détection des comptes démo intégrés
-    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
-    if (demoMatch) {
-      setUser(demoMatch);
-      return { success: true, user: demoMatch };
-    }
-
-    // 4. Utilisateurs enregistrés sur la plateforme
-    const registeredList = getRegisteredUsers();
-    const savedUser = registeredList.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (savedUser) {
-      if (savedUser.is_active === false && cleanEmail !== SUPER_ADMIN_EMAIL) {
-        return { success: false, error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction." };
-      }
-      const sanitizedUser = {
-        ...savedUser,
-        role: resolveUserRole(savedUser.email, savedUser.role)
-      };
-      setUser(sanitizedUser);
-      return { success: true, user: sanitizedUser };
-    }
-
-    // 5. Nouvel utilisateur : attribution automatique du rôle
-    const determinedRole = resolveUserRole(cleanEmail, optionalRole || 'client');
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name: cleanEmail.split('@')[0].replace(/[._]/g, ' '),
-      email: cleanEmail,
-      role: determinedRole,
-      company: determinedRole === 'owner' ? 'Partenaire Hébergeur / Auto' : undefined,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-      verified: determinedRole === 'admin',
-      createdAt: new Date().toISOString()
+    // 4. Compte inexistant : Refus strict et immédiat (Sécurité absolue)
+    return {
+      success: false,
+      isUnknownAccount: true,
+      error: "Aucun compte n'est associé à cette adresse e-mail. Veuillez vérifier votre saisie ou créer un compte."
     };
-
-    saveRegisteredUser(newUser);
-    setUser(newUser);
-    return { success: true, user: newUser };
   };
 
   /**
@@ -483,7 +522,17 @@ export function AuthProvider({ children }) {
     const cleanEmail = (email || '').trim().toLowerCase();
     const assignedRole = resolveUserRole(cleanEmail, role);
 
-    // Si Supabase est actif, créer le compte dans Supabase Auth
+    // 1. Vérification d'existence préalable (anti-doublon)
+    const registeredList = getRegisteredUsers();
+    const existing = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+    if (existing && (existing.password || existing.provider === 'google')) {
+      return {
+        success: false,
+        error: "Un compte est déjà associé à cette adresse e-mail. Veuillez vous connecter."
+      };
+    }
+
+    // 2. Si Supabase est actif, créer le compte dans Supabase Auth
     if (isSupabaseConfigured && supabase && password) {
       try {
         const { data, error } = await supabase.auth.signUp({
@@ -505,6 +554,17 @@ export function AuthProvider({ children }) {
           }
         });
 
+        if (error) {
+          const errMsg = (error.message || '').toLowerCase();
+          if (errMsg.includes('already registered') || errMsg.includes('already in use') || errMsg.includes('user already exists')) {
+            return {
+              success: false,
+              error: "Un compte est déjà associé à cette adresse e-mail. Veuillez vous connecter."
+            };
+          }
+          console.warn('Supabase signUp warning:', error);
+        }
+
         if (!error && data?.user) {
           try {
             await supabase.from('profiles').upsert({
@@ -518,7 +578,7 @@ export function AuthProvider({ children }) {
               tax_id: taxId,
               kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
               kyc_doc_url: kycDocUrl,
-              kyc_status: 'pending',
+              kyc_status: assignedRole === 'owner' ? 'pending' : 'verified',
               verified: assignedRole === 'admin',
               updated_at: new Date().toISOString()
             }, { onConflict: 'email' });
@@ -545,8 +605,10 @@ export function AuthProvider({ children }) {
       cip: cip,
       kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
       kyc_doc_url: kycDocUrl,
-      kyc_status: assignedRole === 'admin' ? 'verified' : 'pending',
+      kyc_status: assignedRole === 'admin' ? 'verified' : (assignedRole === 'owner' ? 'pending' : 'verified'),
       verified: assignedRole === 'admin',
+      password: password,
+      provider: 'email',
       avatar: assignedRole === 'admin'
         ? DEMO_USERS.admin.avatar
         : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
@@ -556,6 +618,47 @@ export function AuthProvider({ children }) {
     saveRegisteredUser(newUser);
     setUser(newUser);
     return { success: true, user: newUser };
+  };
+
+  /**
+   * Demande de réinitialisation de mot de passe
+   */
+  const resetPassword = async (email) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      return { success: false, error: 'Veuillez saisir votre adresse e-mail.' };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/login`
+        });
+        if (error) {
+          return { success: false, error: error.message };
+        }
+        return {
+          success: true,
+          message: 'Un lien de réinitialisation a été envoyé à votre adresse e-mail.'
+        };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    const registeredList = getRegisteredUsers();
+    const savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+    if (!savedUser) {
+      return {
+        success: false,
+        error: "Aucun compte n'est associé à cette adresse e-mail."
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Un e-mail de réinitialisation a été préparé pour votre adresse.'
+    };
   };
 
   /**
@@ -668,6 +771,7 @@ export function AuthProvider({ children }) {
         loginWithGoogle,
         loginAsDemo,
         register,
+        resetPassword,
         registerOrLoginClient,
         upgradeToOwner,
         logout

@@ -8,7 +8,10 @@ import {
   faCircleCheck,
   faCircleInfo,
   faSpinner,
-  faShieldHalved
+  faShieldHalved,
+  faTriangleExclamation,
+  faKey,
+  faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -17,7 +20,7 @@ import { BrandIcon } from '../components/BrandLogo';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginWithGoogle, user } = useAuth();
+  const { login, loginWithGoogle, resetPassword, user } = useAuth();
 
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || '';
@@ -26,10 +29,18 @@ export function LoginPage() {
   const [email, setEmail] = useState(() => emailParam);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [errorInfo, setErrorInfo] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [oauthTimeoutExpired, setOauthTimeoutExpired] = useState(false);
+
+  // Modal Réinitialisation mot de passe
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [forgotError, setForgotError] = useState('');
 
   const isOAuthCallback =
     window.location.hash.includes('access_token') ||
@@ -67,6 +78,7 @@ export function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setErrorInfo(null);
     setSuccessMsg('');
 
     if (!email) {
@@ -97,16 +109,49 @@ export function LoginPage() {
         }
       } else {
         setError(res.error || 'Identifiants invalides.');
+        setErrorInfo({
+          message: res.error || 'Identifiants invalides.',
+          isGoogleAccount: Boolean(res.isGoogleAccount),
+          isUnknownAccount: Boolean(res.isUnknownAccount),
+          isWrongPassword: Boolean(res.isWrongPassword)
+        });
       }
     } catch (err) {
       setError('Une erreur est survenue lors de la connexion.');
+      setErrorInfo(null);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+
+    if (!forgotEmail) {
+      setForgotError('Veuillez saisir votre adresse e-mail.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const res = await resetPassword(forgotEmail);
+      if (res.success) {
+        setForgotSuccess(res.message || 'Un lien de réinitialisation vous a été envoyé.');
+      } else {
+        setForgotError(res.error || 'Impossible d’envoyer le lien de réinitialisation.');
+      }
+    } catch (err) {
+      setForgotError('Une erreur est survenue.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setError('');
+    setErrorInfo(null);
     setLoadingGoogle(true);
     localStorage.setItem('benin_beyond_oauth_in_progress', 'true');
     try {
@@ -215,15 +260,105 @@ export function LoginPage() {
               </div>
             )}
 
-            {/* Feedback messages */}
+            {/* Feedback messages contextuels et stylisés */}
             {error && (
-              <div className="mb-4 rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
-                <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
-                <span>{error}</span>
+              <div className="mb-5 rounded-2xl border p-4 text-xs transition-all animate-fadeIn shadow-sm backdrop-blur-sm bg-card/90">
+                {errorInfo?.isUnknownAccount ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5 text-rose-600 dark:text-rose-400">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-sm">Compte introuvable</p>
+                        <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                          {error}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-rose-500/20 flex flex-wrap items-center gap-3">
+                      <Link
+                        to={`/register?email=${encodeURIComponent(email)}`}
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
+                      >
+                        <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
+                        <span>Créer un compte maintenant</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError('');
+                          setErrorInfo(null);
+                          setPassword('');
+                        }}
+                        className="text-xs text-foreground/60 hover:text-foreground underline"
+                      >
+                        Modifier l'e-mail
+                      </button>
+                    </div>
+                  </div>
+                ) : errorInfo?.isGoogleAccount ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5 text-blue-600 dark:text-blue-400">
+                      <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-sm">Compte synchronisé avec Google</p>
+                        <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                          {error}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-blue-500/20">
+                      <button
+                        type="button"
+                        onClick={handleGoogleLogin}
+                        disabled={loadingGoogle}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm active:scale-[0.98] transition-all disabled:opacity-60"
+                      >
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                          <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                          <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                        </svg>
+                        <span>Se connecter avec Google</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : errorInfo?.isWrongPassword ? (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
+                      <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-sm">Mot de passe incorrect</p>
+                        <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                          {error}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-amber-500/20 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForgotEmail(email);
+                          setShowForgotModal(true);
+                        }}
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5"
+                      >
+                        <FontAwesomeIcon icon={faKey} className="h-3 w-3" />
+                        <span>Mot de passe oublié ? Réinitialiser</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5 text-destructive">
+                    <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
+                    <span className="font-medium">{error}</span>
+                  </div>
+                )}
               </div>
             )}
+
             {successMsg && (
-              <div className="mb-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 font-semibold flex items-center gap-2">
+              <div className="mb-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2 animate-fadeIn">
                 <FontAwesomeIcon icon={faCircleCheck} className="h-3.5 w-3.5 shrink-0" />
                 <span>{successMsg}</span>
               </div>
@@ -234,7 +369,11 @@ export function LoginPage() {
               type="button"
               onClick={handleGoogleLogin}
               disabled={loadingGoogle || loading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-foreground/15 bg-white text-gray-800 py-3 text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-60"
+              className={`w-full flex items-center justify-center gap-3 rounded-xl border py-3 text-sm font-semibold shadow-sm transition-all disabled:opacity-60 ${
+                errorInfo?.isGoogleAccount
+                  ? 'border-blue-500 bg-blue-50 text-blue-900 ring-4 ring-blue-500/25 animate-pulse'
+                  : 'border-foreground/15 bg-white text-gray-800 hover:bg-gray-50 active:scale-[0.98]'
+              }`}
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path
@@ -280,7 +419,10 @@ export function LoginPage() {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (errorInfo) setErrorInfo(null);
+                    }}
                     placeholder="votre.email@domaine.com"
                     className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
@@ -293,9 +435,16 @@ export function LoginPage() {
                   <label className="block text-xs font-medium text-foreground/80">
                     Mot de passe
                   </label>
-                  <span className="text-[11px] text-primary/80 hover:text-primary cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setShowForgotModal(true);
+                    }}
+                    className="text-[11px] text-primary/80 hover:text-primary hover:underline cursor-pointer bg-transparent border-0 p-0"
+                  >
                     Mot de passe oublié ?
-                  </span>
+                  </button>
                 </div>
                 <div className="relative">
                   <FontAwesomeIcon
@@ -306,7 +455,10 @@ export function LoginPage() {
                     type="password"
                     required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (errorInfo) setErrorInfo(null);
+                    }}
                     placeholder="••••••••••••"
                     className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
@@ -333,30 +485,131 @@ export function LoginPage() {
               </button>
             </form>
 
-
             {/* Switch to Register */}
-            <div className="mt-5 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
+            <div className="mt-6 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
               <div>
-                <span>Vous êtes un voyageur ? </span>
+                <span>Vous n'avez pas encore de compte ? </span>
                 <Link
-                  to="/explore"
-                  className="font-semibold text-primary hover:underline"
+                  to={`/register${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                  className="font-bold text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  Explorer & réserver un séjour
+                  <span>Créer mon compte Voyageur</span>
+                  <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
                 </Link>
               </div>
-              <div>
-                <span>Propriétaire de villa, hôtel ou loueur auto ? </span>
+              <div className="pt-1">
+                <span>Vous êtes hébergeur ou loueur pro ? </span>
                 <Link
                   to="/register?type=owner"
                   className="font-semibold text-accent hover:underline"
                 >
-                  Rejoindre l'Espace Propriétaire
+                  Rejoindre le réseau Partenaire
                 </Link>
               </div>
             </div>
           </div>
         </ScrollReveal>
+
+        {/* Modal Réinitialisation mot de passe */}
+        {showForgotModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+            <div className="relative w-full max-w-md rounded-3xl border border-foreground/15 bg-card p-6 shadow-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotModal(false);
+                  setForgotSuccess('');
+                  setForgotError('');
+                }}
+                className="absolute top-5 right-5 text-foreground/50 hover:text-foreground p-1"
+                aria-label="Fermer"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-2 text-primary font-bold text-sm">
+                <FontAwesomeIcon icon={faKey} />
+                <span>Sécurité & Accès</span>
+              </div>
+              <h3 className="font-heading text-lg font-black text-foreground">
+                Mot de passe oublié ?
+              </h3>
+              <p className="text-xs text-foreground/65 mt-1 mb-4 leading-relaxed">
+                Indiquez votre adresse e-mail ci-dessous. Si un compte existe, nous vous enverrons immédiatement les instructions pour définir un nouveau mot de passe.
+              </p>
+
+              {forgotSuccess ? (
+                <div className="rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-sm" />
+                    <span>Lien expédié avec succès</span>
+                  </div>
+                  <p>{forgotSuccess}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotModal(false);
+                      setForgotSuccess('');
+                    }}
+                    className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
+                  >
+                    Retour à la connexion
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotSubmit} className="space-y-4">
+                  {forgotError && (
+                    <div className="rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
+                      <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
+                      <span>{forgotError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-foreground/80 mb-1">
+                      Votre adresse e-mail
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="votre.email@domaine.com"
+                      className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotModal(false);
+                        setForgotError('');
+                      }}
+                      className="flex-1 rounded-xl border border-foreground/15 py-2.5 text-xs font-bold text-foreground/70 hover:bg-muted"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="flex-1 rounded-xl bg-primary py-2.5 text-xs font-bold text-white shadow-md hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {forgotLoading ? (
+                        <>
+                          <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
+                          <span>Envoi...</span>
+                        </>
+                      ) : (
+                        <span>Envoyer le lien</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
