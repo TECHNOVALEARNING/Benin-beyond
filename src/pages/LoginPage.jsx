@@ -7,17 +7,23 @@ import {
   faArrowRight,
   faCircleCheck,
   faCircleInfo,
-  faSpinner
+  faSpinner,
+  faShieldHalved
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { BrandIcon } from '../components/BrandLogo';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, loginWithGoogle, user } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const searchParams = new URLSearchParams(location.search);
+  const emailParam = searchParams.get('email') || '';
+  const fromCheckout = searchParams.get('fromCheckout') === 'true';
+
+  const [email, setEmail] = useState(() => emailParam);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -175,25 +181,39 @@ export function LoginPage() {
       <div className="relative z-10 w-full max-w-md">
         <ScrollReveal delay={0} y={20}>
           {/* Header */}
-          <div className="text-center mb-8">
-            <Link to="/" className="inline-block">
-              <span className="font-heading text-3xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+          <div className="text-center mb-8 flex flex-col items-center">
+            <Link to="/" className="inline-flex flex-col items-center gap-2.5 group mb-2">
+              <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
+              <span className="font-heading text-3xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
                 Bénin Beyond
               </span>
             </Link>
-            <p className="caption text-xs uppercase tracking-widest text-accent font-semibold mt-2">
-              Portail Authentification
+            <p className="caption text-xs uppercase tracking-widest text-accent font-semibold">
+              Portail Authentification & Sécurité
             </p>
             <h1 className="font-heading text-2xl font-bold text-foreground mt-2">
               Connexion à votre espace
             </h1>
-            <p className="text-xs text-foreground/60 mt-1.5">
+            <p className="text-xs text-foreground/60 mt-1.5 max-w-xs mx-auto">
               Accédez à vos réservations, gérez vos biens ou pilotez la plateforme
             </p>
           </div>
 
           {/* Form Card */}
           <div className="rounded-3xl border border-foreground/10 bg-card/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+            {/* Notification de réservation confirmée sécurisée */}
+            {fromCheckout && (
+              <div className="mb-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-1.5 animate-fadeIn">
+                <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
+                  <FontAwesomeIcon icon={faShieldHalved} className="text-sm" />
+                  <span>Réservation confirmée avec succès !</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-foreground/75">
+                  Pour protéger vos données personnelles, veuillez vous connecter avec votre compte <strong>Google</strong> ou vos identifiants pour accéder à votre espace voyageur et consulter vos reçus officiels.
+                </p>
+              </div>
+            )}
+
             {/* Feedback messages */}
             {error && (
               <div className="mb-4 rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">

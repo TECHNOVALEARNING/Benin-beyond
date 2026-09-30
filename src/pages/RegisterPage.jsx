@@ -23,6 +23,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { BrandIcon } from '../components/BrandLogo';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -183,13 +184,14 @@ export function RegisterPage() {
         <ScrollReveal delay={0} y={20}>
           
           {/* Header */}
-          <div className="text-center mb-8">
-            <Link to="/" className="inline-block">
-              <span className="font-heading text-3xl font-black tracking-tight text-foreground hover:text-primary transition-colors">
+          <div className="text-center mb-8 flex flex-col items-center">
+            <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
+              <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
+              <span className="font-heading text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
                 Bénin Beyond
               </span>
             </Link>
-            <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/40 text-accent text-[11px] font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-accent/20 border border-accent/40 text-accent text-[11px] font-bold uppercase tracking-wider">
               <FontAwesomeIcon icon={faBuilding} className="h-3 w-3" />
               <span>Espace Propriétaire & Partenaire</span>
             </div>

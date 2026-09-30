@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { PublicHeader } from './components/PublicHeader';
 import { HomePage } from './pages/HomePage';
 import { ExplorePage } from './pages/ExplorePage';
 import { ListingDetailPage } from './pages/ListingDetailPage';
@@ -34,17 +35,23 @@ export function App() {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
   const isAuth = location.pathname === '/login' || location.pathname === '/register';
+  const isHome = location.pathname === '/';
   const hidePublicChrome = isDashboard || isAuth;
+  const showPublicHeader = !isHome && !hidePublicChrome;
 
   return (
     <ErrorBoundary>
       <AuthProvider>
         <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
           <ScrollToTop />
+          {showPublicHeader && <PublicHeader />}
           <main className={`flex-1 ${hidePublicChrome ? '' : 'pb-28'}`}>
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/explore" element={<ExplorePage />} />
+              <Route path="/residences" element={<ExplorePage />} />
+              <Route path="/hebergements" element={<ExplorePage />} />
+              <Route path="/vehicules" element={<ExplorePage />} />
               <Route path="/listing/:id" element={<ListingDetailPage />} />
               <Route path="/packs" element={<PacksPage />} />
               <Route path="/pack/:id" element={<PackDetailPage />} />

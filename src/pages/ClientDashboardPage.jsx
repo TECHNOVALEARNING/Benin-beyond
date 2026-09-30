@@ -27,6 +27,7 @@ import { submitReview } from '../services/reviewService';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
+import { BrandIcon } from '../components/BrandLogo';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -85,11 +86,11 @@ export function ClientDashboardPage() {
         if (!mounted) return;
         // Filter by user's email or display all user's local orders
         const filtered = all.filter((b) => {
-          if (!user?.email) return true;
-          return (
-            b.customer_email?.toLowerCase() === user.email.toLowerCase() ||
-            b.customer_name?.toLowerCase() === user.name?.toLowerCase()
-          );
+          if (!user?.email) return false;
+          const userEmail = user.email.toLowerCase().trim();
+          const bookingEmail = (b.customer_email || '').toLowerCase().trim();
+          const bookingUserId = b.user_id || b.client_id;
+          return bookingEmail === userEmail || (bookingUserId && bookingUserId === user.id);
         });
         setUserBookings(filtered);
       })
@@ -190,8 +191,9 @@ export function ClientDashboardPage() {
       <header className="sticky top-0 z-30 border-b border-foreground/10 bg-card/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <Link to="/" className="font-heading text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
-              Bénin Beyond
+            <Link to="/" className="flex items-center gap-2.5 font-heading text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+              <BrandIcon size={28} />
+              <span>Bénin Beyond</span>
             </Link>
             <span className="hidden sm:inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary border border-primary/20">
               Espace Voyageur

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLocationDot, faPhone, faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
+import { BrandLogo } from './BrandLogo';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -48,7 +49,7 @@ export function Footer() {
         {/* Brand Col */}
         <div className="sm:col-span-2 md:col-span-5 lg:col-span-4">
           <ScrollReveal delay={0} y={20}>
-            <h3 className="section-title text-2xl">Bénin Beyond</h3>
+            <BrandLogo size="md" textColor="text-secondary-foreground" subtext="Hospitalité & Mobilité d'Exception" />
             <p className="mt-4 max-w-md text-sm leading-relaxed text-secondary-foreground/70">
               L'écosystème d'hospitalité et de mobilité curaté à travers le Bénin. Là où l'héritage terrestre rencontre la précision digitale.
             </p>

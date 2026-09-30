@@ -64,6 +64,7 @@ import { saveMediaBlob, uploadMediaFile, parseVideoEmbed } from '../services/med
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
+import { BrandIcon } from '../components/BrandLogo';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -854,13 +855,16 @@ export function PartnerDashboardPage() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Brand Logo & Close button on Mobile */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] shrink-0">
-            <Link to="/" className="flex items-center gap-2 group">
-              <span className="font-heading text-[16px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
-                Bénin Beyond
-              </span>
-              <span className="rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
-                Hôte & Flotte
-              </span>
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <BrandIcon size={26} />
+              <div className="flex items-center gap-2">
+                <span className="font-heading text-[15px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
+                  Bénin Beyond
+                </span>
+                <span className="rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
+                  Hôte & Flotte
+                </span>
+              </div>
             </Link>
 
             <button

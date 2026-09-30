@@ -114,7 +114,7 @@ export function PacksPage() {
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <Link
-                to="/residences"
+                to="/explore?type=stay"
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:bg-primary/90 transition-all shadow-md"
               >
                 <FontAwesomeIcon icon={faHouse} className="h-3 w-3" />

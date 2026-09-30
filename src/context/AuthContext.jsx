@@ -557,7 +557,8 @@ export function AuthProvider({ children }) {
         role: sanitizedRole
       };
       saveRegisteredUser(existing);
-      if (user?.role !== 'admin') {
+      // Sécurité : Ne pas connecter automatiquement un inconnu sans authentification préalable
+      if (user && user.email?.toLowerCase() === cleanEmail) {
         setUser(existing);
       }
       return existing;
@@ -577,7 +578,8 @@ export function AuthProvider({ children }) {
     };
 
     saveRegisteredUser(newClient);
-    if (user?.role !== 'admin') {
+    // Sécurité : Ne connecter l'utilisateur que s'il est déjà authentifié avec cet email
+    if (user && user.email?.toLowerCase() === cleanEmail) {
       setUser(newClient);
     }
     return newClient;

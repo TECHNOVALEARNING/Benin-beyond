@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faCheck,
@@ -8,7 +8,8 @@ import {
   faMobileScreen,
   faCreditCard,
   faWallet,
-  faShieldHalved
+  faShieldHalved,
+  faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +42,7 @@ const PAYMENT_METHODS = [
 ];
 
 export function CheckoutPage() {
+  const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
   const { user, registerOrLoginClient } = useAuth();
 
@@ -55,6 +57,22 @@ export function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [redirectCountdown, setRedirectCountdown] = useState(7);
+  const [isCountdownPaused, setIsCountdownPaused] = useState(false);
+
+  useEffect(() => {
+    if (confirmedBooking && !user && !isCountdownPaused) {
+      if (redirectCountdown <= 0) {
+        const clientEmail = confirmedBooking.customer_email || customer.email || '';
+        navigate(`/login?email=${encodeURIComponent(clientEmail)}&fromCheckout=true`);
+        return;
+      }
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [confirmedBooking, user, redirectCountdown, isCountdownPaused, customer.email, navigate]);
 
   // Calculate options total
   const optionsTotal = PROTECTION_OPTIONS.reduce(
@@ -167,9 +185,16 @@ export function CheckoutPage() {
             <p className="mt-2 text-sm text-secondary-foreground/75">
               Votre itinéraire et votre voucher officiel sont enregistrés pour <strong>{confirmedBooking.customer_email || customer.email}</strong>.
             </p>
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs text-accent font-medium">
-              <span>✓ Compte Voyageur créé & actif pour cet email</span>
-            </div>
+            {user ? (
+              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs text-accent font-medium">
+                <span>✓ Enregistré sur votre compte voyageur actif</span>
+              </div>
+            ) : (
+              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs text-accent font-medium">
+                <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
+                <span>Paiement validé · Connexion requise pour accéder aux vouchers</span>
+              </div>
+            )}
           </div>
 
           {/* Details Body */}
@@ -207,19 +232,71 @@ export function CheckoutPage() {
               </span>
             </div>
 
+            {!user && (
+              <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-5">
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <FontAwesomeIcon icon={faShieldHalved} className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Protection de votre Espace Voyageur
+                    </h3>
+                    <p className="mt-1 text-xs text-foreground/75 leading-relaxed">
+                      Pour empêcher toute usurpation et protéger vos réservations, connectez-vous avec votre compte Google ou vos identifiants pour afficher vos vouchers et factures.
+                    </p>
+                    <div className="mt-3 flex items-center justify-between text-xs text-foreground/60">
+                      <span>
+                        {!isCountdownPaused
+                          ? `Redirection sécurisée vers la connexion dans ${redirectCountdown}s...`
+                          : 'Redirection automatique suspendue.'}
+                      </span>
+                      {!isCountdownPaused && (
+                        <button
+                          type="button"
+                          onClick={() => setIsCountdownPaused(true)}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Suspendre pour imprimer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-8 flex flex-col gap-3 sm:flex-row no-print">
               <button
-                onClick={() => window.print()}
+                type="button"
+                onClick={() => {
+                  setIsCountdownPaused(true);
+                  window.print();
+                }}
                 className="flex-1 rounded-full border border-foreground/20 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
               >
                 <FontAwesomeIcon icon={faPrint} className="h-4 w-4" />
                 <span>Imprimer le récapitulatif</span>
               </button>
-              <Link to="/dashboard/client" className="flex-1">
-                <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all">
-                  Accéder à mon espace voyageur
-                </button>
-              </Link>
+
+              {user ? (
+                <Link to="/dashboard/client" className="flex-1">
+                  <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
+                    <span>Accéder à mon espace voyageur</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
+                  </button>
+                </Link>
+              ) : (
+                <Link
+                  to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`}
+                  className="flex-1"
+                >
+                  <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
+                    <span>Se connecter avec Google</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
+                  </button>
+                </Link>
+              )}
             </div>
           </div>
         </ScrollReveal>

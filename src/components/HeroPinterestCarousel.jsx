@@ -11,6 +11,7 @@ import {
   faRightFromBracket
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 const DESTINATIONS = [
   {
@@ -153,10 +154,10 @@ export function HeroPinterestCarousel() {
       </div>
 
       {/* 2. Top Header (Brand Logo & Navigation buttons) */}
-      <div className="absolute inset-x-0 top-0 z-30 px-6 pt-7 md:px-12">
+      <div className="absolute inset-x-0 top-0 z-30 px-6 pt-6 md:px-12">
         <div className="mx-auto flex max-w-8xl items-center justify-between">
-          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-white hover:opacity-90 transition-opacity">
-            Bénin Beyond
+          <Link to="/" className="hover:opacity-95 transition-opacity group">
+            <BrandLogo size="md" textColor="text-white" subtext="Voyage & Standing" />
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
