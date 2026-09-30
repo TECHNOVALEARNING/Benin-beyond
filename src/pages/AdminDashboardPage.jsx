@@ -1613,15 +1613,14 @@ export function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Courbe d'Évolution Continue du Volume d'Affaires & Commissions (100% réelles) */}
+              {/* Graphe Sales Overview Ultra-Moderne (Conforme au design de référence : Ondulations Cyan & Violet néon) */}
               <EvolutionAreaChart
-                title="Évolution du Volume d'Affaires & Commissions"
-                subtitle="Courbe dynamique continue : traçabilité des achats (hausse) et annulations (baisse)"
+                title="Sales Overview"
+                subtitle="Volume d'affaires global (Cyan) & Marges de commissions 10% (Violet)"
                 data={evolutionData.length > 0 ? evolutionData : monthlyStats.map(m => ({ label: m.month, value: m.gmv, secondaryValue: m.commission }))}
-                valueLabel="Volume GMV"
-                secondaryLabel="Commission (10%)"
-                emptyMessage="Aucune transaction enregistrée pour l'instant"
-                emptySubtext="La courbe d'évolution s'activera et tracera vos paliers en direct dès la première réservation validée."
+                valueLabel="Volume GMV (Ventes)"
+                secondaryLabel="Commissions Bénin Beyond (10%)"
+                height={290}
               />
 
               {/* Quick Action Cards Grid */}

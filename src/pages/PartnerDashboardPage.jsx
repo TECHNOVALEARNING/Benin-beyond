@@ -1214,14 +1214,12 @@ export function PartnerDashboardPage() {
                 {/* Visual Earnings Evolution Chart */}
                 <div className="lg:col-span-7">
                   <EvolutionAreaChart
-                    title="Évolution des Revenus Partenaire"
-                    subtitle="Gains nets réels : progression à chaque réservation, ajustement aux annulations"
+                    title="Sales Overview · Revenus Hôte"
+                    subtitle="Traçabilité continue : Gains nets perçus (Cyan) & Commission plateforme déduite (Violet)"
                     data={partnerEvolutionData.length > 0 ? partnerEvolutionData : monthlyPartnerStats.map(m => ({ label: m.month, value: m.net, secondaryValue: Math.round(m.net * 0.111) }))}
                     valueLabel="Gains Nets Hôte"
-                    secondaryLabel="Com. Déduite (10%)"
-                    emptyMessage="Aucun revenu enregistré pour le moment"
-                    emptySubtext="Votre courbe d'évolution financière et vos indicateurs s'activeront automatiquement dès votre première réservation validée."
-                    height={250}
+                    secondaryLabel="Commission Déduite (10%)"
+                    height={270}
                   />
                 </div>
 
