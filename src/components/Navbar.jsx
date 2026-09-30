@@ -27,7 +27,7 @@ export function Navbar() {
   const currentType = searchParams.get('type');
 
   return (
-    <nav className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-2 w-[calc(100%-1rem)] max-w-xl">
+    <nav className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-2 w-[calc(100%-1rem)] max-w-xl transform-gpu will-change-transform pb-[env(safe-area-inset-bottom,0px)]">
       <div className="glass-bar flex items-center justify-between rounded-full border border-foreground/10 px-2 py-2 shadow-2xl shadow-foreground/10">
         {NAV_ITEMS.map((item) => {
           const isActive = item.isPack

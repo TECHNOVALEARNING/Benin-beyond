@@ -28,7 +28,7 @@ export function PublicHeader() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-foreground/10 bg-background/85 backdrop-blur-xl transition-all">
+    <header className="sticky top-0 z-40 w-full border-b border-foreground/10 bg-background/85 backdrop-blur-xl transform-gpu">
       <div className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5 md:px-12 gap-3">
         {/* Brand Logo */}
         <Link to="/" className="hover:opacity-95 transition-opacity group flex items-center shrink-0">

@@ -906,7 +906,7 @@ export function PartnerDashboardPage() {
       {/* 1. SIDEBAR PRO MARKETPLACE (FONTAWESOME ICONS ONLY) - STRICTLY PINNED */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-68 md:w-[272px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-[272px] h-[100dvh] max-h-[100dvh] md:h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -1013,7 +1013,7 @@ export function PartnerDashboardPage() {
         </div>
 
         {/* Sidebar Footer Actions (Strictly Pinned at the Bottom) */}
-        <div className="p-3 border-t border-white/[0.08] space-y-1 shrink-0 bg-secondary">
+        <div className="p-3 border-t border-white/[0.08] space-y-1.5 shrink-0 bg-secondary pb-[max(0.875rem,env(safe-area-inset-bottom))]">
           <Link
             to="/"
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
@@ -1027,9 +1027,10 @@ export function PartnerDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
+            className="w-full flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 transition-all shadow-sm active:scale-95"
+            title="Se déconnecter"
           >
-            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5 text-rose-400" />
             <span>Déconnexion</span>
           </button>
         </div>
@@ -1041,38 +1042,53 @@ export function PartnerDashboardPage() {
       <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-lg border border-foreground/15 text-foreground hover:bg-muted"
+              className="md:hidden p-2 rounded-lg border border-foreground/15 text-foreground hover:bg-muted shrink-0"
+              aria-label="Ouvrir le menu"
             >
               <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
             </button>
-            <div>
-              <h1 className="font-heading text-lg sm:text-xl font-bold text-foreground">
+            <div className="min-w-0">
+              <h1 className="font-heading text-base sm:text-xl font-bold text-foreground truncate">
                 {navItems.find((i) => i.key === currentSection)?.label || 'Espace Propriétaire'}
               </h1>
-              <p className="text-[11px] text-foreground/60 hidden sm:block">
-                Portail de gestion des hébergements et véhicules • Bénin Beyond
+              <p className="text-[11px] text-foreground/60 hidden sm:block truncate max-w-sm">
+                Portail de gestion des hébergements et véhicules
               </p>
             </div>
           </div>
 
           {/* Quick Actions in Header */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden lg:flex items-center gap-2 bg-muted/60 border border-foreground/10 rounded-full px-3 py-1.5 text-xs">
               <FontAwesomeIcon icon={faWallet} className="text-primary h-3.5 w-3.5" />
-              <span className="text-foreground/70">Solde disponible :</span>
+              <span className="text-foreground/70">Solde :</span>
               <strong className="text-foreground font-mono">{formatPrice(financials.net)}</strong>
             </div>
 
             <button
               onClick={() => setCurrentSection('publish')}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-primary px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all active:scale-95"
             >
               <FontAwesomeIcon icon={faCirclePlus} className="h-3.5 w-3.5" />
               <span>Publier</span>
+            </button>
+
+            {/* Quick Logout Button directly on mobile */}
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 transition-colors"
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+            >
+              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             </button>
           </div>
         </header>

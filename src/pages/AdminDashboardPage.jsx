@@ -1388,7 +1388,7 @@ export function AdminDashboardPage() {
       {/* 1. SIDEBAR NAVIGATION (Apple-grade Minimalist Luxury - STRICTLY PINNED, NO SCROLL) */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-68 md:w-[272px] h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-[272px] h-[100dvh] max-h-[100dvh] md:h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -1505,7 +1505,7 @@ export function AdminDashboardPage() {
         </div>
 
         {/* Sidebar Footer (Apple-grade compact footer) */}
-        <div className="p-3 border-t border-white/[0.08] space-y-1 shrink-0 bg-secondary">
+        <div className="p-3 border-t border-white/[0.08] space-y-1.5 shrink-0 bg-secondary pb-[max(0.875rem,env(safe-area-inset-bottom))]">
           <Link
             to="/"
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
@@ -1535,9 +1535,10 @@ export function AdminDashboardPage() {
               logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-rose-300 hover:bg-rose-500/15 border border-rose-500/20 transition-colors"
+            className="w-full flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 transition-all shadow-sm active:scale-95"
+            title="Se déconnecter"
           >
-            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5 text-rose-400" />
             <span>Déconnexion</span>
           </button>
         </div>
@@ -1549,33 +1550,35 @@ export function AdminDashboardPage() {
       <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-lg border border-foreground/10 text-foreground hover:bg-muted"
+              className="md:hidden p-2 rounded-lg border border-foreground/10 text-foreground hover:bg-muted shrink-0"
+              aria-label="Ouvrir le menu"
             >
               <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
             </button>
-            <div>
-              <h1 className="font-heading text-lg font-bold text-foreground">
+            <div className="min-w-0">
+              <h1 className="font-heading text-base sm:text-lg font-bold text-foreground truncate">
                 {currentSection === 'publish'
-                  ? (isSuperAdmin ? 'Publier une Nouvelle Annonce (Mode Super-Admin)' : 'Publier une Nouvelle Annonce (Mode Opérations)')
+                  ? (isSuperAdmin ? 'Publier une Annonce' : 'Nouvelle Annonce')
                   : currentSection === 'catalog_inventory'
-                  ? 'Inventaire & Gestion des Biens'
+                  ? 'Inventaire des Biens'
                   : allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
               </h1>
-              <p className="text-[11px] text-foreground/60">
-                {getTimeBasedGreeting()}, {user?.name || (isSuperAdmin ? 'Super-Administrateur' : 'Assistant Admin')} • {isSuperAdmin ? 'Supervision générale & gouvernance opérationnelle Bénin Beyond' : 'Cockpit Assistant Admin • Opérations, Modération & Gestion du Catalogue'}
+              <p className="text-[11px] text-foreground/60 truncate">
+                {getTimeBasedGreeting()}, {user?.name || (isSuperAdmin ? 'Super-Admin' : 'Assistant')}
+                <span className="hidden lg:inline"> • {isSuperAdmin ? 'Supervision générale & gouvernance' : 'Cockpit Assistant Admin'}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Quick Action: Publier un bien */}
             <button
               onClick={() => setCurrentSection('publish')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
                 currentSection === 'publish'
                   ? 'bg-accent text-black ring-2 ring-accent/40 shadow-accent/20'
                   : 'bg-accent/15 text-accent border border-accent/40 hover:bg-accent/25 hover:text-accent-foreground'
@@ -1596,7 +1599,7 @@ export function AdminDashboardPage() {
               to="/explore"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-semibold text-foreground hover:border-primary transition-colors"
             >
-              <span>Voir le catalogue</span>
+              <span>Catalogue</span>
               <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/40" />
             </Link>
 
@@ -1609,13 +1612,27 @@ export function AdminDashboardPage() {
                   setAdminPasswordConfirm('');
                   setShowAdminPasswordModal(true);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
                 title="Modifier mon mot de passe Super-Admin"
               >
                 <FontAwesomeIcon icon={faLock} className="h-3 w-3" />
-                <span className="hidden sm:inline">Mon mot de passe</span>
+                <span>Mon mot de passe</span>
               </button>
             )}
+
+            {/* Quick Logout Button directly on mobile */}
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 transition-colors"
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+            >
+              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            </button>
           </div>
         </header>
 
@@ -3066,24 +3083,27 @@ export function AdminDashboardPage() {
 
               {/* Modal de Création de Pack Exclusif Admin */}
               {showNewPackModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-                  <div className="relative w-full max-w-2xl rounded-3xl bg-card border border-foreground/15 p-6 sm:p-8 shadow-2xl my-8">
-                    <div className="flex items-center justify-between pb-4 border-b border-foreground/10">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in overflow-hidden">
+                  <div className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-[28px] sm:rounded-3xl bg-card border border-foreground/15 shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
+                    <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-foreground/10 shrink-0 bg-card z-10">
                       <div>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Formule Tout-en-un</span>
-                        <h3 className="font-heading text-lg font-bold text-foreground">
+                        <h3 className="font-heading text-base sm:text-lg font-bold text-foreground">
                           Créer un Pack Signature Bénin Beyond
                         </h3>
                       </div>
                       <button
                         onClick={() => setShowNewPackModal(false)}
-                        className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground"
+                        className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
+                        title="Fermer"
+                        aria-label="Fermer"
                       >
                         <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleCreatePack} className="mt-6 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                    <form onSubmit={handleCreatePack} className="flex flex-col flex-1 overflow-hidden min-h-0">
+                      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 space-y-4">
                       {/* Titre & Accroche */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -3267,7 +3287,9 @@ export function AdminDashboardPage() {
                         />
                       </div>
 
-                      <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
+                      </div>
+
+                      <div className="shrink-0 px-5 py-3.5 sm:px-6 sm:py-4 border-t border-foreground/10 flex items-center justify-end gap-3 bg-card/95 backdrop-blur-sm z-10 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
                         <button
                           type="button"
                           onClick={() => setShowNewPackModal(false)}
@@ -4786,27 +4808,30 @@ export function AdminDashboardPage() {
       {/* MODAL CRÉATION / MODIFICATION ÉVÉNEMENT CULTUREL */}
       {/* ========================================================================= */}
       {showEventModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="w-full max-w-xl rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5 my-8">
-            <div className="flex items-center justify-between border-b border-foreground/10 pb-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in overflow-hidden">
+          <div className="relative w-full max-w-xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-[28px] sm:rounded-3xl bg-card border border-foreground/15 shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
+            <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-foreground/10 shrink-0 bg-card z-10">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                   {editingEvent ? 'Mise à jour' : 'Nouvel Événement'}
                 </span>
-                <h3 className="font-heading text-lg font-bold text-foreground">
+                <h3 className="font-heading text-base sm:text-lg font-bold text-foreground">
                   {editingEvent ? `Modifier "${editingEvent.title}"` : 'Ajouter un Événement Culturel'}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowEventModal(false)}
-                className="rounded-full p-2 text-foreground/50 hover:bg-muted hover:text-foreground"
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
+                title="Fermer"
+                aria-label="Fermer"
               >
                 <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEvent} className="space-y-4">
+            <form onSubmit={handleSaveEvent} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 space-y-4">
               <div>
                 <label className="text-xs font-bold text-foreground block mb-1">
                   Titre de l'Événement *
@@ -4917,11 +4942,13 @@ export function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="pt-3 border-t border-foreground/10 flex items-center justify-end gap-3">
+              </div>
+
+              <div className="shrink-0 px-5 py-3.5 sm:px-6 sm:py-4 border-t border-foreground/10 flex items-center justify-end gap-3 bg-card/95 backdrop-blur-sm z-10 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => setShowEventModal(false)}
-                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
                 >
                   Annuler
                 </button>
