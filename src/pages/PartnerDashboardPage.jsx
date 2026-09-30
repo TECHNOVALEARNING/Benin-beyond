@@ -1214,10 +1214,10 @@ export function PartnerDashboardPage() {
                 {/* Visual Earnings Evolution Chart */}
                 <div className="lg:col-span-7">
                   <EvolutionAreaChart
-                    title="Sales Overview · Revenus Hôte"
-                    subtitle="Traçabilité continue : Gains nets perçus (Cyan) & Commission plateforme déduite (Violet)"
+                    title="Évolution des Revenus Hôte"
+                    subtitle="Traçabilité continue : Gains nets perçus & commissions partenaires au fil des séjours"
                     data={partnerEvolutionData.length > 0 ? partnerEvolutionData : monthlyPartnerStats.map(m => ({ label: m.month, value: m.net, secondaryValue: Math.round(m.net * 0.111) }))}
-                    valueLabel="Gains Nets Hôte"
+                    valueLabel="Gains Nets Perçus"
                     secondaryLabel="Commission Déduite (10%)"
                     height={270}
                   />

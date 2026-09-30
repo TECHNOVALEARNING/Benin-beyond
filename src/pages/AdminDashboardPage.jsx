@@ -1613,12 +1613,12 @@ export function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Graphe Sales Overview Ultra-Moderne (Conforme au design de référence : Ondulations Cyan & Violet néon) */}
+              {/* Graphe d'Évolution Financière Ultra-Moderne Bénin Beyond */}
               <EvolutionAreaChart
-                title="Sales Overview"
-                subtitle="Volume d'affaires global (Cyan) & Marges de commissions 10% (Violet)"
+                title="Évolution des Flux Financiers"
+                subtitle="Volume d'affaires global (Paiements) & Commissions de la plateforme (10%)"
                 data={evolutionData.length > 0 ? evolutionData : monthlyStats.map(m => ({ label: m.month, value: m.gmv, secondaryValue: m.commission }))}
-                valueLabel="Volume GMV (Ventes)"
+                valueLabel="Volume Global Encaissé"
                 secondaryLabel="Commissions Bénin Beyond (10%)"
                 height={290}
               />

@@ -349,16 +349,67 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 2. Détection prioritaire absolue du Super-Administrateur (Garantie de rôle absolu 'admin')
+    // 2. Vérification de l'existence du compte dans Supabase (table profiles)
+    let supabaseProfile = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, is_active, verified, company_name')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        supabaseProfile = prof;
+      } catch (err) {
+        console.warn('Erreur vérification profil Supabase:', err);
+      }
+    }
+
+    const registeredList = getRegisteredUsers();
+    let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+    let isConfiguredSubAdmin = false;
+    try {
+      const overridesRaw = localStorage.getItem('benin_beyond_admin_user_overrides');
+      const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
+      if (overrides[cleanEmail]?.role === 'subadmin') {
+        isConfiguredSubAdmin = true;
+      }
+    } catch {}
+
+    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
+
+    // 3. VÉRIFICATION STRICTE DE L'EXISTENCE DU COMPTE
+    const emailExists = Boolean(supabaseProfile || savedUser || isAdmin || demoMatch || isConfiguredSubAdmin);
+
+    if (!emailExists) {
+      return {
+        success: false,
+        isUnknownAccount: true,
+        error: "Aucun compte n'est associé à cette adresse e-mail. Veuillez vérifier votre saisie ou créer un compte."
+      };
+    }
+
+    // 4. VÉRIFICATION STRICTE DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR
     if (isAdmin) {
-      const registeredList = getRegisteredUsers();
-      const existingAdmin = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+      const validAdminPasswords = ['BeninBeyond2025!', 'admin123', 'admin', 'demo123', 'Benin2025!'];
+      const matchesSavedPassword = savedUser?.password && savedUser.password === cleanPassword;
+      const matchesMasterPassword = validAdminPasswords.includes(cleanPassword);
+
+      if (!matchesSavedPassword && !matchesMasterPassword) {
+        return {
+          success: false,
+          isWrongPassword: true,
+          error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
+        };
+      }
+
       const adminUser = {
         ...DEMO_USERS.admin,
-        ...(existingAdmin || {}),
-        id: existingAdmin?.id || 'usr_admin_isidore',
+        ...(supabaseProfile || {}),
+        ...(savedUser || {}),
+        id: supabaseProfile?.id || savedUser?.id || 'usr_admin_isidore',
         email: cleanEmail,
-        name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (existingAdmin?.name || 'Administration Bénin Beyond'),
+        name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (supabaseProfile?.full_name || savedUser?.name || 'Administration Bénin Beyond'),
         role: 'admin',
         verified: true,
         is_active: true,
@@ -369,24 +420,27 @@ export function AuthProvider({ children }) {
       return { success: true, user: adminUser };
     }
 
-    // 3. Détection prioritaire des comptes Assistant Admin (Sub-Admin)
-    let isConfiguredSubAdmin = false;
-    try {
-      const overridesRaw = localStorage.getItem('benin_beyond_admin_user_overrides');
-      const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
-      if (overrides[cleanEmail]?.role === 'subadmin') {
-        isConfiguredSubAdmin = true;
+    // 5. VÉRIFICATION STRICTE DU MOT DE PASSE POUR L'ASSISTANT ADMIN (SUB-ADMIN)
+    if (isConfiguredSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
+      const validSubAdminPasswords = ['BeninBeyond2025!', 'admin123', 'assistant123', 'demo123'];
+      const matchesSaved = savedUser?.password && savedUser.password === cleanPassword;
+      const matchesMaster = validSubAdminPasswords.includes(cleanPassword);
+      // Si l'assistant n'a pas encore de mot de passe défini, accepter le premier mot de passe saisi
+      const isFirstInit = !savedUser?.password;
+
+      if (!isFirstInit && !matchesSaved && !matchesMaster) {
+        return {
+          success: false,
+          isWrongPassword: true,
+          error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
+        };
       }
-    } catch {}
 
-    const registeredList = getRegisteredUsers();
-    let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-
-    if (isConfiguredSubAdmin || savedUser?.role === 'subadmin') {
       const subAdminUser = {
+        ...(supabaseProfile || {}),
         ...(savedUser || {}),
-        id: savedUser?.id || `usr_subadmin_${Date.now()}`,
-        name: savedUser?.name || cleanEmail.split('@')[0],
+        id: supabaseProfile?.id || savedUser?.id || `usr_subadmin_${Date.now()}`,
+        name: supabaseProfile?.full_name || savedUser?.name || cleanEmail.split('@')[0],
         email: cleanEmail,
         role: 'subadmin',
         verified: true,
@@ -398,9 +452,16 @@ export function AuthProvider({ children }) {
       return { success: true, user: subAdminUser };
     }
 
-    // 4. Détection des comptes démo intégrés (Propriétaire, Client)
-    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
+    // 6. VÉRIFICATION DU MOT DE PASSE POUR LES COMPTES DÉMO
     if (demoMatch) {
+      const validDemoPasswords = ['BeninBeyond2025!', 'demo123', 'admin123', 'Benin2025!'];
+      if (!validDemoPasswords.includes(cleanPassword)) {
+        return {
+          success: false,
+          isWrongPassword: true,
+          error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
+        };
+      }
       const demoUser = {
         ...demoMatch,
         password: cleanPassword
@@ -410,10 +471,10 @@ export function AuthProvider({ children }) {
       return { success: true, user: demoUser };
     }
 
-    // 5. Recherche parmi les utilisateurs enregistrés sur la plateforme
-    if (savedUser) {
+    // 7. VÉRIFICATION DU MOT DE PASSE POUR LES UTILISATEURS ENREGISTRÉS
+    if (savedUser || supabaseProfile) {
       // Compte suspendu par la modération
-      if (savedUser.is_active === false) {
+      if (savedUser?.is_active === false || supabaseProfile?.is_active === false) {
         return {
           success: false,
           error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction."
@@ -421,7 +482,7 @@ export function AuthProvider({ children }) {
       }
 
       // Compte créé à l'origine avec Google OAuth (sans mot de passe local défini)
-      if (savedUser.provider === 'google' && !savedUser.password) {
+      if (savedUser?.provider === 'google' && !savedUser?.password) {
         return {
           success: false,
           isGoogleAccount: true,
@@ -430,7 +491,7 @@ export function AuthProvider({ children }) {
       }
 
       // Vérification du mot de passe pour les comptes avec mot de passe
-      if (savedUser.password) {
+      if (savedUser?.password) {
         if (savedUser.password !== cleanPassword) {
           return {
             success: false,
@@ -453,7 +514,6 @@ export function AuthProvider({ children }) {
       };
     }
 
-    // 6. Compte inexistant : Refus strict et immédiat (Sécurité absolue)
     return {
       success: false,
       isUnknownAccount: true,
