@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://beninbeyond.com/sitemap.xml
+
+# Interdire l'accès aux pages d'administration et dashboards
+Disallow: /admin
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /register
+Disallow: /checkout

@@ -972,9 +972,9 @@ export function PartnerDashboardPage() {
                     handleSetSection(item.key);
                     setSidebarOpen(false);
                   }}
-                  className={`w-full group flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all ${
+                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all btn-press ${
                     isActive
-                      ? 'bg-white/[0.12] text-white shadow-xs font-semibold'
+                      ? 'bg-white/[0.12] text-white shadow-xs font-semibold nav-active-indicator'
                       : item.highlight
                       ? 'bg-accent text-secondary font-semibold hover:bg-accent/90 shadow-xs'
                       : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
@@ -1038,7 +1038,7 @@ export function PartnerDashboardPage() {
       {/* ========================================================================= */}
       {/* 2. MAIN DASHBOARD CONTENT AREA - INDEPENDENT FLUID SCROLL */}
       {/* ========================================================================= */}
-      <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 scroll-smooth">
+      <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         
         {/* Top Header Bar */}
         <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between shrink-0">
@@ -1078,13 +1078,13 @@ export function PartnerDashboardPage() {
         </header>
 
         {/* Dynamic Section Rendering */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+        <main key={currentSection} className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto animate-section-enter">
 
           {/* ========================================================================= */}
           {/* SECTION A : VUE D'ENSEMBLE (OVERVIEW) */}
           {/* ========================================================================= */}
           {currentSection === 'overview' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-section-stagger">
               
               {/* Welcome Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-foreground/10">
@@ -1393,7 +1393,7 @@ export function PartnerDashboardPage() {
           {/* SECTION B : RÉSERVATIONS REÇUES (DETAILED BOOKINGS LIST) */}
           {/* ========================================================================= */}
           {currentSection === 'bookings' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               
               {/* Header & Controls */}
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1586,7 +1586,7 @@ export function PartnerDashboardPage() {
           {/* SECTION C : MES ANNONCES & BIENS (LISTINGS) */}
           {/* ========================================================================= */}
           {currentSection === 'listings' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h2 className="font-heading text-xl font-bold text-foreground">
@@ -1784,7 +1784,7 @@ export function PartnerDashboardPage() {
           {/* SECTION D : PUBLIER UNE ANNONCE (PUBLISH FORM) */}
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-3xl mx-auto space-y-6 animate-section-stagger">
               <div>
                 <h2 className="font-heading text-xl font-bold text-foreground">
                   Publier une Nouvelle Annonce
@@ -2363,7 +2363,7 @@ export function PartnerDashboardPage() {
           {/* SECTION E : SOLDE & FINANCES (FINANCIALS & PAYOUTS) */}
           {/* ========================================================================= */}
           {currentSection === 'finances' && (
-            <div className="space-y-8 animate-fadeIn">
+            <div className="space-y-8 animate-section-stagger">
               
               {/* Header with Navigation Pills */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-foreground/10">
@@ -2977,7 +2977,7 @@ export function PartnerDashboardPage() {
           {/* SECTION F : STATISTIQUES & ANALYSES (PERFORMANCE RÉELLE) */}
           {/* ========================================================================= */}
           {currentSection === 'stats' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-section-stagger">
               <div>
                 <h2 className="font-heading text-xl font-bold text-foreground">
                   Statistiques & Performances des Annonces

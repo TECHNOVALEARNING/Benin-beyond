@@ -301,6 +301,118 @@
 }
 
 /* ========================================================================= */
+/* ANIMATIONS FLUIDES POUR TRANSITIONS DE SECTIONS ADMIN DASHBOARD           */
+/* ========================================================================= */
+
+@keyframes sectionFadeSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes sectionContentStagger {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-section-enter {
+  animation: sectionFadeSlideIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform, filter;
+  overflow: clip;
+}
+
+.animate-section-stagger > * {
+  opacity: 0;
+  animation: sectionContentStagger 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.animate-section-stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.animate-section-stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.animate-section-stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.animate-section-stagger > *:nth-child(4) { animation-delay: 0.16s; }
+.animate-section-stagger > *:nth-child(5) { animation-delay: 0.20s; }
+.animate-section-stagger > *:nth-child(6) { animation-delay: 0.24s; }
+.animate-section-stagger > *:nth-child(7) { animation-delay: 0.28s; }
+.animate-section-stagger > *:nth-child(8) { animation-delay: 0.32s; }
+
+/* Interactive button press effect */
+@keyframes buttonPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+.btn-press:active {
+  animation: buttonPress 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Smooth card hover lift */
+.card-hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Sidebar nav link active indicator slide */
+@keyframes navIndicatorSlide {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.nav-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: hsl(var(--accent));
+  animation: navIndicatorSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Toast enter/exit */
+@keyframes toastSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-in {
+  animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ========================================================================= */
 /* IMPRESSION PROFESSIONNELLE DES REÇUS & BONS DE RÉSERVATION (MEDIA PRINT) */
 /* ========================================================================= */
 @media print {

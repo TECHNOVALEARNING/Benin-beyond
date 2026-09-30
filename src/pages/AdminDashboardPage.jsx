@@ -1434,7 +1434,7 @@ export function AdminDashboardPage() {
                             handleSetSection(item.key);
                             setSidebarOpen(false);
                           }}
-                          className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-semibold transition-all duration-150 ${
+                          className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-semibold transition-all duration-150 btn-press ${
                             isActive
                               ? 'bg-accent text-secondary shadow-xs'
                               : 'bg-accent/15 text-accent hover:bg-accent/25 hover:text-white'
@@ -1469,9 +1469,9 @@ export function AdminDashboardPage() {
                           handleSetSection(item.key);
                           setSidebarOpen(false);
                         }}
-                        className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all duration-150 ${
+                        className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all duration-150 btn-press ${
                           isActive
-                            ? 'bg-white/[0.12] text-white shadow-xs font-semibold'
+                            ? 'bg-white/[0.12] text-white shadow-xs font-semibold nav-active-indicator'
                             : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
                         }`}
                       >
@@ -1546,7 +1546,7 @@ export function AdminDashboardPage() {
       {/* ========================================================================= */}
       {/* 2. MAIN ADMIN CONTENT CONTAINER - INDEPENDENT FLUID SCROLL */}
       {/* ========================================================================= */}
-      <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth">
+      <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         
         {/* Top Header Bar */}
         <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-6 py-4 flex items-center justify-between shrink-0">
@@ -1621,23 +1621,23 @@ export function AdminDashboardPage() {
 
         {/* Feedback Toast */}
         {toastMessage && (
-          <div className="m-6 mb-0 rounded-2xl bg-primary/15 border border-primary/30 p-4 text-xs font-semibold text-primary flex items-center gap-2 animate-fadeIn">
+          <div className="m-6 mb-0 rounded-2xl bg-primary/15 border border-primary/30 p-4 text-xs font-semibold text-primary flex items-center gap-2 animate-toast-in">
             <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
             <span>{toastMessage}</span>
           </div>
         )}
 
         {/* Scrollable Section Content */}
-        <div className="flex-1 p-6 md:p-8 space-y-8 overflow-y-auto">
+        <div key={currentSection} className="flex-1 p-6 md:p-8 space-y-8 animate-section-enter">
 
           {/* ========================================================================= */}
           {/* SECTION 1: COCKPIT MACRO (TOUR DE CONTRÔLE) */}
           {/* ========================================================================= */}
           {currentSection === 'cockpit' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-section-stagger">
               {/* Macro KPIs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
                   <div className="flex items-center justify-between mb-3">
                     <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
                       Volume Global (GMV)
@@ -1654,7 +1654,7 @@ export function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5 shadow-sm">
+                <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5 shadow-sm card-hover-lift">
                   <div className="flex items-center justify-between mb-3">
                     <span className="caption text-[11px] uppercase tracking-wider text-foreground/75 font-semibold">
                       Commissions Bénin Beyond (10%)
@@ -1671,7 +1671,7 @@ export function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
                   <div className="flex items-center justify-between mb-3">
                     <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
                       Biens & Flottes Actifs
@@ -1688,7 +1688,7 @@ export function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
                   <div className="flex items-center justify-between mb-3">
                     <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
                       Hôtes & Partenaires
@@ -1721,7 +1721,7 @@ export function AdminDashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div
                   onClick={() => handleSetSection('moderation')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
@@ -1739,7 +1739,7 @@ export function AdminDashboardPage() {
 
                 <div
                   onClick={() => handleSetSection('reservations')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -1757,7 +1757,7 @@ export function AdminDashboardPage() {
 
                 <div
                   onClick={() => handleSetSection('partners')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group"
+                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span className="h-9 w-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground group-hover:bg-accent group-hover:text-black transition-colors">
@@ -1892,7 +1892,7 @@ export function AdminDashboardPage() {
           {/* SECTION 2: MODÉRATION DU CATALOGUE */}
           {/* ========================================================================= */}
           {currentSection === 'moderation' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               {/* Filter and Search Bar */}
               <div className="flex flex-col gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -2195,7 +2195,7 @@ export function AdminDashboardPage() {
           {/* SECTION 3: RÉSERVATIONS GLOBALES */}
           {/* ========================================================================= */}
           {currentSection === 'reservations' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               {/* Search and Filters */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
                 <div className="relative flex-1 max-w-md">
@@ -2349,7 +2349,7 @@ export function AdminDashboardPage() {
           {/* SECTION 4: HÔTES, PARTENAIRES & VÉRIFICATION KYC */}
           {/* ========================================================================= */}
           {currentSection === 'partners' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-section-stagger">
               {/* Payout Requests Pending Admin Approval */}
               <div className="rounded-3xl border border-accent/40 bg-card p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/10">
@@ -2563,7 +2563,7 @@ export function AdminDashboardPage() {
           {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS (SUPER-ADMIN ONLY) */}
           {/* ========================================================================= */}
           {currentSection === 'users' && isSuperAdmin && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
                 <div>
@@ -2840,7 +2840,7 @@ export function AdminDashboardPage() {
           {/* SECTION 5: TRÉSORERIE & COMMISSIONS */}
           {/* ========================================================================= */}
           {currentSection === 'finances' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-section-stagger">
               {/* Financial Breakdown Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
@@ -2942,7 +2942,7 @@ export function AdminDashboardPage() {
           {/* SECTION 6: FORMULES & PACKS SIGNATURE (EXCLUSIVITÉ SUPER-ADMIN) */}
           {/* ========================================================================= */}
           {currentSection === 'packs' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -3293,7 +3293,7 @@ export function AdminDashboardPage() {
           {/* SECTION: ÉVÉNEMENTS & AGENDA CULTUREL DU BÉNIN */}
           {/* ========================================================================= */}
           {currentSection === 'events' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
                 <div>
@@ -3436,7 +3436,7 @@ export function AdminDashboardPage() {
           {/* SECTION 7: PUBLIER UNE NOUVELLE ANNONCE (SUPER-ADMIN & PROPRIÉTAIRE) */}
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-3xl mx-auto space-y-6 animate-section-stagger">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <h2 className="font-heading text-xl font-bold text-foreground">
@@ -4019,7 +4019,7 @@ export function AdminDashboardPage() {
           {/* SECTION 8: INVENTAIRE GLOBAL DES BIENS & PROPRIÉTÉS */}
           {/* ========================================================================= */}
           {currentSection === 'catalog_inventory' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               
               {/* Header & Quick Action */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -4274,7 +4274,7 @@ export function AdminDashboardPage() {
           {/* SECTION: AVIS & RETOURS CLIENTS (AUTHENTIQUES ET MODÉRABLES) */}
           {/* ========================================================================= */}
           {currentSection === 'reviews' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-section-stagger">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
