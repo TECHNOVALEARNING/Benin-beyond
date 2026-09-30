@@ -46,7 +46,9 @@ import {
   faImage,
   faPlus,
   faPen,
-  faStar
+  faStar,
+  faLock,
+  faUserShield
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -55,7 +57,7 @@ import { getBookings, updateBookingStatus, deleteBooking } from '../services/boo
 import { getReviews, deleteReview } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
-import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC } from '../services/userService';
+import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC, createAssistantAdmin } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
@@ -68,7 +70,13 @@ import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin: authIsSuperAdmin } = useAuth();
+  const isSuperAdmin = Boolean(
+    authIsSuperAdmin ||
+    user?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com' ||
+    user?.is_super_admin
+  );
+  const isSubAdmin = !isSuperAdmin;
 
   // Navigation State persisté pour conserver la vue sélectionnée après actualisation (F5)
   const [currentSection, setCurrentSection] = useState(() => {
@@ -124,6 +132,13 @@ export function AdminDashboardPage() {
   const [userFormRole, setUserFormRole] = useState('client');
   const [userFormCompany, setUserFormCompany] = useState('');
   const [userFormIsActive, setUserFormIsActive] = useState(true);
+
+  // Assistant Admin (Sub-Admin) creation modal state (Super-Admin exclusive)
+  const [showAddAssistantModal, setShowAddAssistantModal] = useState(false);
+  const [newAssistantName, setNewAssistantName] = useState('');
+  const [newAssistantEmail, setNewAssistantEmail] = useState('');
+  const [newAssistantPhone, setNewAssistantPhone] = useState('');
+  const [isCreatingAssistant, setIsCreatingAssistant] = useState(false);
 
   // Events Management Modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -201,7 +216,7 @@ export function AdminDashboardPage() {
   useEffect(() => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/admin' } } });
-    } else if (user.role !== 'admin') {
+    } else if (user.role !== 'admin' && user.role !== 'subadmin') {
       if (user.role === 'owner' || user.role === 'partner') {
         navigate('/dashboard/partner', { replace: true });
       } else {
@@ -440,6 +455,37 @@ export function AdminDashboardPage() {
         }
       }
     });
+  };
+
+  const handleCreateAssistant = async (e) => {
+    e.preventDefault();
+    if (!isSuperAdmin) {
+      showToast('Action non autorisée. Réservée au Super-Administrateur.');
+      return;
+    }
+    if (!newAssistantEmail.trim() || !newAssistantName.trim()) {
+      showToast("Veuillez renseigner le nom et l'adresse email de l'assistant.");
+      return;
+    }
+    setIsCreatingAssistant(true);
+    try {
+      await createAssistantAdmin({
+        name: newAssistantName,
+        email: newAssistantEmail,
+        phone: newAssistantPhone
+      });
+      showToast(`Assistant Admin "${newAssistantName}" créé avec succès !`);
+      setShowAddAssistantModal(false);
+      setNewAssistantName('');
+      setNewAssistantEmail('');
+      setNewAssistantPhone('');
+      const updated = await getUsers();
+      setUsersList(updated);
+    } catch (err) {
+      showToast(err.message || "Erreur lors de la création de l'assistant.");
+    } finally {
+      setIsCreatingAssistant(false);
+    }
   };
 
   const handleCreatePack = async (e) => {
@@ -1157,7 +1203,8 @@ export function AdminDashboardPage() {
         userRoleFilter === 'all' ||
         (userRoleFilter === 'client' && u.role === 'client') ||
         (userRoleFilter === 'owner' && (u.role === 'owner' || u.role === 'partner')) ||
-        (userRoleFilter === 'admin' && u.role === 'admin');
+        (userRoleFilter === 'subadmin' && u.role === 'subadmin') ||
+        (userRoleFilter === 'admin' && (u.role === 'admin' || u.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com'));
 
       const matchStatus =
         userStatusFilter === 'all' ||
@@ -1172,8 +1219,9 @@ export function AdminDashboardPage() {
     const total = usersList.length;
     const clients = usersList.filter((u) => u.role === 'client' && u.is_active !== false).length;
     const owners = usersList.filter((u) => (u.role === 'owner' || u.role === 'partner') && u.is_active !== false).length;
+    const subadmins = usersList.filter((u) => u.role === 'subadmin' && u.is_active !== false).length;
     const suspended = usersList.filter((u) => u.is_active === false).length;
-    return { total, clients, owners, suspended };
+    return { total, clients, owners, subadmins, suspended };
   }, [usersList]);
 
   const filteredReviews = useMemo(() => {
@@ -1191,7 +1239,7 @@ export function AdminDashboardPage() {
 
   const navGroups = [
     {
-      title: 'SUPERVISION & GOUVERNANCE',
+      title: isSuperAdmin ? 'SUPERVISION & GOUVERNANCE' : 'OPÉRATIONS & MODÉRATION DÉLÉGUÉE',
       items: [
         { key: 'cockpit', label: 'Tour de Contrôle', icon: faCrown },
         {
@@ -1218,9 +1266,9 @@ export function AdminDashboardPage() {
         {
           key: 'users',
           label: 'Gestion Utilisateurs',
-          icon: faUsers,
-          badge: usersList.length > 0 ? `${usersList.length} comptes` : null,
-          badgeColor: 'bg-primary/20 text-primary border-primary/30'
+          icon: isSuperAdmin ? faUsers : faLock,
+          badge: isSuperAdmin ? (usersList.length > 0 ? `${usersList.length} comptes` : null) : '🔒 Super-Admin',
+          badgeColor: isSuperAdmin ? 'bg-primary/20 text-primary border-primary/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
         },
         { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
         { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup },
@@ -1295,7 +1343,7 @@ export function AdminDashboardPage() {
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Superviseur
+                  {isSuperAdmin ? 'Superviseur' : 'Assistant Admin'}
                 </span>
               </div>
             </Link>
@@ -1436,13 +1484,13 @@ export function AdminDashboardPage() {
             <div>
               <h1 className="font-heading text-lg font-bold text-foreground">
                 {currentSection === 'publish'
-                  ? 'Publier une Nouvelle Annonce (Mode Super-Admin)'
+                  ? (isSuperAdmin ? 'Publier une Nouvelle Annonce (Mode Super-Admin)' : 'Publier une Nouvelle Annonce (Mode Opérations)')
                   : currentSection === 'catalog_inventory'
                   ? 'Inventaire & Gestion des Biens'
                   : allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
               </h1>
               <p className="text-[11px] text-foreground/60">
-                {getTimeBasedGreeting()}, {user?.name || 'Administrateur'} • Supervision générale & gouvernance opérationnelle Bénin Beyond
+                {getTimeBasedGreeting()}, {user?.name || (isSuperAdmin ? 'Super-Administrateur' : 'Assistant Admin')} • {isSuperAdmin ? 'Supervision générale & gouvernance opérationnelle Bénin Beyond' : 'Cockpit Assistant Admin • Opérations, Modération & Gestion du Catalogue'}
               </p>
             </div>
           </div>
@@ -2422,7 +2470,51 @@ export function AdminDashboardPage() {
           {/* ========================================================================= */}
           {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS */}
           {/* ========================================================================= */}
-          {currentSection === 'users' && (
+          {currentSection === 'users' && !isSuperAdmin && (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+              <div className="w-full max-w-xl rounded-3xl border border-rose-500/25 bg-card/90 p-8 shadow-xl backdrop-blur-md">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-500 border border-rose-500/30 text-2xl">
+                  <FontAwesomeIcon icon={faLock} />
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[11px] font-bold uppercase tracking-wider mb-3">
+                  Privilège Exclusif Super-Admin
+                </div>
+                <h2 className="font-heading text-xl font-black text-foreground">
+                  Gestion des Utilisateurs Verrouillée
+                </h2>
+                <p className="mt-3 text-xs leading-relaxed text-foreground/70">
+                  En tant qu'<strong>Assistant Admin (Sub-Admin)</strong>, votre compte dispose des délégations nécessaires pour assurer la gestion quotidienne de la plateforme (modération des annonces, réservations globales, avis clients, agenda et publication de biens).
+                </p>
+                <div className="mt-4 rounded-2xl bg-muted/40 p-4 border border-foreground/10 text-left text-xs space-y-2">
+                  <p className="font-bold text-foreground flex items-center gap-2">
+                    <FontAwesomeIcon icon={faShieldHalved} className="text-amber-500" />
+                    Règle de Sécurité & Hiérarchie des Rôles :
+                  </p>
+                  <p className="text-[11px] text-foreground/60 leading-relaxed">
+                    La création, modification, suspension, suppression de comptes ou la modification des rôles d'accès relève exclusivement de la direction générale (<strong>Isidore Toudonou</strong>).
+                  </p>
+                </div>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSetSection('cockpit')}
+                    className="rounded-xl bg-accent px-5 py-2.5 text-xs font-bold text-black hover:bg-white transition-all shadow-sm"
+                  >
+                    Retourner au Cockpit Opérations
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetSection('reservations')}
+                    className="rounded-xl border border-foreground/15 bg-background px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+                  >
+                    Gérer les Réservations
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentSection === 'users' && isSuperAdmin && (
             <div className="space-y-6">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
@@ -2432,17 +2524,31 @@ export function AdminDashboardPage() {
                     Répertoire & Gouvernance
                   </div>
                   <h2 className="font-heading text-2xl font-black text-foreground">
-                    Gestion des Utilisateurs
+                    Gestion des Utilisateurs & Équipe
                   </h2>
                   <p className="text-xs text-foreground/60 max-w-2xl mt-1">
-                    Pilotez tous les comptes de la plateforme (voyageurs, hôtes propriétaires et administrateurs). 
-                    Vous pouvez modifier les informations d'un utilisateur, suspendre ou réactiver son accès, ou supprimer un profil obsolète.
+                    Pilotez tous les comptes de la plateforme (voyageurs, partenaires hôtes, assistants opérationnels et administrateurs). 
+                    Créez des Assistants Admin avec droits opérationnels délégués ou ajustez les accès.
                   </p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewAssistantName('');
+                    setNewAssistantEmail('');
+                    setNewAssistantPhone('');
+                    setShowAddAssistantModal(true);
+                  }}
+                  className="flex items-center gap-2 rounded-2xl bg-accent px-4 py-2.5 text-xs font-black text-black shadow-md hover:bg-white hover:text-black transition-all active:scale-95 shrink-0"
+                >
+                  <FontAwesomeIcon icon={faUserShield} className="h-3.5 w-3.5" />
+                  <span>+ Ajouter un Assistant Admin</span>
+                </button>
               </div>
 
               {/* Stat Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
                     Total Utilisateurs
@@ -2465,6 +2571,14 @@ export function AdminDashboardPage() {
                   </span>
                   <p className="font-heading text-2xl font-black text-accent-foreground">{userMetrics.owners}</p>
                   <p className="text-[10px] text-accent-foreground/70 mt-0.5">Gestionnaires d'annonces</p>
+                </div>
+
+                <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block mb-1">
+                    Assistants Admin
+                  </span>
+                  <p className="font-heading text-2xl font-black text-indigo-700 dark:text-indigo-300">{userMetrics.subadmins}</p>
+                  <p className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70 mt-0.5">Opérations & Modération</p>
                 </div>
 
                 <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 shadow-sm">
@@ -2496,6 +2610,7 @@ export function AdminDashboardPage() {
                       { key: 'all', label: 'Tous' },
                       { key: 'client', label: 'Clients' },
                       { key: 'owner', label: 'Propriétaires' },
+                      { key: 'subadmin', label: 'Assistants' },
                       { key: 'admin', label: 'Admins' }
                     ].map((tab) => (
                       <button
@@ -2531,7 +2646,7 @@ export function AdminDashboardPage() {
                       <tr>
                         <th className="p-4">Utilisateur</th>
                         <th className="p-4">Rôle</th>
-                        <th className="p-4">Société / Enseigne</th>
+                        <th className="p-4">Société / Pôle</th>
                         <th className="p-4">Téléphone</th>
                         <th className="p-4">Statut Compte</th>
                         <th className="p-4 text-right">Actions</th>
@@ -2546,7 +2661,8 @@ export function AdminDashboardPage() {
                         </tr>
                       ) : (
                         filteredUsers.map((u) => {
-                          const isSuperAdmin = u.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com';
+                          const isRowSuperAdmin = u.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com';
+                          const isRowSubAdmin = u.role === 'subadmin';
                           const isActive = u.is_active !== false;
 
                           return (
@@ -2559,9 +2675,14 @@ export function AdminDashboardPage() {
                                   <div>
                                     <p className="font-bold text-foreground flex items-center gap-1.5">
                                       <span>{u.name}</span>
-                                      {isSuperAdmin && (
+                                      {isRowSuperAdmin && (
                                         <span className="text-[9px] rounded-full bg-accent/25 text-accent border border-accent/40 px-1.5 py-0.2 font-black uppercase">
                                           Super-Admin
+                                        </span>
+                                      )}
+                                      {isRowSubAdmin && (
+                                        <span className="text-[9px] rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.2 font-bold uppercase">
+                                          Assistant
                                         </span>
                                       )}
                                     </p>
@@ -2571,10 +2692,20 @@ export function AdminDashboardPage() {
                               </td>
 
                               <td className="p-4">
-                                {u.role === 'admin' ? (
+                                {isRowSuperAdmin ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-accent/25 text-accent-foreground border border-accent/50 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                                    <FontAwesomeIcon icon={faCrown} className="h-2.5 w-2.5 text-accent" />
+                                    Super-Admin
+                                  </span>
+                                ) : u.role === 'admin' ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-accent/20 text-accent-foreground border border-accent/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
                                     <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5" />
                                     Administrateur
+                                  </span>
+                                ) : isRowSubAdmin ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                                    <FontAwesomeIcon icon={faUserShield} className="h-2.5 w-2.5 text-indigo-400" />
+                                    Assistant Admin (Sub-Admin)
                                   </span>
                                 ) : u.role === 'owner' || u.role === 'partner' ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 text-[10px] font-bold uppercase">
@@ -2612,8 +2743,8 @@ export function AdminDashboardPage() {
 
                               <td className="p-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
-                                  {/* Toggle Active / Suspended */}
-                                  {!isSuperAdmin && (
+                                  {/* Toggle Active / Suspended (Protected for Super-Admin) */}
+                                  {!isRowSuperAdmin && (
                                     <button
                                       type="button"
                                       onClick={() => handleToggleUserActive(u)}
@@ -2633,13 +2764,13 @@ export function AdminDashboardPage() {
                                     type="button"
                                     onClick={() => handleOpenEditUser(u)}
                                     className="p-1.5 rounded-lg border border-foreground/15 text-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
-                                    title="Modifier les informations"
+                                    title="Modifier les informations ou changer le rôle"
                                   >
                                     <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
                                   </button>
 
                                   {/* Delete User Button (Protected for Super-Admin) */}
-                                  {!isSuperAdmin && (
+                                  {!isRowSuperAdmin && (
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteUserRecord(u)}
@@ -4839,6 +4970,7 @@ export function AdminDashboardPage() {
                   >
                     <option value="client">Voyageur (Client)</option>
                     <option value="owner">Propriétaire / Hôte / Loueur</option>
+                    <option value="subadmin">Assistant Admin (Sub-Admin - Opérations)</option>
                     <option value="admin">Administrateur</option>
                   </select>
                 </div>
@@ -4856,6 +4988,18 @@ export function AdminDashboardPage() {
                     placeholder="Ex: Villa Royale Ouidah SARL"
                     className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                   />
+                </div>
+              )}
+
+              {userFormRole === 'subadmin' && (
+                <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3 text-[11px] text-foreground/80">
+                  <p className="font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 mb-1">
+                    <FontAwesomeIcon icon={faUserShield} className="h-3 w-3" />
+                    Statut Assistant Admin (Délégué Opérationnel)
+                  </p>
+                  <p className="text-foreground/60 text-[10.5px]">
+                    Ce compte dispose des accès complets aux opérations (réservations, catalogue, avis, agenda), mais la gestion des utilisateurs lui sera sécurisée et verrouillée.
+                  </p>
                 </div>
               )}
 
@@ -4903,6 +5047,112 @@ export function AdminDashboardPage() {
                   className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
                 >
                   Enregistrer les Modifications
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL CRÉATION ASSISTANT ADMIN (SUB-ADMIN) - SUPER-ADMIN ONLY */}
+      {/* ========================================================================= */}
+      {showAddAssistantModal && isSuperAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl border border-foreground/10 bg-background p-6 shadow-2xl relative my-8">
+            <div className="flex items-center justify-between border-b border-foreground/10 pb-4 mb-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5" />
+                  Délégation Opérationnelle
+                </div>
+                <h3 className="text-base font-black text-foreground">
+                  Créer un Assistant Admin
+                </h3>
+                <p className="text-xs text-foreground/60">
+                  Attribuez un compte Sub-Admin pour gérer les opérations du quotidien
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAssistantModal(false)}
+                className="h-8 w-8 rounded-full border border-foreground/15 flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAssistant} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Nom Complet de l'Assistant *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAssistantName}
+                  onChange={(e) => setNewAssistantName(e.target.value)}
+                  placeholder="Ex: Marc Lawson"
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Adresse Email Professionnelle *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newAssistantEmail}
+                  onChange={(e) => setNewAssistantEmail(e.target.value)}
+                  placeholder="assistant@beninbeyond.com"
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+                <span className="text-[10px] text-foreground/50 mt-1 block">
+                  L'assistant pourra se connecter via cet email ou via Google avec cette adresse.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Numéro de Téléphone
+                </label>
+                <input
+                  type="tel"
+                  value={newAssistantPhone}
+                  onChange={(e) => setNewAssistantPhone(e.target.value)}
+                  placeholder="+229 97 00 00 00"
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="rounded-xl border border-accent/20 bg-accent/5 p-3.5 text-[11px] text-foreground/80 space-y-1.5">
+                <p className="font-bold text-accent flex items-center gap-1.5">
+                  <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
+                  Droits & Périmètre de l'Assistant Admin :
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-foreground/70 text-[10.5px]">
+                  <li>Accès complet au Cockpit, Réservations, Avis, Agenda et Biens.</li>
+                  <li>Publication d'annonces et modération des partenaires.</li>
+                  <li className="font-semibold text-rose-500">Aucun accès à la gestion des utilisateurs (sécurisé).</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-foreground/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAssistantModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAssistant}
+                  className="rounded-xl bg-accent px-5 py-2 text-xs font-black text-black hover:bg-white transition-all shadow-sm disabled:opacity-50"
+                >
+                  {isCreatingAssistant ? 'Création en cours...' : 'Valider & Créer l’Assistant'}
                 </button>
               </div>
             </form>

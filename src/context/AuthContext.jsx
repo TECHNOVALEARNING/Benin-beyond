@@ -19,6 +19,16 @@ export const DEMO_USERS = {
     verified: true,
     kyc_status: 'verified'
   },
+  subadmin: {
+    id: 'usr_subadmin_01',
+    name: 'Marc Lawson',
+    email: 'assistant@beninbeyond.com',
+    role: 'subadmin',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+    title: 'Assistant Admin (Opérations & Modération)',
+    verified: true,
+    kyc_status: 'verified'
+  },
   owner: {
     id: 'usr_owner_01',
     name: 'Patrice H. (Hôte & Loueur Pro)',
@@ -52,7 +62,17 @@ export function resolveUserRole(email, rawRole = null) {
     return 'admin';
   }
 
-  // 1. Rôle explicite propriétaire ou partenaire
+  // 1. Détection rôle Assistant Admin (Sub-Admin)
+  if (
+    rawRole === 'subadmin' ||
+    cleanEmail === 'assistant@beninbeyond.com' ||
+    cleanEmail.startsWith('assistant@') ||
+    cleanEmail.includes('subadmin')
+  ) {
+    return 'subadmin';
+  }
+
+  // 2. Rôle explicite propriétaire ou partenaire
   if (rawRole === 'owner' || rawRole === 'partner') {
     return 'owner';
   }
@@ -75,7 +95,7 @@ export function resolveUserRole(email, rawRole = null) {
     }
   } catch {}
 
-  return rawRole === 'admin' ? 'admin' : (rawRole || 'client');
+  return rawRole === 'admin' ? 'admin' : (rawRole === 'subadmin' ? 'subadmin' : (rawRole || 'client'));
 }
 
 function getRegisteredUsers() {
@@ -640,6 +660,8 @@ export function AuthProvider({ children }) {
       value={{
         user,
         role: user ? user.role : null,
+        isSuperAdmin: Boolean(user && (user.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL || user.is_super_admin || user.role === 'superadmin')),
+        isSubAdmin: Boolean(user && (user.role === 'subadmin' || (user.role === 'admin' && user.email?.toLowerCase().trim() !== SUPER_ADMIN_EMAIL))),
         isAuthenticated: Boolean(user),
         isDemoMode,
         login,

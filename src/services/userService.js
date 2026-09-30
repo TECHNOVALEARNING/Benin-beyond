@@ -5,6 +5,58 @@ const OVERRIDES_STORAGE_KEY = 'benin_beyond_user_admin_overrides';
 const DELETED_USERS_KEY = 'benin_beyond_deleted_users';
 const SUPER_ADMIN_EMAIL = 'isidoretoudonou@gmail.com';
 
+const DEFAULT_INITIAL_USERS = [
+  {
+    id: 'usr_admin_isidore',
+    name: 'Isidore Toudonou',
+    email: SUPER_ADMIN_EMAIL,
+    phone: '+229 97 00 00 01',
+    role: 'admin',
+    company: 'Direction Générale Bénin Beyond',
+    kyc_status: 'verified',
+    verified: true,
+    is_active: true,
+    created_at: '2025-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_subadmin_01',
+    name: 'Marc Lawson',
+    email: 'assistant@beninbeyond.com',
+    phone: '+229 96 12 34 56',
+    role: 'subadmin',
+    company: 'Bénin Beyond (Pôle Opérations & Modération)',
+    kyc_status: 'verified',
+    verified: true,
+    is_active: true,
+    created_at: '2025-02-15T10:00:00.000Z'
+  },
+  {
+    id: 'usr_owner_01',
+    name: 'Patrice H. (Hôte & Loueur Pro)',
+    email: 'proprietaire@beninbeyond.com',
+    phone: '+229 97 45 67 89',
+    role: 'owner',
+    company: 'Littoral Prestige Assets SARL',
+    partner_type: 'stay',
+    kyc_status: 'verified',
+    verified: true,
+    is_active: true,
+    created_at: '2025-02-10T08:30:00.000Z'
+  },
+  {
+    id: 'usr_client_01',
+    name: 'Amina Koffi',
+    email: 'voyageur@beninbeyond.com',
+    phone: '+229 95 88 77 66',
+    role: 'client',
+    company: '',
+    kyc_status: 'verified',
+    verified: true,
+    is_active: true,
+    created_at: '2025-03-01T14:20:00.000Z'
+  }
+];
+
 function getAdminOverrides() {
   try {
     const raw = localStorage.getItem(OVERRIDES_STORAGE_KEY);
@@ -51,7 +103,19 @@ function markUserAsDeleted(idOrEmail) {
 function getLocalUsers() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const list = raw ? JSON.parse(raw) : [];
+    let list = raw ? JSON.parse(raw) : [];
+
+    // Si la liste est vide, initialiser avec les comptes de base
+    if (!list || list.length === 0) {
+      list = [...DEFAULT_INITIAL_USERS];
+    } else {
+      // S'assurer que le compte démo assistant existe dans la liste
+      const hasAssistant = list.some((u) => (u.email || '').toLowerCase().trim() === 'assistant@beninbeyond.com');
+      if (!hasAssistant) {
+        list.push(DEFAULT_INITIAL_USERS[1]);
+      }
+    }
+
     const overrides = getAdminOverrides();
     const deleted = getDeletedUserIds();
 
@@ -66,29 +130,30 @@ function getLocalUsers() {
         const id = (u.id || '').toString().toLowerCase();
         const isAdmin = email === SUPER_ADMIN_EMAIL || u.role === 'admin';
         const override = overrides[email] || overrides[id] || {};
+        const isSubAdmin = !isAdmin && (override.role === 'subadmin' || u.role === 'subadmin' || email === 'assistant@beninbeyond.com');
 
         return {
           id: u.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           name: isAdmin ? 'Isidore Toudonou' : (override.name || u.name || email.split('@')[0]),
           email: email,
           phone: override.phone || u.phone || 'Non renseigné',
-          role: isAdmin ? 'admin' : (override.role || u.role === 'owner' || u.role === 'partner' ? 'owner' : 'client'),
-          company: override.company || u.company || (u.role === 'owner' ? 'Partenaire Hébergeur / Auto' : ''),
+          role: isAdmin ? 'admin' : (isSubAdmin ? 'subadmin' : (override.role || u.role === 'owner' || u.role === 'partner' ? 'owner' : 'client')),
+          company: override.company || u.company || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : (u.role === 'owner' ? 'Partenaire Hébergeur / Auto' : '')),
           partner_type: override.partner_type || u.partner_type || u.partnerType || 'stay',
           tax_id: override.tax_id || u.tax_id || u.taxId || '',
           rccm: override.rccm || u.rccm || '',
           cip: override.cip || u.cip || '',
-          kyc_doc_type: override.kyc_doc_type || u.kyc_doc_type || u.kycDocType || 'Dossier Conforme',
+          kyc_doc_type: override.kyc_doc_type || u.kyc_doc_type || u.kycDocType || (isSubAdmin ? 'Habilitation Opérationnelle Interne' : 'Dossier Conforme'),
           kyc_doc_url: override.kyc_doc_url || u.kyc_doc_url || u.kycDocUrl || '',
-          kyc_status: isAdmin ? 'verified' : (override.kyc_status !== undefined ? override.kyc_status : (u.kyc_status || (u.verified ? 'verified' : 'pending'))),
+          kyc_status: (isAdmin || isSubAdmin) ? 'verified' : (override.kyc_status !== undefined ? override.kyc_status : (u.kyc_status || (u.verified ? 'verified' : 'pending'))),
           rejection_reason: override.rejection_reason !== undefined ? override.rejection_reason : (u.rejection_reason || ''),
-          verified: isAdmin ? true : (override.verified !== undefined ? Boolean(override.verified) : Boolean(u.verified)),
+          verified: (isAdmin || isSubAdmin) ? true : (override.verified !== undefined ? Boolean(override.verified) : Boolean(u.verified)),
           is_active: isAdmin ? true : (override.is_active !== undefined ? Boolean(override.is_active) : (u.is_active !== undefined ? u.is_active : true)),
           created_at: u.createdAt || u.created_at || new Date().toISOString()
         };
       });
   } catch {
-    return [];
+    return [...DEFAULT_INITIAL_USERS];
   }
 }
 
@@ -148,23 +213,24 @@ export async function getUsers() {
 
           const isAdmin = email === SUPER_ADMIN_EMAIL || p.role === 'admin';
           const override = overrides[email] || overrides[id] || {};
+          const isSubAdmin = !isAdmin && (override.role === 'subadmin' || p.role === 'subadmin' || email === 'assistant@beninbeyond.com');
 
           emailMap.set(email, {
             id: p.id,
             name: isAdmin ? 'Isidore Toudonou' : (override.name || p.full_name || email.split('@')[0]),
             email: email,
             phone: override.phone || p.phone || 'Non renseigné',
-            role: isAdmin ? 'admin' : (override.role || (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client')),
-            company: override.company || p.company_name || '',
+            role: isAdmin ? 'admin' : (isSubAdmin ? 'subadmin' : (override.role || (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client'))),
+            company: override.company || p.company_name || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : ''),
             partner_type: override.partner_type || p.partner_type || 'stay',
             tax_id: override.tax_id || p.tax_id || '',
             rccm: override.rccm || p.rccm || '',
             cip: override.cip || p.cip || '',
-            kyc_doc_type: override.kyc_doc_type || p.kyc_doc_type || 'Dossier Conforme',
+            kyc_doc_type: override.kyc_doc_type || p.kyc_doc_type || (isSubAdmin ? 'Habilitation Opérationnelle Interne' : 'Dossier Conforme'),
             kyc_doc_url: override.kyc_doc_url || p.kyc_doc_url || '',
-            kyc_status: isAdmin ? 'verified' : (override.kyc_status !== undefined ? override.kyc_status : (p.kyc_status || (p.verified ? 'verified' : 'pending'))),
+            kyc_status: (isAdmin || isSubAdmin) ? 'verified' : (override.kyc_status !== undefined ? override.kyc_status : (p.kyc_status || (p.verified ? 'verified' : 'pending'))),
             rejection_reason: override.rejection_reason !== undefined ? override.rejection_reason : (p.rejection_reason || ''),
-            verified: isAdmin ? true : (override.verified !== undefined ? Boolean(override.verified) : Boolean(p.verified)),
+            verified: (isAdmin || isSubAdmin) ? true : (override.verified !== undefined ? Boolean(override.verified) : Boolean(p.verified)),
             is_active: isAdmin ? true : (override.is_active !== undefined ? Boolean(override.is_active) : (p.is_active !== undefined ? p.is_active : true)),
             created_at: p.created_at || new Date().toISOString()
           });
@@ -205,6 +271,78 @@ export async function getUsers() {
 }
 
 /**
+ * Créer un compte Assistant Admin (Sub-Admin) - Réservé au Super-Administrateur
+ */
+export async function createAssistantAdmin({ name, email, phone }) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) throw new Error("L'adresse email est requise.");
+  if (cleanEmail === SUPER_ADMIN_EMAIL) {
+    throw new Error("L'adresse du Super-Administrateur ne peut pas être réaffectée.");
+  }
+
+  const id = `usr_subadmin_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+  const assistantUser = {
+    id,
+    name: name?.trim() || cleanEmail.split('@')[0],
+    email: cleanEmail,
+    phone: phone?.trim() || 'Non renseigné',
+    role: 'subadmin',
+    company: 'Bénin Beyond (Pôle Opérations & Modération)',
+    partner_type: '',
+    tax_id: '',
+    rccm: '',
+    cip: '',
+    kyc_doc_type: 'Habilitation Opérationnelle Interne',
+    kyc_doc_url: '',
+    kyc_status: 'verified',
+    rejection_reason: '',
+    verified: true,
+    is_active: true,
+    created_at: new Date().toISOString()
+  };
+
+  saveAdminOverride(cleanEmail, assistantUser);
+  saveAdminOverride(id, assistantUser);
+
+  const list = getLocalUsers();
+  const existingIdx = list.findIndex(
+    (u) => u.email?.toLowerCase().trim() === cleanEmail || u.id === id
+  );
+
+  let updatedList;
+  if (existingIdx >= 0) {
+    updatedList = [...list];
+    updatedList[existingIdx] = { ...updatedList[existingIdx], ...assistantUser };
+  } else {
+    updatedList = [assistantUser, ...list];
+  }
+  saveLocalUsers(updatedList);
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('profiles').upsert(
+        {
+          email: cleanEmail,
+          full_name: assistantUser.name,
+          role: 'subadmin',
+          phone: assistantUser.phone,
+          company_name: assistantUser.company,
+          verified: true,
+          is_active: true,
+          kyc_status: 'verified',
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'email' }
+      );
+    } catch (e) {
+      console.warn('Erreur upsert profile assistant Supabase:', e);
+    }
+  }
+
+  return assistantUser;
+}
+
+/**
  * Mettre à jour un utilisateur (Nom, Rôle, Société, Téléphone, Statut Actif, KYC)
  */
 export async function updateUser(userId, updates) {
@@ -216,11 +354,19 @@ export async function updateUser(userId, updates) {
 
   const sanitizedUpdates = {
     ...updates,
-    role: isAdmin ? 'admin' : (updates.role === 'owner' || updates.role === 'partner' ? 'owner' : updates.role || existingUser?.role || 'client'),
+    role: isAdmin
+      ? 'admin'
+      : (updates.role === 'subadmin'
+          ? 'subadmin'
+          : (updates.role === 'owner' || updates.role === 'partner'
+              ? 'owner'
+              : (updates.role === 'client'
+                  ? 'client'
+                  : updates.role || existingUser?.role || 'client'))),
     name: isAdmin ? 'Isidore Toudonou' : (updates.name || existingUser?.name || cleanEmail.split('@')[0]),
     is_active: isAdmin ? true : (updates.is_active !== undefined ? Boolean(updates.is_active) : (existingUser?.is_active !== undefined ? existingUser.is_active : true)),
-    kyc_status: isAdmin ? 'verified' : (updates.kyc_status || existingUser?.kyc_status || 'pending'),
-    verified: isAdmin ? true : (updates.verified !== undefined ? Boolean(updates.verified) : (existingUser?.verified ?? false)),
+    kyc_status: (isAdmin || updates.role === 'subadmin') ? 'verified' : (updates.kyc_status || existingUser?.kyc_status || 'pending'),
+    verified: (isAdmin || updates.role === 'subadmin') ? true : (updates.verified !== undefined ? Boolean(updates.verified) : (existingUser?.verified ?? false)),
     rejection_reason: updates.rejection_reason !== undefined ? updates.rejection_reason : (existingUser?.rejection_reason || '')
   };
 
@@ -231,7 +377,11 @@ export async function updateUser(userId, updates) {
   // 2. Supabase (uniquement avec les colonnes valides existantes dans le schéma Supabase)
   if (isSupabaseConfigured && supabase) {
     try {
-      const dbRole = sanitizedUpdates.role === 'admin' ? 'admin' : (sanitizedUpdates.role === 'owner' ? 'partner' : 'client');
+      const dbRole = sanitizedUpdates.role === 'admin'
+        ? 'admin'
+        : (sanitizedUpdates.role === 'subadmin'
+            ? 'subadmin'
+            : (sanitizedUpdates.role === 'owner' ? 'partner' : 'client'));
       const payload = {
         full_name: sanitizedUpdates.name,
         role: dbRole,

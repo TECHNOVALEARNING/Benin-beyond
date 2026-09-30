@@ -70,7 +70,7 @@ export function ClientDashboardPage() {
   useEffect(() => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/dashboard/client' } } });
-    } else if (user.role === 'admin') {
+    } else if (user.role === 'admin' || user.role === 'subadmin') {
       navigate('/admin', { replace: true });
     } else if (user.role === 'owner' || user.role === 'partner') {
       navigate('/dashboard/partner', { replace: true });

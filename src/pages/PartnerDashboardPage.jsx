@@ -70,7 +70,7 @@ import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
-  const isPartnerCertified = Boolean(user?.role === 'admin' || user?.verified || user?.kyc_status === 'verified');
+  const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified');
 
   // Sidebar navigation state
   const [currentSection, setCurrentSection] = useState(() => {
@@ -187,7 +187,7 @@ export function PartnerDashboardPage() {
   useEffect(() => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/dashboard/partner' } } });
-    } else if (user.role === 'admin') {
+    } else if (user.role === 'admin' || user.role === 'subadmin') {
       navigate('/admin', { replace: true });
     } else if (user.role === 'client') {
       navigate('/dashboard/client', { replace: true });

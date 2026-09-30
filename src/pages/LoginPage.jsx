@@ -41,7 +41,7 @@ export function LoginPage() {
   useEffect(() => {
     if (user) {
       localStorage.removeItem('benin_beyond_oauth_in_progress');
-      if (user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'subadmin') {
         navigate('/admin', { replace: true });
       } else if (user.role === 'owner' || user.role === 'partner') {
         navigate('/dashboard/partner', { replace: true });
@@ -78,8 +78,9 @@ export function LoginPage() {
     try {
       const res = await login(email, password);
       if (res.success) {
-        if (res.user.role === 'admin') {
-          setSuccessMsg('Compte Super-Administrateur vérifié. Accès à la Tour de Contrôle...');
+        if (res.user.role === 'admin' || res.user.role === 'subadmin') {
+          const isSub = res.user.role === 'subadmin';
+          setSuccessMsg(isSub ? 'Compte Assistant Admin identifié. Accès à la console opérationnelle...' : 'Compte Super-Administrateur vérifié. Accès à la Tour de Contrôle...');
           setTimeout(() => navigate('/admin', { replace: true }), 400);
         } else if (res.user.role === 'owner' || res.user.role === 'partner') {
           setSuccessMsg('Compte Partenaire identifié. Accès à votre tableau de bord...');
@@ -125,7 +126,7 @@ export function LoginPage() {
       const res = await loginWithGoogle(hintRole, hintCompany);
       if (res?.success && res.user) {
         localStorage.removeItem('benin_beyond_oauth_in_progress');
-        if (res.user.role === 'admin') {
+        if (res.user.role === 'admin' || res.user.role === 'subadmin') {
           navigate('/admin', { replace: true });
         } else if (res.user.role === 'owner' || res.user.role === 'partner') {
           navigate('/dashboard/partner', { replace: true });

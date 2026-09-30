@@ -62,7 +62,7 @@ export function RegisterPage() {
   // Redirection automatique si déjà connecté
   useEffect(() => {
     if (user) {
-      if (user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'subadmin') {
         navigate('/admin', { replace: true });
       } else if (user.role === 'owner' || user.role === 'partner') {
         navigate('/dashboard/partner', { replace: true });

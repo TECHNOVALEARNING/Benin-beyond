@@ -81,7 +81,7 @@ export function PublicHeader() {
             <div className="flex items-center gap-1.5">
               <Link
                 to={
-                  role === 'admin' || user?.role === 'admin'
+                  role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
                     ? '/admin'
                     : role === 'partner' || user?.role === 'partner'
                     ? '/dashboard/partner'
@@ -91,7 +91,7 @@ export function PublicHeader() {
               >
                 <FontAwesomeIcon icon={faGaugeHigh} className="h-3 w-3" />
                 <span className="hidden sm:inline">
-                  {role === 'admin' || user?.role === 'admin'
+                  {role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
                     ? 'Cockpit Admin'
                     : role === 'partner' || user?.role === 'partner'
                     ? 'Dashboard Partenaire'
