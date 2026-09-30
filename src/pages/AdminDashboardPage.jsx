@@ -5105,7 +5105,7 @@ export function AdminDashboardPage() {
                   required
                   value={newAssistantEmail}
                   onChange={(e) => setNewAssistantEmail(e.target.value)}
-                  placeholder="assistant@beninbeyond.com"
+                  placeholder="ex: adjoint@monentreprise.com"
                   className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                 />
                 <span className="text-[10px] text-foreground/50 mt-1 block">

@@ -19,16 +19,6 @@ export const DEMO_USERS = {
     verified: true,
     kyc_status: 'verified'
   },
-  subadmin: {
-    id: 'usr_subadmin_01',
-    name: 'Marc Lawson',
-    email: 'assistant@beninbeyond.com',
-    role: 'subadmin',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-    title: 'Assistant Admin (Opérations & Modération)',
-    verified: true,
-    kyc_status: 'verified'
-  },
   owner: {
     id: 'usr_owner_01',
     name: 'Patrice H. (Hôte & Loueur Pro)',
@@ -63,12 +53,7 @@ export function resolveUserRole(email, rawRole = null) {
   }
 
   // 1. Détection rôle Assistant Admin (Sub-Admin)
-  if (
-    rawRole === 'subadmin' ||
-    cleanEmail === 'assistant@beninbeyond.com' ||
-    cleanEmail.startsWith('assistant@') ||
-    cleanEmail.includes('subadmin')
-  ) {
+  if (rawRole === 'subadmin') {
     return 'subadmin';
   }
 

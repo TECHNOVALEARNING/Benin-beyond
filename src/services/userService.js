@@ -19,18 +19,6 @@ const DEFAULT_INITIAL_USERS = [
     created_at: '2025-01-01T00:00:00.000Z'
   },
   {
-    id: 'usr_subadmin_01',
-    name: 'Marc Lawson',
-    email: 'assistant@beninbeyond.com',
-    phone: '+229 96 12 34 56',
-    role: 'subadmin',
-    company: 'Bénin Beyond (Pôle Opérations & Modération)',
-    kyc_status: 'verified',
-    verified: true,
-    is_active: true,
-    created_at: '2025-02-15T10:00:00.000Z'
-  },
-  {
     id: 'usr_owner_01',
     name: 'Patrice H. (Hôte & Loueur Pro)',
     email: 'proprietaire@beninbeyond.com',
@@ -108,12 +96,6 @@ function getLocalUsers() {
     // Si la liste est vide, initialiser avec les comptes de base
     if (!list || list.length === 0) {
       list = [...DEFAULT_INITIAL_USERS];
-    } else {
-      // S'assurer que le compte démo assistant existe dans la liste
-      const hasAssistant = list.some((u) => (u.email || '').toLowerCase().trim() === 'assistant@beninbeyond.com');
-      if (!hasAssistant) {
-        list.push(DEFAULT_INITIAL_USERS[1]);
-      }
     }
 
     const overrides = getAdminOverrides();
@@ -123,14 +105,15 @@ function getLocalUsers() {
       .filter((u) => {
         const email = (u.email || '').trim().toLowerCase();
         const id = (u.id || '').toString().toLowerCase();
-        return !deleted.has(email) && !deleted.has(id);
+        // Filtrer les comptes supprimés et l'ancien compte démo
+        return !deleted.has(email) && !deleted.has(id) && email !== 'assistant@beninbeyond.com';
       })
       .map((u) => {
         const email = (u.email || '').trim().toLowerCase();
         const id = (u.id || '').toString().toLowerCase();
         const isAdmin = email === SUPER_ADMIN_EMAIL || u.role === 'admin';
         const override = overrides[email] || overrides[id] || {};
-        const isSubAdmin = !isAdmin && (override.role === 'subadmin' || u.role === 'subadmin' || email === 'assistant@beninbeyond.com');
+        const isSubAdmin = !isAdmin && (override.role === 'subadmin' || u.role === 'subadmin');
 
         return {
           id: u.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -213,7 +196,7 @@ export async function getUsers() {
 
           const isAdmin = email === SUPER_ADMIN_EMAIL || p.role === 'admin';
           const override = overrides[email] || overrides[id] || {};
-          const isSubAdmin = !isAdmin && (override.role === 'subadmin' || p.role === 'subadmin' || email === 'assistant@beninbeyond.com');
+          const isSubAdmin = !isAdmin && (override.role === 'subadmin' || p.role === 'subadmin');
 
           emailMap.set(email, {
             id: p.id,
