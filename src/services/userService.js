@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 
 const STORAGE_KEY = 'benin_beyond_registered_users';
 const OVERRIDES_STORAGE_KEY = 'benin_beyond_user_admin_overrides';
+const ALT_OVERRIDES_KEY = 'benin_beyond_admin_user_overrides';
 const DELETED_USERS_KEY = 'benin_beyond_deleted_users';
 const SUPER_ADMIN_EMAIL = 'isidoretoudonou@gmail.com';
 
@@ -30,24 +31,12 @@ const DEFAULT_INITIAL_USERS = [
     verified: true,
     is_active: true,
     created_at: '2025-02-10T08:30:00.000Z'
-  },
-  {
-    id: 'usr_client_01',
-    name: 'Amina Koffi',
-    email: 'voyageur@beninbeyond.com',
-    phone: '+229 95 88 77 66',
-    role: 'client',
-    company: '',
-    kyc_status: 'verified',
-    verified: true,
-    is_active: true,
-    created_at: '2025-03-01T14:20:00.000Z'
   }
 ];
 
 function getAdminOverrides() {
   try {
-    const raw = localStorage.getItem(OVERRIDES_STORAGE_KEY);
+    const raw = localStorage.getItem(OVERRIDES_STORAGE_KEY) || localStorage.getItem(ALT_OVERRIDES_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -64,7 +53,9 @@ function saveAdminOverride(key, overrides) {
       ...overrides,
       updated_at: new Date().toISOString()
     };
-    localStorage.setItem(OVERRIDES_STORAGE_KEY, JSON.stringify(all));
+    const jsonStr = JSON.stringify(all);
+    localStorage.setItem(OVERRIDES_STORAGE_KEY, jsonStr);
+    localStorage.setItem(ALT_OVERRIDES_KEY, jsonStr);
   } catch (e) {
     console.warn('Failed to save admin user override:', e);
   }
@@ -105,8 +96,8 @@ function getLocalUsers() {
       .filter((u) => {
         const email = (u.email || '').trim().toLowerCase();
         const id = (u.id || '').toString().toLowerCase();
-        // Filtrer les comptes supprimés et l'ancien compte démo
-        return !deleted.has(email) && !deleted.has(id) && email !== 'assistant@beninbeyond.com';
+        // Filtrer les comptes supprimés et les anciens comptes démo factices
+        return !deleted.has(email) && !deleted.has(id) && email !== 'assistant@beninbeyond.com' && email !== 'voyageur@beninbeyond.com';
       })
       .map((u) => {
         const email = (u.email || '').trim().toLowerCase();
@@ -120,7 +111,13 @@ function getLocalUsers() {
           name: isAdmin ? 'Isidore Toudonou' : (override.name || u.name || email.split('@')[0]),
           email: email,
           phone: override.phone || u.phone || 'Non renseigné',
-          role: isAdmin ? 'admin' : (isSubAdmin ? 'subadmin' : (override.role || u.role === 'owner' || u.role === 'partner' ? 'owner' : 'client')),
+          role: isAdmin
+            ? 'admin'
+            : (isSubAdmin
+                ? 'subadmin'
+                : (override.role
+                    ? override.role
+                    : (u.role === 'owner' || u.role === 'partner' ? 'owner' : 'client'))),
           company: override.company || u.company || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : (u.role === 'owner' ? 'Partenaire Hébergeur / Auto' : '')),
           partner_type: override.partner_type || u.partner_type || u.partnerType || 'stay',
           tax_id: override.tax_id || u.tax_id || u.taxId || '',
@@ -203,7 +200,13 @@ export async function getUsers() {
             name: isAdmin ? 'Isidore Toudonou' : (override.name || p.full_name || email.split('@')[0]),
             email: email,
             phone: override.phone || p.phone || 'Non renseigné',
-            role: isAdmin ? 'admin' : (isSubAdmin ? 'subadmin' : (override.role || (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client'))),
+            role: isAdmin
+              ? 'admin'
+              : (isSubAdmin
+                  ? 'subadmin'
+                  : (override.role
+                      ? override.role
+                      : (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client'))),
             company: override.company || p.company_name || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : ''),
             partner_type: override.partner_type || p.partner_type || 'stay',
             tax_id: override.tax_id || p.tax_id || '',
@@ -429,6 +432,31 @@ export async function updateUser(userId, updates) {
         }
       }
     });
+  } catch {}
+
+  // 5. Mettre à jour benin_beyond_registered_users pour garantir la cohérence
+  try {
+    const regRaw = localStorage.getItem('benin_beyond_registered_users');
+    let regList = regRaw ? JSON.parse(regRaw) : [];
+    let regFound = false;
+    regList = regList.map((u) => {
+      if (u.id === userId || (cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)) {
+        regFound = true;
+        return {
+          ...u,
+          ...sanitizedUpdates
+        };
+      }
+      return u;
+    });
+    if (!regFound && cleanEmail) {
+      regList.unshift({
+        id: userId || `usr_${Date.now()}`,
+        email: cleanEmail,
+        ...sanitizedUpdates
+      });
+    }
+    localStorage.setItem('benin_beyond_registered_users', JSON.stringify(regList));
   } catch {}
 
   return sanitizedUpdates;

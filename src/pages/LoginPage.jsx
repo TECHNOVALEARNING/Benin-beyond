@@ -13,7 +13,8 @@ import {
   faKey,
   faXmark,
   faEye,
-  faEyeSlash
+  faEyeSlash,
+  faCrown
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -22,7 +23,7 @@ import { BrandIcon } from '../components/BrandLogo';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginWithGoogle, resetPassword, user } = useAuth();
+  const { login, loginWithGoogle, resetPassword, updateSuperAdminPassword, user } = useAuth();
 
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || '';
@@ -44,6 +45,9 @@ export function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState('');
+  const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
 
   const isOAuthCallback =
     window.location.hash.includes('access_token') ||
@@ -132,14 +136,52 @@ export function LoginPage() {
     setForgotError('');
     setForgotSuccess('');
 
-    if (!forgotEmail) {
+    const cleanForgotEmail = (forgotEmail || '').trim().toLowerCase();
+    if (!cleanForgotEmail) {
       setForgotError('Veuillez saisir votre adresse e-mail.');
+      return;
+    }
+
+    const isSuperAdminEmail =
+      cleanForgotEmail === 'isidoretoudonou@gmail.com' ||
+      cleanForgotEmail === 'admin@beninbeyond.com' ||
+      cleanForgotEmail === 'admin@beninbeyond.bj';
+
+    if (isSuperAdminEmail) {
+      if (!adminNewPassword) {
+        setForgotError('Veuillez saisir votre nouveau mot de passe personnalisé.');
+        return;
+      }
+      if (adminNewPassword.length < 4) {
+        setForgotError('Le mot de passe doit contenir au moins 4 caractères.');
+        return;
+      }
+      if (adminNewPassword !== adminConfirmPassword) {
+        setForgotError('Les deux mots de passe saisis ne sont pas identiques.');
+        return;
+      }
+
+      setForgotLoading(true);
+      try {
+        const success = updateSuperAdminPassword(adminNewPassword);
+        if (success) {
+          setPassword(adminNewPassword);
+          setEmail(cleanForgotEmail);
+          setForgotSuccess('Votre mot de passe Administrateur a été enregistré avec succès ! Vous pouvez maintenant vous connecter directement.');
+        } else {
+          setForgotError('Erreur lors de la mise à jour du mot de passe.');
+        }
+      } catch (err) {
+        setForgotError('Une erreur est survenue lors de la réinitialisation.');
+      } finally {
+        setForgotLoading(false);
+      }
       return;
     }
 
     setForgotLoading(true);
     try {
-      const res = await resetPassword(forgotEmail);
+      const res = await resetPassword(cleanForgotEmail);
       if (res.success) {
         setForgotSuccess(res.message || 'Un lien de réinitialisation vous a été envoyé.');
       } else {
@@ -222,34 +264,34 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-[90vh] w-full flex items-center justify-center px-4 py-16">
+    <div className="relative min-h-screen sm:h-screen w-full flex items-center justify-center px-4 py-4 sm:py-2 overflow-y-auto sm:overflow-hidden">
       {/* Subtle Background Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative z-10 w-full max-w-md">
-        <ScrollReveal delay={0} y={20}>
+      <div className="relative z-10 w-full max-w-md my-auto">
+        <ScrollReveal delay={0} y={15}>
           {/* Header */}
-          <div className="text-center mb-8 flex flex-col items-center">
-            <Link to="/" className="inline-flex flex-col items-center gap-2.5 group mb-2">
-              <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
-              <span className="font-heading text-3xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+          <div className="text-center mb-3 sm:mb-4 flex flex-col items-center">
+            <Link to="/" className="inline-flex items-center gap-2 group mb-1">
+              <BrandIcon size="md" className="hover:scale-105 transition-transform" />
+              <span className="font-heading text-2xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
                 Bénin Beyond
               </span>
             </Link>
-            <p className="caption text-xs uppercase tracking-widest text-accent font-semibold">
+            <p className="caption text-[10px] uppercase tracking-widest text-accent font-semibold">
               Portail Authentification & Sécurité
             </p>
-            <h1 className="font-heading text-2xl font-bold text-foreground mt-2">
+            <h1 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-0.5">
               Connexion à votre espace
             </h1>
-            <p className="text-xs text-foreground/60 mt-1.5 max-w-xs mx-auto">
+            <p className="text-[11px] text-foreground/60 mt-0.5 max-w-xs mx-auto">
               Accédez à vos réservations, gérez vos biens ou pilotez la plateforme
             </p>
           </div>
 
           {/* Form Card */}
-          <div className="rounded-3xl border border-foreground/10 bg-card/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-3xl border border-foreground/10 bg-card/90 p-5 sm:p-6 shadow-2xl backdrop-blur-xl">
             {/* Notification de réservation confirmée sécurisée */}
             {fromCheckout && (
               <div className="mb-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-1.5 animate-fadeIn">
@@ -400,17 +442,17 @@ export function LoginPage() {
             </button>
 
             {/* Divider */}
-            <div className="relative my-5 flex items-center justify-center">
+            <div className="relative my-3 sm:my-3.5 flex items-center justify-center">
               <div className="w-full border-t border-foreground/10" />
               <span className="absolute bg-card px-3 text-[11px] font-medium uppercase tracking-wider text-foreground/50">
                 ou avec votre e-mail
               </span>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
               {/* Email */}
               <div>
-                <label className="block text-xs font-medium text-foreground/80 mb-1.5">
+                <label className="block text-xs font-medium text-foreground/80 mb-1">
                   Adresse e-mail
                 </label>
                 <div className="relative">
@@ -427,14 +469,14 @@ export function LoginPage() {
                       if (errorInfo) setErrorInfo(null);
                     }}
                     placeholder="votre.email@domaine.com"
-                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2 text-xs sm:text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-medium text-foreground/80">
                     Mot de passe
                   </label>
@@ -463,7 +505,7 @@ export function LoginPage() {
                       if (errorInfo) setErrorInfo(null);
                     }}
                     placeholder="••••••••••••"
-                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2.5 text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2 text-xs sm:text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
                   <button
                     type="button"
@@ -484,7 +526,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || loadingGoogle}
-                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/95 active:scale-[0.98] transition-all disabled:opacity-60"
+                className="w-full mt-1.5 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs sm:text-sm font-semibold text-white shadow-lg hover:bg-primary/95 active:scale-[0.98] transition-all disabled:opacity-60"
               >
                 {loading ? (
                   <>
@@ -501,18 +543,18 @@ export function LoginPage() {
             </form>
 
             {/* Switch to Register */}
-            <div className="mt-6 space-y-2 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-4">
+            <div className="mt-3.5 space-y-1 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-2.5">
               <div>
                 <span>Vous n'avez pas encore de compte ? </span>
                 <Link
                   to={`/register${email ? `?email=${encodeURIComponent(email)}` : ''}`}
                   className="font-bold text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Créer mon compte Voyageur</span>
+                  <span>Créer un compte</span>
                   <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
                 </Link>
               </div>
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <span>Vous êtes hébergeur ou loueur pro ? </span>
                 <Link
                   to="/register?type=owner"
@@ -557,7 +599,7 @@ export function LoginPage() {
                 <div className="rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-3">
                   <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
                     <FontAwesomeIcon icon={faCircleCheck} className="text-sm" />
-                    <span>Lien expédié avec succès</span>
+                    <span>Mot de passe mis à jour</span>
                   </div>
                   <p>{forgotSuccess}</p>
                   <button
@@ -594,12 +636,66 @@ export function LoginPage() {
                     />
                   </div>
 
+                  {(forgotEmail.trim().toLowerCase() === 'isidoretoudonou@gmail.com' ||
+                    forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.com' ||
+                    forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.bj') && (
+                    <div className="rounded-2xl border border-accent/40 bg-accent/10 p-3.5 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-accent">
+                        <FontAwesomeIcon icon={faCrown} />
+                        <span>Compte Super-Administrateur identifié</span>
+                      </div>
+                      <p className="text-[11px] text-foreground/75 leading-relaxed">
+                        En tant que Super-Administrateur, vous pouvez réinitialiser et réattribuer immédiatement votre mot de passe personnel sans délai :
+                      </p>
+
+                      <div className="space-y-2 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-foreground/80 mb-1">
+                            Nouveau mot de passe
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showAdminNewPassword ? 'text' : 'password'}
+                              value={adminNewPassword}
+                              onChange={(e) => setAdminNewPassword(e.target.value)}
+                              placeholder="Votre mot de passe personnalisé"
+                              className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 pr-10 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminNewPassword(!showAdminNewPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground p-1 text-xs"
+                              tabIndex={-1}
+                            >
+                              <FontAwesomeIcon icon={showAdminNewPassword ? faEyeSlash : faEye} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-foreground/80 mb-1">
+                            Confirmer le mot de passe
+                          </label>
+                          <input
+                            type={showAdminNewPassword ? 'text' : 'password'}
+                            value={adminConfirmPassword}
+                            onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                            placeholder="Répétez le mot de passe"
+                            className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => {
                         setShowForgotModal(false);
                         setForgotError('');
+                        setAdminNewPassword('');
+                        setAdminConfirmPassword('');
                       }}
                       className="flex-1 rounded-xl border border-foreground/15 py-2.5 text-xs font-bold text-foreground/70 hover:bg-muted"
                     >
@@ -613,10 +709,16 @@ export function LoginPage() {
                       {forgotLoading ? (
                         <>
                           <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
-                          <span>Envoi...</span>
+                          <span>Traitement...</span>
                         </>
                       ) : (
-                        <span>Envoyer le lien</span>
+                        <span>
+                          {forgotEmail.trim().toLowerCase() === 'isidoretoudonou@gmail.com' ||
+                          forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.com' ||
+                          forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.bj'
+                            ? 'Enregistrer mon mot de passe'
+                            : 'Envoyer le lien'}
+                        </span>
                       )}
                     </button>
                   </div>

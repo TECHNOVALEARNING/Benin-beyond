@@ -48,7 +48,9 @@ import {
   faPen,
   faStar,
   faLock,
-  faUserShield
+  faUserShield,
+  faEyeSlash,
+  faKey
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -70,7 +72,7 @@ import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
-  const { user, logout, isSuperAdmin: authIsSuperAdmin } = useAuth();
+  const { user, logout, isSuperAdmin: authIsSuperAdmin, updateSuperAdminPassword } = useAuth();
   const isSuperAdmin = Boolean(
     authIsSuperAdmin ||
     user?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com' ||
@@ -139,6 +141,14 @@ export function AdminDashboardPage() {
   const [newAssistantEmail, setNewAssistantEmail] = useState('');
   const [newAssistantPhone, setNewAssistantPhone] = useState('');
   const [isCreatingAssistant, setIsCreatingAssistant] = useState(false);
+
+  // Super-Admin Password Management Modal State
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
+  const [showAdminPasswordText, setShowAdminPasswordText] = useState(false);
+  const [adminPasswordSaving, setAdminPasswordSaving] = useState(false);
+  const [adminPasswordError, setAdminPasswordError] = useState('');
 
   // Events Management Modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -485,6 +495,41 @@ export function AdminDashboardPage() {
       showToast(err.message || "Erreur lors de la création de l'assistant.");
     } finally {
       setIsCreatingAssistant(false);
+    }
+  };
+
+  const handleSaveAdminPassword = (e) => {
+    e.preventDefault();
+    setAdminPasswordError('');
+    const trimmed = (adminPasswordInput || '').trim();
+    if (!trimmed) {
+      setAdminPasswordError('Veuillez saisir votre nouveau mot de passe.');
+      return;
+    }
+    if (trimmed.length < 4) {
+      setAdminPasswordError('Le mot de passe doit comporter au moins 4 caractères.');
+      return;
+    }
+    if (trimmed !== (adminPasswordConfirm || '').trim()) {
+      setAdminPasswordError('Les deux mots de passe saisis ne sont pas identiques.');
+      return;
+    }
+
+    setAdminPasswordSaving(true);
+    try {
+      const ok = updateSuperAdminPassword(trimmed);
+      if (ok) {
+        showToast('Votre mot de passe Super-Administrateur a été enregistré avec succès !');
+        setShowAdminPasswordModal(false);
+        setAdminPasswordInput('');
+        setAdminPasswordConfirm('');
+      } else {
+        setAdminPasswordError('Erreur lors de la mise à jour du mot de passe.');
+      }
+    } catch {
+      setAdminPasswordError('Une erreur inattendue est survenue.');
+    } finally {
+      setAdminPasswordSaving(false);
     }
   };
 
@@ -1454,6 +1499,22 @@ export function AdminDashboardPage() {
             <span>Voir le site public</span>
           </Link>
 
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setAdminPasswordError('');
+                setAdminPasswordInput('');
+                setAdminPasswordConfirm('');
+                setShowAdminPasswordModal(true);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition-colors"
+            >
+              <FontAwesomeIcon icon={faLock} className="h-3.5 w-3.5 text-accent" />
+              <span>Changer mon mot de passe</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               logout();
@@ -1523,6 +1584,23 @@ export function AdminDashboardPage() {
               <span>Voir le catalogue</span>
               <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/40" />
             </Link>
+
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminPasswordError('');
+                  setAdminPasswordInput('');
+                  setAdminPasswordConfirm('');
+                  setShowAdminPasswordModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
+                title="Modifier mon mot de passe Super-Admin"
+              >
+                <FontAwesomeIcon icon={faLock} className="h-3 w-3" />
+                <span className="hidden sm:inline">Mon mot de passe</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -2610,7 +2688,7 @@ export function AdminDashboardPage() {
                       { key: 'client', label: 'Clients' },
                       { key: 'owner', label: 'Propriétaires' },
                       { key: 'subadmin', label: 'Assistants' },
-                      { key: 'admin', label: 'Admins' }
+                      { key: 'admin', label: 'Super-Admin' }
                     ].map((tab) => (
                       <button
                         key={tab.key}
@@ -2679,7 +2757,7 @@ export function AdminDashboardPage() {
                                           Super-Admin
                                         </span>
                                       )}
-                                      {isRowSubAdmin && (
+                                      {(isRowSubAdmin || (!isRowSuperAdmin && u.role === 'admin')) && (
                                         <span className="text-[9px] rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.2 font-bold uppercase">
                                           Assistant
                                         </span>
@@ -2696,12 +2774,7 @@ export function AdminDashboardPage() {
                                     <FontAwesomeIcon icon={faCrown} className="h-2.5 w-2.5 text-accent" />
                                     Super-Admin
                                   </span>
-                                ) : u.role === 'admin' ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-accent/20 text-accent-foreground border border-accent/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
-                                    <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5" />
-                                    Administrateur
-                                  </span>
-                                ) : isRowSubAdmin ? (
+                                ) : isRowSubAdmin || u.role === 'admin' || u.role === 'subadmin' ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
                                     <FontAwesomeIcon icon={faUserShield} className="h-2.5 w-2.5 text-indigo-400" />
                                     Assistant Admin (Sub-Admin)
@@ -4965,13 +5038,18 @@ export function AdminDashboardPage() {
                   <select
                     value={userFormRole}
                     onChange={(e) => setUserFormRole(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    disabled={editingUser?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com'}
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="client">Voyageur (Client)</option>
+                    <option value="client">Client</option>
                     <option value="owner">Propriétaire / Hôte / Loueur</option>
                     <option value="subadmin">Assistant Admin (Sub-Admin - Opérations)</option>
-                    <option value="admin">Administrateur</option>
                   </select>
+                  {editingUser?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com' && (
+                    <span className="text-[10.5px] text-amber-600 dark:text-amber-400 font-semibold block mt-1">
+                      Le rôle Super-Administrateur est exclusif et inaltérable.
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -5158,6 +5236,104 @@ export function AdminDashboardPage() {
           </div>
         </div>
       )}
+      {/* ========================================================================= */}
+      {/* MODAL MODIFIER MOT DE PASSE SUPER-ADMIN */}
+      {/* ========================================================================= */}
+      {showAdminPasswordModal && isSuperAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl border border-foreground/10 bg-background p-6 shadow-2xl relative my-8">
+            <div className="flex items-center justify-between border-b border-foreground/10 pb-4 mb-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <FontAwesomeIcon icon={faLock} className="h-2.5 w-2.5" />
+                  Sécurité Compte Super-Admin
+                </div>
+                <h3 className="text-base font-black text-foreground">
+                  Modifier mon mot de passe
+                </h3>
+                <p className="text-xs text-foreground/60">
+                  Définissez votre propre mot de passe personnalisé ({user?.email || 'isidoretoudonou@gmail.com'})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminPasswordModal(false)}
+                className="h-8 w-8 rounded-full border border-foreground/15 flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdminPassword} className="space-y-4">
+              {adminPasswordError && (
+                <div className="rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
+                  <span>{adminPasswordError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Nouveau mot de passe *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAdminPasswordText ? 'text' : 'password'}
+                    required
+                    value={adminPasswordInput}
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
+                    placeholder="Votre mot de passe personnel"
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 pr-10 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPasswordText(!showAdminPasswordText)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground p-1 text-xs"
+                    tabIndex={-1}
+                  >
+                    <FontAwesomeIcon icon={showAdminPasswordText ? faEyeSlash : faEye} />
+                  </button>
+                </div>
+                <span className="text-[10.5px] text-foreground/50 mt-1 block">
+                  Ce mot de passe sera immédiatement enregistré et requis à votre prochaine connexion.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Confirmer le nouveau mot de passe *
+                </label>
+                <input
+                  type={showAdminPasswordText ? 'text' : 'password'}
+                  required
+                  value={adminPasswordConfirm}
+                  onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                  placeholder="Répétez le mot de passe"
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-foreground/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPasswordModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminPasswordSaving}
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {adminPasswordSaving ? 'Enregistrement...' : 'Enregistrer mon mot de passe'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* MODAL: AUDIT CONFORMITÉ & DOSSIER KYC PARTENAIRE */}
       {/* ========================================================================= */}

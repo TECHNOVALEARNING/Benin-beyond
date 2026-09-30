@@ -52,27 +52,38 @@ export function resolveUserRole(email, rawRole = null) {
     return 'admin';
   }
 
-  // 1. Détection rôle Assistant Admin (Sub-Admin)
+  // 1. PRIORITÉ ABSOLUE : Vérification d'un override explicite par le Super-Administrateur
+  try {
+    const overridesRaw =
+      localStorage.getItem('benin_beyond_user_admin_overrides') ||
+      localStorage.getItem('benin_beyond_admin_user_overrides');
+    const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
+    if (overrides[cleanEmail]?.role) {
+      return overrides[cleanEmail].role;
+    }
+  } catch {}
+
+  // 2. Détection rôle Assistant Admin (Sub-Admin)
   if (rawRole === 'subadmin') {
     return 'subadmin';
   }
 
-  // 2. Rôle explicite propriétaire ou partenaire
+  // 3. Rôle explicite propriétaire ou partenaire
   if (rawRole === 'owner' || rawRole === 'partner') {
     return 'owner';
   }
 
-  // 2. Si l'utilisateur est déjà enregistré localement comme propriétaire
+  // 4. Si l'utilisateur est déjà enregistré localement avec un rôle
   try {
     const raw = localStorage.getItem(REGISTERED_USERS_KEY);
     const list = raw ? JSON.parse(raw) : [];
     const found = list.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-    if (found && (found.role === 'owner' || found.role === 'partner')) {
-      return 'owner';
+    if (found?.role) {
+      return found.role;
     }
   } catch {}
 
-  // 3. Intention de rôle OAuth (ex: clic Google depuis Espace Hôte ou inscription partenaire)
+  // 5. Intention de rôle OAuth (ex: clic Google depuis Espace Hôte ou inscription partenaire)
   try {
     const intendedRole = localStorage.getItem('benin_beyond_oauth_intended_role');
     if (intendedRole === 'owner' || intendedRole === 'partner') {
@@ -291,9 +302,9 @@ export function AuthProvider({ children }) {
     };
 
     // Mettre à jour Supabase profiles pour persister définitivement le rôle
-    if (isSupabaseConfigured && supabase && (assignedRole === 'owner' || assignedRole === 'admin')) {
+    if (isSupabaseConfigured && supabase && (assignedRole === 'owner' || assignedRole === 'admin' || assignedRole === 'subadmin')) {
       try {
-        const dbRole = assignedRole === 'admin' ? 'admin' : 'partner';
+        const dbRole = assignedRole === 'admin' ? 'admin' : (assignedRole === 'subadmin' ? 'subadmin' : 'partner');
         await supabase
           .from('profiles')
           .upsert({
@@ -364,22 +375,24 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const registeredList = getRegisteredUsers();
-    let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-
-    let isConfiguredSubAdmin = false;
+    // Récupération des overrides Super-Admin prioritaires
+    let userOverride = null;
     try {
-      const overridesRaw = localStorage.getItem('benin_beyond_admin_user_overrides');
+      const overridesRaw =
+        localStorage.getItem('benin_beyond_user_admin_overrides') ||
+        localStorage.getItem('benin_beyond_admin_user_overrides');
       const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
-      if (overrides[cleanEmail]?.role === 'subadmin') {
-        isConfiguredSubAdmin = true;
-      }
+      userOverride = overrides[cleanEmail];
     } catch {}
 
+    const isPromotedSubAdmin = userOverride?.role === 'subadmin';
+
+    const registeredList = getRegisteredUsers();
+    let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
     const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
 
     // 3. VÉRIFICATION STRICTE DE L'EXISTENCE DU COMPTE
-    const emailExists = Boolean(supabaseProfile || savedUser || isAdmin || demoMatch || isConfiguredSubAdmin);
+    const emailExists = Boolean(supabaseProfile || savedUser || isAdmin || demoMatch || isPromotedSubAdmin || userOverride);
 
     if (!emailExists) {
       return {
@@ -389,19 +402,29 @@ export function AuthProvider({ children }) {
       };
     }
 
-    // 4. VÉRIFICATION STRICTE DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR
+    // 4. VÉRIFICATION DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR
     if (isAdmin) {
+      const customAdminPassword = localStorage.getItem('benin_beyond_admin_custom_password');
       const validAdminPasswords = ['BeninBeyond2025!', 'admin123', 'admin', 'demo123', 'Benin2025!'];
+
+      const matchesCustom = customAdminPassword && cleanPassword === customAdminPassword;
       const matchesSavedPassword = savedUser?.password && savedUser.password === cleanPassword;
       const matchesMasterPassword = validAdminPasswords.includes(cleanPassword);
 
-      if (!matchesSavedPassword && !matchesMasterPassword) {
+      // Si le Super-Admin n'avait pas encore défini de mot de passe personnalisé spécifique,
+      // on enregistre le mot de passe qu'il saisit maintenant comme son mot de passe officiel
+      if (!customAdminPassword && !savedUser?.password) {
+        localStorage.setItem('benin_beyond_admin_custom_password', cleanPassword);
+      } else if (!matchesCustom && !matchesSavedPassword && !matchesMasterPassword) {
         return {
           success: false,
           isWrongPassword: true,
-          error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
+          error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou cliquer sur 'Mot de passe oublié' pour rétablir votre mot de passe."
         };
       }
+
+      // Mot de passe validé avec succès
+      localStorage.setItem('benin_beyond_admin_custom_password', cleanPassword);
 
       const adminUser = {
         ...DEMO_USERS.admin,
@@ -420,8 +443,8 @@ export function AuthProvider({ children }) {
       return { success: true, user: adminUser };
     }
 
-    // 5. VÉRIFICATION STRICTE DU MOT DE PASSE POUR L'ASSISTANT ADMIN (SUB-ADMIN)
-    if (isConfiguredSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
+    // 5. GESTION STRICTE DES COMPTES PROMUS OU CONFIGURÉS EN ASSISTANT ADMIN (SUB-ADMIN)
+    if (isPromotedSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
       const validSubAdminPasswords = ['BeninBeyond2025!', 'admin123', 'assistant123', 'demo123'];
       const matchesSaved = savedUser?.password && savedUser.password === cleanPassword;
       const matchesMaster = validSubAdminPasswords.includes(cleanPassword);
@@ -437,10 +460,12 @@ export function AuthProvider({ children }) {
       }
 
       const subAdminUser = {
+        ...(demoMatch || {}),
         ...(supabaseProfile || {}),
         ...(savedUser || {}),
-        id: supabaseProfile?.id || savedUser?.id || `usr_subadmin_${Date.now()}`,
-        name: supabaseProfile?.full_name || savedUser?.name || cleanEmail.split('@')[0],
+        ...(userOverride || {}),
+        id: supabaseProfile?.id || savedUser?.id || demoMatch?.id || `usr_subadmin_${Date.now()}`,
+        name: userOverride?.name || supabaseProfile?.full_name || savedUser?.name || demoMatch?.name || cleanEmail.split('@')[0],
         email: cleanEmail,
         role: 'subadmin',
         verified: true,
@@ -452,8 +477,8 @@ export function AuthProvider({ children }) {
       return { success: true, user: subAdminUser };
     }
 
-    // 6. VÉRIFICATION DU MOT DE PASSE POUR LES COMPTES DÉMO
-    if (demoMatch) {
+    // 6. VÉRIFICATION DU MOT DE PASSE POUR LES COMPTES DÉMO (SI NON MODIFIÉS PAR L'ADMIN)
+    if (demoMatch && !userOverride) {
       const validDemoPasswords = ['BeninBeyond2025!', 'demo123', 'admin123', 'Benin2025!'];
       if (!validDemoPasswords.includes(cleanPassword)) {
         return {
@@ -696,12 +721,40 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Demande de réinitialisation de mot de passe
+   * Demande ou définition directe de réinitialisation de mot de passe
    */
-  const resetPassword = async (email) => {
+  const resetPassword = async (email, newPassword = null) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!cleanEmail) {
       return { success: false, error: 'Veuillez saisir votre adresse e-mail.' };
+    }
+
+    // Définition directe d'un nouveau mot de passe (notamment pour le Super-Admin)
+    if (newPassword && newPassword.trim()) {
+      const trimmedPass = newPassword.trim();
+      if (cleanEmail === SUPER_ADMIN_EMAIL) {
+        localStorage.setItem('benin_beyond_admin_custom_password', trimmedPass);
+      }
+
+      const regList = getRegisteredUsers();
+      const updatedReg = regList.map((u) => {
+        if (u.email?.toLowerCase().trim() === cleanEmail) {
+          return { ...u, password: trimmedPass };
+        }
+        return u;
+      });
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updatedReg));
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.auth.updateUser({ password: trimmedPass });
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: 'Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.'
+      };
     }
 
     if (isSupabaseConfigured && supabase) {
@@ -723,7 +776,7 @@ export function AuthProvider({ children }) {
 
     const registeredList = getRegisteredUsers();
     const savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-    if (!savedUser) {
+    if (!savedUser && cleanEmail !== SUPER_ADMIN_EMAIL) {
       return {
         success: false,
         error: "Aucun compte n'est associé à cette adresse e-mail."
@@ -734,6 +787,24 @@ export function AuthProvider({ children }) {
       success: true,
       message: 'Un e-mail de réinitialisation a été préparé pour votre adresse.'
     };
+  };
+
+  /**
+   * Modifier directement le mot de passe Super-Admin
+   */
+  const updateSuperAdminPassword = (newPassword) => {
+    if (!newPassword || !newPassword.trim()) return false;
+    const trimmed = newPassword.trim();
+    localStorage.setItem('benin_beyond_admin_custom_password', trimmed);
+    const regList = getRegisteredUsers();
+    const updated = regList.map((u) => {
+      if (u.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
+        return { ...u, password: trimmed };
+      }
+      return u;
+    });
+    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updated));
+    return true;
   };
 
   /**
@@ -847,6 +918,7 @@ export function AuthProvider({ children }) {
         loginAsDemo,
         register,
         resetPassword,
+        updateSuperAdminPassword,
         registerOrLoginClient,
         upgradeToOwner,
         logout

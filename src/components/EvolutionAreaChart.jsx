@@ -67,9 +67,10 @@ export function EvolutionAreaChart({
   ];
 
   // Construction d'une série continue reflétant fidèlement l'activité réelle
+  // Construction d'une série continue reflétant fidèlement l'activité réelle
   const chartPoints = useMemo(() => {
-    // Si des données complètes sont passées en props avec au moins 3 points
-    if (data && data.length >= 3) {
+    // 1. Si des données réelles avec plusieurs points sont passées
+    if (data && data.length >= 2) {
       return data.map((d, i) => ({
         index: i,
         label: d.label || d.month || `Mois ${i + 1}`,
@@ -79,28 +80,27 @@ export function EvolutionAreaChart({
       }));
     }
 
-    // Baseline progressive naturelle créant la belle ondulation financière
-    const monthNames = ['Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre'];
-    const currentMonthIdx = 5; // Septembre
-    const realTotalGmv = (data || []).reduce((acc, curr) => acc + (Number(curr.value) || Number(curr.gmv) || 0), 0);
-    const realTotalComm = (data || []).reduce((acc, curr) => acc + (Number(curr.secondaryValue) || Number(curr.commission) || 0), 0);
+    // 2. Si 1 seul point existe (démarrage avec 1 réservation récente)
+    if (data && data.length === 1) {
+      const d = data[0];
+      const gmv = Math.max(0, Number(d.value) || Number(d.gmv) || 0);
+      const comm = Math.max(0, Number(d.secondaryValue) || Number(d.commission) || Math.round(gmv * 0.10));
+      return [
+        { index: 0, label: 'Départ', date: 'Initialisation (0 FCFA)', primaryValue: 0, secondaryValue: 0 },
+        { index: 1, label: d.label || 'Actuel', date: d.date || 'Réservation récente', primaryValue: gmv, secondaryValue: comm }
+      ];
+    }
 
-    const basePrimaryValues = [1850000, 2400000, 1950000, 3100000, 2800000, 3950000];
-    const baseSecondaryValues = [185000, 240000, 195000, 310000, 280000, 395000];
-
-    return monthNames.map((month, idx) => {
-      const multiplier = realTotalGmv > 0 ? (realTotalGmv / 3000000) : 1;
-      const primary = Math.round(basePrimaryValues[idx] * (realTotalGmv > 0 ? (0.6 + 0.4 * multiplier) : 1));
-      const secondary = Math.round(baseSecondaryValues[idx] * (realTotalComm > 0 ? (0.6 + 0.4 * multiplier) : 1));
-
-      return {
-        index: idx,
-        label: month,
-        date: idx === currentMonthIdx ? 'Septembre 2026 (En cours)' : `${month} 2026`,
-        primaryValue: primary,
-        secondaryValue: secondary
-      };
-    });
+    // 3. Aucune réservation encore enregistrée : REFLÉTER FIDÈLEMENT LE RÉEL DU SITE
+    // La plateforme démarre : la courbe reste en bas à 0 FCFA. Zéro chiffre d'affaires inventé.
+    const monthNames = ['Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre'];
+    return monthNames.map((month, idx) => ({
+      index: idx,
+      label: month,
+      date: `${month} 2026`,
+      primaryValue: 0,
+      secondaryValue: 0
+    }));
   }, [data]);
 
   // Dimensions géométriques du canvas SVG
@@ -115,14 +115,14 @@ export function EvolutionAreaChart({
   const innerHeight = svgHeight - paddingTop - paddingBottom;
   const groundY = paddingTop + innerHeight;
 
-  // Échelle max Y avec marge de 20%
+  // Échelle max Y avec marge de 25% (ou échelle étalon de 100 000 FCFA si tout est à 0)
   const maxDataValue = useMemo(() => {
     let max = 0;
     chartPoints.forEach((p) => {
       if (p.primaryValue > max) max = p.primaryValue;
       if (p.secondaryValue > max) max = p.secondaryValue;
     });
-    return max > 0 ? max * 1.20 : 4000000;
+    return max > 0 ? max * 1.25 : 100000;
   }, [chartPoints]);
 
   // Points coordonnés (X, Y)
