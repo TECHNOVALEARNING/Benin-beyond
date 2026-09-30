@@ -83,11 +83,22 @@ export function AdminDashboardPage() {
   // Navigation State persisté pour conserver la vue sélectionnée après actualisation (F5)
   const [currentSection, setCurrentSection] = useState(() => {
     try {
-      return localStorage.getItem('benin_beyond_admin_section') || 'cockpit';
+      const saved = localStorage.getItem('benin_beyond_admin_section') || 'cockpit';
+      if (!isSuperAdmin && saved === 'users') return 'cockpit';
+      return saved;
     } catch {
       return 'cockpit';
     }
   });
+
+  useEffect(() => {
+    if (!isSuperAdmin && currentSection === 'users') {
+      setCurrentSection('cockpit');
+      try {
+        localStorage.setItem('benin_beyond_admin_section', 'cockpit');
+      } catch {}
+    }
+  }, [isSuperAdmin, currentSection]);
 
   const handleSetSection = (sec) => {
     setCurrentSection(sec);
@@ -1308,13 +1319,17 @@ export function AdminDashboardPage() {
           badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null,
           badgeColor: 'bg-rose-500/25 text-rose-300 border-rose-500/40'
         },
-        {
-          key: 'users',
-          label: 'Gestion Utilisateurs',
-          icon: isSuperAdmin ? faUsers : faLock,
-          badge: isSuperAdmin ? (usersList.length > 0 ? `${usersList.length} comptes` : null) : '🔒 Super-Admin',
-          badgeColor: isSuperAdmin ? 'bg-primary/20 text-primary border-primary/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-        },
+        ...(isSuperAdmin
+          ? [
+              {
+                key: 'users',
+                label: 'Gestion Utilisateurs',
+                icon: faUsers,
+                badge: usersList.length > 0 ? `${usersList.length} comptes` : null,
+                badgeColor: 'bg-primary/20 text-primary border-primary/30'
+              }
+            ]
+          : []),
         { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
         { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup },
         {
@@ -2545,52 +2560,8 @@ export function AdminDashboardPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS */}
+          {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS (SUPER-ADMIN ONLY) */}
           {/* ========================================================================= */}
-          {currentSection === 'users' && !isSuperAdmin && (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
-              <div className="w-full max-w-xl rounded-3xl border border-rose-500/25 bg-card/90 p-8 shadow-xl backdrop-blur-md">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-500 border border-rose-500/30 text-2xl">
-                  <FontAwesomeIcon icon={faLock} />
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[11px] font-bold uppercase tracking-wider mb-3">
-                  Privilège Exclusif Super-Admin
-                </div>
-                <h2 className="font-heading text-xl font-black text-foreground">
-                  Gestion des Utilisateurs Verrouillée
-                </h2>
-                <p className="mt-3 text-xs leading-relaxed text-foreground/70">
-                  En tant qu'<strong>Assistant Admin (Sub-Admin)</strong>, votre compte dispose des délégations nécessaires pour assurer la gestion quotidienne de la plateforme (modération des annonces, réservations globales, avis clients, agenda et publication de biens).
-                </p>
-                <div className="mt-4 rounded-2xl bg-muted/40 p-4 border border-foreground/10 text-left text-xs space-y-2">
-                  <p className="font-bold text-foreground flex items-center gap-2">
-                    <FontAwesomeIcon icon={faShieldHalved} className="text-amber-500" />
-                    Règle de Sécurité & Hiérarchie des Rôles :
-                  </p>
-                  <p className="text-[11px] text-foreground/60 leading-relaxed">
-                    La création, modification, suspension, suppression de comptes ou la modification des rôles d'accès relève exclusivement de la direction générale (<strong>Isidore Toudonou</strong>).
-                  </p>
-                </div>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSetSection('cockpit')}
-                    className="rounded-xl bg-accent px-5 py-2.5 text-xs font-bold text-black hover:bg-white transition-all shadow-sm"
-                  >
-                    Retourner au Cockpit Opérations
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetSection('reservations')}
-                    className="rounded-xl border border-foreground/15 bg-background px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
-                  >
-                    Gérer les Réservations
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {currentSection === 'users' && isSuperAdmin && (
             <div className="space-y-6">
               {/* Header */}
