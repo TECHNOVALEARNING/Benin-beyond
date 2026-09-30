@@ -8,9 +8,9 @@ export function BrandIcon({ size = 'md', className = '' }) {
   const sizeMap = {
     xs: 'w-6 h-6',
     sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-14 h-14',
-    xl: 'w-20 h-20'
+    md: 'w-9 h-9 sm:w-10 sm:h-10',
+    lg: 'w-12 h-12 md:w-14 md:h-14',
+    xl: 'w-16 h-16 md:w-20 md:h-20'
   };
 
   const dim = sizeMap[size] || sizeMap.md;
@@ -131,15 +131,15 @@ export function BrandLogo({
   textClassName = ''
 }) {
   return (
-    <div className={`inline-flex items-center gap-3 select-none ${className}`}>
+    <div className={`inline-flex items-center gap-2 sm:gap-3 select-none shrink-0 ${className}`}>
       <BrandIcon size={size} className={iconClassName} />
       {showText && (
-        <div className="flex flex-col leading-tight">
-          <span className={`font-heading font-bold tracking-tight ${size === 'lg' ? 'text-2xl md:text-3xl' : size === 'sm' ? 'text-base' : 'text-xl'} ${textColor} ${textClassName}`}>
+        <div className="flex flex-col leading-tight min-w-0">
+          <span className={`font-heading font-bold tracking-tight whitespace-nowrap ${size === 'lg' ? 'text-2xl md:text-3xl' : size === 'sm' ? 'text-sm sm:text-base' : 'text-lg sm:text-xl'} ${textColor} ${textClassName}`}>
             Bénin Beyond
           </span>
           {subtext && (
-            <span className="text-[10px] tracking-wider uppercase text-accent font-semibold -mt-0.5">
+            <span className="text-[9px] sm:text-[10px] tracking-wider uppercase text-accent font-semibold -mt-0.5 whitespace-nowrap">
               {subtext}
             </span>
           )}

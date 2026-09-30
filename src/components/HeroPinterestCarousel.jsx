@@ -154,27 +154,28 @@ export function HeroPinterestCarousel() {
       </div>
 
       {/* 2. Top Header (Brand Logo & Navigation buttons) */}
-      <div className="absolute inset-x-0 top-0 z-30 px-6 pt-6 md:px-12">
-        <div className="mx-auto flex max-w-8xl items-center justify-between">
-          <Link to="/" className="hover:opacity-95 transition-opacity group">
+      <div className="absolute inset-x-0 top-0 z-30 px-4 pt-4 sm:px-6 sm:pt-6 md:px-12">
+        <div className="mx-auto flex max-w-8xl items-center justify-between gap-3">
+          <Link to="/" className="hover:opacity-95 transition-opacity group shrink-0">
             <BrandLogo size="md" textColor="text-white" subtext="Voyage & Standing" />
           </Link>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Espace Propriétaire : toujours accessible pour devenir hôte / partenaire */}
             {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
               <Link
                 to="/register?type=owner"
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm"
-                title="Devenir propriétaire ou gestionnaire partenaire sur Bénin Beyond"
+                className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
+                title="Espace Propriétaire & Partenaire"
+                aria-label="Espace Propriétaire & Partenaire"
               >
-                <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
-                <span>Espace Propriétaire</span>
+                <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent transition-transform group-hover:scale-110" />
+                <span className="hidden sm:inline">Espace Propriétaire</span>
               </Link>
             )}
 
             {user ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <Link
                   to={
                     role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
@@ -183,11 +184,18 @@ export function HeroPinterestCarousel() {
                       ? '/dashboard/partner'
                       : '/dashboard/client'
                   }
-                  className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-xs font-bold text-black shadow-lg hover:bg-white hover:text-black transition-all active:scale-95"
-                  title="Accéder à votre tableau de bord"
+                  className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-2 rounded-full bg-accent p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-black shadow-lg hover:bg-white transition-all active:scale-95 group"
+                  title={
+                    role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
+                      ? 'Cockpit Admin'
+                      : role === 'partner' || user?.role === 'partner'
+                      ? 'Dashboard Hôte'
+                      : 'Mon Espace'
+                  }
+                  aria-label="Accéder à votre espace"
                 >
-                  <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5" />
-                  <span>
+                  <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+                  <span className="hidden sm:inline">
                     {role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
                       ? 'Cockpit Admin'
                       : role === 'partner' || user?.role === 'partner'
@@ -200,18 +208,21 @@ export function HeroPinterestCarousel() {
                   type="button"
                   onClick={() => logout()}
                   title="Se déconnecter"
-                  className="h-7 w-7 rounded-full bg-white/10 hover:bg-rose-500/20 text-white/80 hover:text-rose-300 border border-white/20 flex items-center justify-center transition-all"
+                  aria-label="Se déconnecter"
+                  className="h-9 w-9 rounded-full bg-white/10 hover:bg-rose-500/20 text-white/80 hover:text-rose-300 border border-white/20 flex items-center justify-center transition-all active:scale-95"
                 >
-                  <FontAwesomeIcon icon={faRightFromBracket} className="h-3 w-3" />
+                  <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : (
               <Link
                 to="/login"
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-xs font-bold text-black shadow-md hover:bg-accent hover:text-black transition-all active:scale-95"
+                className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/95 hover:bg-accent p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-black shadow-md transition-all active:scale-95 group"
+                title="Connexion"
+                aria-label="Connexion"
               >
-                <FontAwesomeIcon icon={faUser} className="h-3 w-3" />
-                <span>Connexion</span>
+                <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 text-black transition-transform group-hover:scale-110" />
+                <span className="hidden sm:inline">Connexion</span>
               </Link>
             )}
           </div>
