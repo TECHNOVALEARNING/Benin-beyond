@@ -196,10 +196,10 @@ export function RegisterPage() {
               <span>Espace Propriétaire & Partenaire</span>
             </div>
             <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
-              Onboarding & Enregistrement des Biens
+              Créer votre compte Partenaire
             </h1>
             <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
-              Rejoignez le réseau officiel de prestige au Bénin pour louer vos villas, hôtels de charme ou votre flotte de véhicules VIP.
+              Rejoignez le réseau officiel de prestige au Bénin pour vos résidences de standing et flottes de véhicules d'exception.
             </p>
           </div>
 

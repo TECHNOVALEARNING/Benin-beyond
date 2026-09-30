@@ -64,6 +64,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
+import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -725,7 +726,7 @@ export function AdminDashboardPage() {
   // Financial calculations 100% réelles
   const platformMetrics = useMemo(() => {
     const totalGmv = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0), 0);
-    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0) * 0.15)), 0);
+    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0) * 0.10)), 0);
     const totalDisbursed = totalGmv - totalCommissions;
     const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
     const pendingPayoutsCount = payouts.filter((p) => p.status === 'pending').length;
@@ -745,6 +746,62 @@ export function AdminDashboardPage() {
     };
   }, [bookings, listings, partners, payouts]);
 
+  // Évolution financière dynamique (Montée à chaque achat, baisse aux annulations, paliers réels)
+  const evolutionData = useMemo(() => {
+    if (bookings.length === 0) return [];
+
+    const sorted = [...bookings].sort((a, b) => {
+      const ta = new Date(a.created_at || a.created_date || 0).getTime();
+      const tb = new Date(b.created_at || b.created_date || 0).getTime();
+      return ta - tb;
+    });
+
+    let runningGmv = 0;
+    let runningComm = 0;
+    const history = [];
+
+    // Point de départ antérieur pour tracer la première montée
+    const firstDate = sorted[0]?.created_at ? new Date(sorted[0].created_at) : new Date();
+    const prevDate = new Date(firstDate.getTime() - 24 * 60 * 60 * 1000);
+    history.push({
+      label: prevDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+      date: prevDate.toLocaleDateString('fr-FR'),
+      value: 0,
+      secondaryValue: 0,
+      changeType: 'flat'
+    });
+
+    sorted.forEach((b) => {
+      const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
+      const comm = Number(b.commission_amount) || Math.round(gmv * 0.10);
+      const isCancelled = b.status === 'cancelled';
+
+      if (isCancelled) {
+        // En cas d'annulation : le chiffre d'affaires actif diminue fidèlement
+        runningGmv = Math.max(0, runningGmv - gmv);
+        runningComm = Math.max(0, runningComm - comm);
+      } else {
+        // En cas d'achat : le chiffre d'affaires monte
+        runningGmv += gmv;
+        runningComm += comm;
+      }
+
+      const d = b.created_at ? new Date(b.created_at) : new Date();
+      const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+
+      history.push({
+        label,
+        date: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
+        value: runningGmv,
+        secondaryValue: runningComm,
+        changeType: isCancelled ? 'down' : 'up',
+        bookingRef: b.booking_ref
+      });
+    });
+
+    return history;
+  }, [bookings]);
+
   // Statistiques mensuelles réelles
   const monthlyStats = useMemo(() => {
     if (bookings.length === 0) {
@@ -758,7 +815,7 @@ export function AdminDashboardPage() {
         monthsMap[monthName] = { month: monthName, gmv: 0, commission: 0 };
       }
       const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
-      const comm = Number(b.commission_amount) || Math.round(gmv * 0.15);
+      const comm = Number(b.commission_amount) || Math.round(gmv * 0.10);
       monthsMap[monthName].gmv += gmv;
       monthsMap[monthName].commission += comm;
     });
@@ -1459,7 +1516,7 @@ export function AdminDashboardPage() {
                 <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <span className="caption text-[11px] uppercase tracking-wider text-foreground/75 font-semibold">
-                      Commissions Bénin Beyond (15%)
+                      Commissions Bénin Beyond (10%)
                     </span>
                     <div className="h-8 w-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground">
                       <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
@@ -1508,62 +1565,16 @@ export function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Monthly Trend Visual Bar Chart (Données 100% réelles) */}
-              <div className="rounded-3xl border border-foreground/10 bg-card p-6 md:p-8 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Activité & Volume d'Affaires Mensuel
-                    </h3>
-                    <p className="text-xs text-foreground/60 mt-0.5">
-                      Statistiques réelles calculées à partir des réservations effectives
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-md bg-primary" />
-                      <span className="text-foreground/70 font-medium">GMV Réel</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-md bg-accent" />
-                      <span className="text-foreground/70 font-medium">Commission 15%</span>
-                    </div>
-                  </div>
-                </div>
-
-                {monthlyStats.length === 0 ? (
-                  <div className="h-44 rounded-2xl bg-muted/20 border border-dashed border-foreground/15 flex flex-col items-center justify-center p-6 text-center">
-                    <FontAwesomeIcon icon={faChartPie} className="h-8 w-8 text-foreground/30 mb-2" />
-                    <p className="text-sm font-semibold text-foreground">Aucune transaction enregistrée pour l'instant</p>
-                    <p className="text-xs text-foreground/60 mt-1 max-w-md">
-                      Les graphiques et barres d'activité se mettront à jour en direct dès la première réservation effectuée par un voyageur.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 items-end pt-8 pb-2 border-b border-foreground/10 h-64">
-                    {monthlyStats.map((stat, idx) => {
-                      const maxGmv = Math.max(...monthlyStats.map((s) => s.gmv), 1);
-                      const heightPercent = Math.max(10, Math.min(100, Math.round((stat.gmv / maxGmv) * 100)));
-                      return (
-                        <div key={idx} className="flex flex-col items-center gap-2 h-full justify-end">
-                          <span className="text-[10px] font-bold text-foreground/60 hidden sm:block">
-                            {formatPrice(stat.gmv)}
-                          </span>
-                          <div className="w-full max-w-[50px] bg-muted/60 rounded-xl overflow-hidden flex flex-col justify-end p-1 relative h-full">
-                            <div
-                              className="w-full bg-primary rounded-lg transition-all duration-500"
-                              style={{ height: `${heightPercent}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-semibold text-foreground/80">
-                            {stat.month}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {/* Courbe d'Évolution Continue du Volume d'Affaires & Commissions (100% réelles) */}
+              <EvolutionAreaChart
+                title="Évolution du Volume d'Affaires & Commissions"
+                subtitle="Courbe dynamique continue : traçabilité des achats (hausse) et annulations (baisse)"
+                data={evolutionData.length > 0 ? evolutionData : monthlyStats.map(m => ({ label: m.month, value: m.gmv, secondaryValue: m.commission }))}
+                valueLabel="Volume GMV"
+                secondaryLabel="Commission (10%)"
+                emptyMessage="Aucune transaction enregistrée pour l'instant"
+                emptySubtext="La courbe d'évolution s'activera et tracera vos paliers en direct dès la première réservation validée."
+              />
 
               {/* Quick Action Cards Grid */}
               {/* Quick Action Cards Grid */}
@@ -2105,8 +2116,8 @@ export function AdminDashboardPage() {
                         <th className="p-4">Prestation réservée</th>
                         <th className="p-4">Dates</th>
                         <th className="p-4">Brut Client</th>
-                        <th className="p-4">Com. Bénin Beyond (15%)</th>
-                        <th className="p-4">Net Hôte (85%)</th>
+                        <th className="p-4">Com. Bénin Beyond (10%)</th>
+                        <th className="p-4">Net Hôte (90%)</th>
                         <th className="p-4">Statut</th>
                         <th className="p-4 text-right">Actions</th>
                       </tr>
@@ -2114,7 +2125,7 @@ export function AdminDashboardPage() {
                     <tbody className="divide-y divide-foreground/5">
                       {filteredBookings.map((b) => {
                         const gross = Number(b.gross_amount) || 0;
-                        const comm = Number(b.commission_amount) || Math.round(gross * 0.15);
+                        const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
                         const net = gross - comm;
 
                         return (
@@ -2674,7 +2685,7 @@ export function AdminDashboardPage() {
                 <div className="rounded-3xl border border-accent/40 bg-accent/15 p-6 shadow-sm">
                   <div className="flex items-center gap-2 text-accent-foreground mb-2">
                     <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Commissions Bénin Beyond (15%)</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Commissions Bénin Beyond (10%)</span>
                   </div>
                   <p className="font-heading text-3xl font-black text-foreground">
                     {formatPrice(platformMetrics.commissions)}
@@ -2687,7 +2698,7 @@ export function AdminDashboardPage() {
                 <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
                   <div className="flex items-center gap-2 text-emerald-700 mb-2">
                     <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Reversements Hôtes (85%)</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Reversements Hôtes (90%)</span>
                   </div>
                   <p className="font-heading text-3xl font-black text-foreground">
                     {formatPrice(platformMetrics.disbursed)}
@@ -3524,10 +3535,10 @@ export function AdminDashboardPage() {
                 <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      2. Tarification & Commission Plateforme (15%)
+                      2. Tarification & Commission Plateforme (10%)
                     </span>
                     <span className="text-[11px] text-accent-foreground font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
-                      Commission standard : 15%
+                      Commission standard : 10%
                     </span>
                   </div>
 
@@ -3572,9 +3583,9 @@ export function AdminDashboardPage() {
                     </div>
 
                     <div className="bg-card p-2.5 rounded-xl border border-foreground/10 flex flex-col justify-center">
-                      <p className="text-[10px] text-foreground/60">Marge plateforme (15%) :</p>
+                      <p className="text-[10px] text-foreground/60">Marge plateforme (10%) :</p>
                       <p className="font-heading text-sm font-bold text-accent font-mono">
-                        {formPrice ? formatPrice(Math.round(parseInt(formPrice, 10) * 0.15)) : '0 FCFA'}
+                        {formPrice ? formatPrice(Math.round(parseInt(formPrice, 10) * 0.10)) : '0 FCFA'}
                       </p>
                     </div>
                   </div>
@@ -4289,12 +4300,12 @@ export function AdminDashboardPage() {
                 <span className="font-bold text-foreground">{formatPrice(selectedBookingModal.gross_amount)}</span>
               </div>
               <div className="flex justify-between text-accent font-bold">
-                <span>Commission Bénin Beyond (15%) :</span>
-                <span>+{formatPrice(selectedBookingModal.commission_amount || Math.round(selectedBookingModal.gross_amount * 0.15))}</span>
+                <span>Commission Bénin Beyond (10%) :</span>
+                <span>+{formatPrice(selectedBookingModal.commission_amount || Math.round(selectedBookingModal.gross_amount * 0.10))}</span>
               </div>
               <div className="flex justify-between text-emerald-700 font-bold text-sm pt-1 border-t border-foreground/10">
-                <span>Net Partenaire à reverser (85%) :</span>
-                <span>{formatPrice(selectedBookingModal.net_amount || (selectedBookingModal.gross_amount - Math.round(selectedBookingModal.gross_amount * 0.15)))}</span>
+                <span>Net Partenaire à reverser (90%) :</span>
+                <span>{formatPrice(selectedBookingModal.net_amount || (selectedBookingModal.gross_amount - Math.round(selectedBookingModal.gross_amount * 0.10)))}</span>
               </div>
             </div>
 

@@ -65,6 +65,7 @@ import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
+import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -408,6 +409,63 @@ export function PartnerDashboardPage() {
       return sum + count;
     }, 0);
     return Math.round((totalDays / bookings.length) * 10) / 10;
+  }, [bookings]);
+
+  // Évolution financière dynamique des gains réels de l'hôte (Montée aux réservations, baisse aux annulations)
+  const partnerEvolutionData = useMemo(() => {
+    if (bookings.length === 0) return [];
+
+    const sorted = [...bookings].sort((a, b) => {
+      const ta = new Date(a.created_at || a.created_date || 0).getTime();
+      const tb = new Date(b.created_at || b.created_date || 0).getTime();
+      return ta - tb;
+    });
+
+    let runningNet = 0;
+    let runningComm = 0;
+    const history = [];
+
+    // Point de départ
+    const firstDate = sorted[0]?.created_at ? new Date(sorted[0].created_at) : new Date();
+    const prevDate = new Date(firstDate.getTime() - 24 * 60 * 60 * 1000);
+    history.push({
+      label: prevDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+      date: prevDate.toLocaleDateString('fr-FR'),
+      value: 0,
+      secondaryValue: 0,
+      changeType: 'flat'
+    });
+
+    sorted.forEach((b) => {
+      const gross = Number(b.gross_amount) || 0;
+      const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
+      const net = gross - comm;
+      const isCancelled = b.status === 'cancelled';
+
+      if (isCancelled) {
+        // En cas d'annulation : les gains nets effectifs diminuent
+        runningNet = Math.max(0, runningNet - net);
+        runningComm = Math.max(0, runningComm - comm);
+      } else {
+        // En cas de réservation : les gains nets augmentent
+        runningNet += net;
+        runningComm += comm;
+      }
+
+      const d = b.created_at ? new Date(b.created_at) : new Date();
+      const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+
+      history.push({
+        label,
+        date: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
+        value: runningNet,
+        secondaryValue: runningComm,
+        changeType: isCancelled ? 'down' : 'up',
+        bookingRef: b.booking_ref
+      });
+    });
+
+    return history;
   }, [bookings]);
 
   // Statistiques mensuelles réelles du partenaire
@@ -1154,60 +1212,17 @@ export function PartnerDashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 
                 {/* Visual Earnings Evolution Chart */}
-                <div className="lg:col-span-7 rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="font-heading text-base font-bold text-foreground">
-                        Évolution des Revenus Mensuels
-                      </h3>
-                      <p className="text-xs text-foreground/60">
-                        Historique des gains nets calculé à partir de vos réservations réelles
-                      </p>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
-                      2026
-                    </span>
-                  </div>
-
-                  {monthlyPartnerStats.length === 0 ? (
-                    <div className="h-48 rounded-2xl bg-muted/20 border border-dashed border-foreground/15 flex flex-col items-center justify-center p-6 text-center">
-                      <FontAwesomeIcon icon={faChartLine} className="h-8 w-8 text-foreground/30 mb-2" />
-                      <p className="text-sm font-semibold text-foreground">Aucun revenu enregistré pour le moment</p>
-                      <p className="text-xs text-foreground/60 mt-1 max-w-md">
-                        Votre graphique d'évolution financière et vos indicateurs d'occupation s'activeront automatiquement dès votre première réservation validée.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="h-48 flex items-end justify-between gap-2 pt-6 border-b border-foreground/10">
-                        {monthlyPartnerStats.map((bar, idx) => {
-                          const maxNet = Math.max(...monthlyPartnerStats.map((s) => s.net), 1);
-                          const heightPercent = Math.max(12, Math.min(100, Math.round((bar.net / maxNet) * 100)));
-                          return (
-                            <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                              <span className="text-[10px] text-foreground/60 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                                {formatPrice(bar.net)}
-                              </span>
-                              <div
-                                className="w-full max-w-[36px] bg-primary rounded-t-lg transition-all duration-500 shadow-md shadow-primary/20"
-                                style={{ height: `${heightPercent}%` }}
-                              />
-                              <span className="text-[11px] font-medium text-foreground/70">
-                                {bar.month}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between text-xs text-foreground/60">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-primary" /> Exercice 2026
-                        </span>
-                        <span>Taux d'occupation : <strong>{bookings.length > 0 ? `${Math.min(100, Math.round(bookings.length * 15))}%` : '0%'}</strong></span>
-                      </div>
-                    </>
-                  )}
+                <div className="lg:col-span-7">
+                  <EvolutionAreaChart
+                    title="Évolution des Revenus Partenaire"
+                    subtitle="Gains nets réels : progression à chaque réservation, ajustement aux annulations"
+                    data={partnerEvolutionData.length > 0 ? partnerEvolutionData : monthlyPartnerStats.map(m => ({ label: m.month, value: m.net, secondaryValue: Math.round(m.net * 0.111) }))}
+                    valueLabel="Gains Nets Hôte"
+                    secondaryLabel="Com. Déduite (10%)"
+                    emptyMessage="Aucun revenu enregistré pour le moment"
+                    emptySubtext="Votre courbe d'évolution financière et vos indicateurs s'activeront automatiquement dès votre première réservation validée."
+                    height={250}
+                  />
                 </div>
 
                 {/* Quick Shortcuts & Verified Status */}

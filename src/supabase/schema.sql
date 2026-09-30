@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   subtotal NUMERIC NOT NULL CHECK (subtotal >= 0),
   options_total NUMERIC NOT NULL DEFAULT 0,
   total_amount NUMERIC NOT NULL CHECK (total_amount >= 0),
-  commission_rate NUMERIC DEFAULT 0.15,
+  commission_rate NUMERIC DEFAULT 0.10,
   commission_amount NUMERIC NOT NULL DEFAULT 0,
   partner_payout_amount NUMERIC NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (
@@ -185,7 +185,7 @@ ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS protection_options JSONB DE
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS subtotal NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS options_total NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS total_amount NUMERIC NOT NULL DEFAULT 0;
-ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS commission_rate NUMERIC DEFAULT 0.15;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS commission_rate NUMERIC DEFAULT 0.10;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS commission_amount NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS partner_payout_amount NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'confirmed';
