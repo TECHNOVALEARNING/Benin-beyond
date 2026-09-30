@@ -2668,33 +2668,35 @@ export function AdminDashboardPage() {
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  {/* Role filter */}
-                  <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
-                    {[
-                      { key: 'all', label: 'Tous' },
-                      { key: 'client', label: 'Clients' },
-                      { key: 'owner', label: 'Propriétaires' },
-                      { key: 'subadmin', label: 'Assistants' },
-                      { key: 'admin', label: 'Super-Admin' }
-                    ].map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setUserRoleFilter(tab.key)}
-                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                          userRoleFilter === tab.key ? 'bg-card text-foreground shadow-sm' : 'text-foreground/60 hover:text-foreground'
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                  {/* Role filter with horizontal scroll on mobile */}
+                  <div className="w-full sm:w-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] py-0.5">
+                    <div className="flex items-center gap-1 rounded-xl bg-muted p-1 min-w-max">
+                      {[
+                        { key: 'all', label: 'Tous' },
+                        { key: 'client', label: 'Clients' },
+                        { key: 'owner', label: 'Propriétaires' },
+                        { key: 'subadmin', label: 'Assistants' },
+                        { key: 'admin', label: 'Super-Admin' }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setUserRoleFilter(tab.key)}
+                          className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap ${
+                            userRoleFilter === tab.key ? 'bg-card text-foreground shadow-sm' : 'text-foreground/60 hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Status filter */}
                   <select
                     value={userStatusFilter}
                     onChange={(e) => setUserStatusFilter(e.target.value)}
-                    className="rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none"
+                    className="w-full sm:w-auto rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
                   >
                     <option value="all">Tous les statuts</option>
                     <option value="active">✓ Actifs uniquement</option>
@@ -2939,16 +2941,18 @@ export function AdminDashboardPage() {
                   </div>
                 )}
 
-                <div className="mt-8 pt-6 border-t border-foreground/10 flex items-center justify-between">
-                  <span className="text-xs text-foreground/60">
-                    Exportation comptable certifiée conforme au droit Ohada / République du Bénin
+                <div className="mt-8 pt-6 border-t border-foreground/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <span className="text-xs text-foreground/70 font-semibold flex items-center gap-2">
+                    <FontAwesomeIcon icon={faFileContract} className="text-accent h-3.5 w-3.5 shrink-0" />
+                    <span>Conforme OHADA & DGI Bénin</span>
+                    <span className="hidden md:inline text-foreground/45 font-normal">• Synthèse mensuelle certifiée</span>
                   </span>
                   <button
                     onClick={() => showToast('Relevé comptable mensuel (PDF/CSV) généré avec succès.')}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/95 transition-all"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-primary/90 transition-all active:scale-95 shrink-0"
                   >
                     <FontAwesomeIcon icon={faDownload} className="h-3.5 w-3.5" />
-                    <span>Télécharger Relevé Comptable</span>
+                    <span>Télécharger le relevé</span>
                   </button>
                 </div>
               </div>
@@ -4383,23 +4387,23 @@ export function AdminDashboardPage() {
                   {filteredReviews.map((rev) => (
                     <div
                       key={rev.id}
-                      className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm hover:border-foreground/20 transition-all flex flex-col md:flex-row md:items-start justify-between gap-4"
+                      className="rounded-2xl border border-foreground/10 bg-card p-4 sm:p-5 shadow-sm hover:border-foreground/20 transition-all flex flex-col md:flex-row md:items-start justify-between gap-4 overflow-hidden"
                     >
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0">
                             {rev.author_name ? rev.author_name.charAt(0) : 'V'}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-heading text-sm font-bold text-foreground">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-heading text-sm font-bold text-foreground truncate">
                                 {rev.author_name || 'Voyageur'}
                               </span>
-                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
+                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20 shrink-0">
                                 Client Vérifié
                               </span>
                             </div>
-                            <span className="text-[11px] text-foreground/50">{rev.author_email || 'Email non renseigné'}</span>
+                            <span className="text-[11px] text-foreground/50 truncate block">{rev.author_email || 'Email non renseigné'}</span>
                           </div>
                         </div>
 
@@ -4418,20 +4422,35 @@ export function AdminDashboardPage() {
                         </div>
 
                         {/* Comment */}
-                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5">
+                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5 break-words">
                           "{rev.comment || 'Aucun commentaire écrit'}"
                         </p>
 
-                        <div className="flex items-center gap-4 text-[10px] text-foreground/45 pt-1">
-                          <span>Publié le : {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date récente'}</span>
-                          {rev.listing_id && <span>Bien Réf : {rev.listing_id}</span>}
-                          {rev.pack_id && <span>Pack Réf : {rev.pack_id}</span>}
-                          {rev.booking_id && <span>Réservation : {rev.booking_id}</span>}
+                        {/* Metadata row with flex-wrap so reservation ID never overflows */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10.5px] text-foreground/50 pt-1">
+                          <span className="shrink-0">
+                            Publié le {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Récemment'}
+                          </span>
+                          {rev.listing_id && (
+                            <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[170px]" title={rev.listing_id}>
+                              Bien : {rev.listing_id}
+                            </span>
+                          )}
+                          {rev.pack_id && (
+                            <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[170px]" title={rev.pack_id}>
+                              Pack : {rev.pack_id}
+                            </span>
+                          )}
+                          {rev.booking_id && (
+                            <span className="inline-flex items-center gap-1 bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold truncate max-w-[190px]" title={rev.booking_id}>
+                              Résa : {rev.booking_id}
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       {/* Action: Delete review */}
-                      <div className="shrink-0 flex md:flex-col items-end justify-between gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-foreground/10">
+                      <div className="shrink-0 flex items-center md:items-end justify-end gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-foreground/10">
                         <button
                           onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
                           className="rounded-xl border border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1.5"
