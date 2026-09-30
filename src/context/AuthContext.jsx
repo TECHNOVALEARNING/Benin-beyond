@@ -349,13 +349,71 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 2. Recherche parmi les utilisateurs enregistrés sur la plateforme
-    const registeredList = getRegisteredUsers();
-    const savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+    // 2. Détection prioritaire absolue du Super-Administrateur (Garantie de rôle absolu 'admin')
+    if (isAdmin) {
+      const registeredList = getRegisteredUsers();
+      const existingAdmin = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+      const adminUser = {
+        ...DEMO_USERS.admin,
+        ...(existingAdmin || {}),
+        id: existingAdmin?.id || 'usr_admin_isidore',
+        email: cleanEmail,
+        name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (existingAdmin?.name || 'Administration Bénin Beyond'),
+        role: 'admin',
+        verified: true,
+        is_active: true,
+        password: cleanPassword
+      };
+      saveRegisteredUser(adminUser);
+      setUser(adminUser);
+      return { success: true, user: adminUser };
+    }
 
+    // 3. Détection prioritaire des comptes Assistant Admin (Sub-Admin)
+    let isConfiguredSubAdmin = false;
+    try {
+      const overridesRaw = localStorage.getItem('benin_beyond_admin_user_overrides');
+      const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
+      if (overrides[cleanEmail]?.role === 'subadmin') {
+        isConfiguredSubAdmin = true;
+      }
+    } catch {}
+
+    const registeredList = getRegisteredUsers();
+    let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+    if (isConfiguredSubAdmin || savedUser?.role === 'subadmin') {
+      const subAdminUser = {
+        ...(savedUser || {}),
+        id: savedUser?.id || `usr_subadmin_${Date.now()}`,
+        name: savedUser?.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: 'subadmin',
+        verified: true,
+        is_active: true,
+        password: cleanPassword
+      };
+      saveRegisteredUser(subAdminUser);
+      setUser(subAdminUser);
+      return { success: true, user: subAdminUser };
+    }
+
+    // 4. Détection des comptes démo intégrés (Propriétaire, Client)
+    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
+    if (demoMatch) {
+      const demoUser = {
+        ...demoMatch,
+        password: cleanPassword
+      };
+      saveRegisteredUser(demoUser);
+      setUser(demoUser);
+      return { success: true, user: demoUser };
+    }
+
+    // 5. Recherche parmi les utilisateurs enregistrés sur la plateforme
     if (savedUser) {
       // Compte suspendu par la modération
-      if (savedUser.is_active === false && cleanEmail !== SUPER_ADMIN_EMAIL) {
+      if (savedUser.is_active === false) {
         return {
           success: false,
           error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction."
@@ -395,35 +453,7 @@ export function AuthProvider({ children }) {
       };
     }
 
-    // 3. Détection des comptes démo intégrés et Super-Administrateur
-    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
-    if (demoMatch || isAdmin) {
-      const validAdminPasswords = ['BeninBeyond2025!', 'admin123', 'admin', 'demo123', 'Benin2025!'];
-      const isValidPassword = validAdminPasswords.includes(cleanPassword);
-      if (!isValidPassword) {
-        return {
-          success: false,
-          isWrongPassword: true,
-          error: "Mot de passe incorrect pour ce compte administratif ou de démonstration."
-        };
-      }
-      const adminUser = isAdmin
-        ? {
-            ...DEMO_USERS.admin,
-            id: 'usr_admin_isidore',
-            email: cleanEmail,
-            name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (cleanEmail.startsWith('admin') ? 'Administration Bénin Beyond' : DEMO_USERS.admin.name),
-            role: 'admin',
-            verified: true
-          }
-        : demoMatch;
-
-      saveRegisteredUser(adminUser);
-      setUser(adminUser);
-      return { success: true, user: adminUser };
-    }
-
-    // 4. Compte inexistant : Refus strict et immédiat (Sécurité absolue)
+    // 6. Compte inexistant : Refus strict et immédiat (Sécurité absolue)
     return {
       success: false,
       isUnknownAccount: true,
