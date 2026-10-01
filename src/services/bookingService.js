@@ -283,6 +283,11 @@ export async function createBooking(bookingPayload) {
   const dates = bookingPayload.dates || (firstItem.startDate && firstItem.endDate ? `Du ${firstItem.startDate} au ${firstItem.endDate}` : 'Dates confirmées');
   const guests = bookingPayload.guests || (firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur');
 
+  const isVehicleBooking = bookingPayload.rental_type === 'drive' || firstItem.type === 'drive' || firstItem.rental_type === 'drive' || firstItem.price_unit === 'jour';
+  const rentalType = isVehicleBooking ? 'drive' : (bookingPayload.rental_type || firstItem.type || 'stay');
+  const durationDays = isVehicleBooking ? (bookingPayload.duration_days || firstItem.days || 1) : null;
+  const roomsCount = isVehicleBooking ? 0 : (bookingPayload.rooms_count ?? firstItem.rooms_count ?? 1);
+
   const record = {
     ...bookingPayload,
     id: `bkg_${Date.now()}`,
@@ -292,6 +297,9 @@ export async function createBooking(bookingPayload) {
     customer_phone: bookingPayload.customer_phone || '',
     customer_avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(bookingPayload.customer_name || 'Voyageur')}&background=0D8ABC&color=fff`,
     items: items,
+    rental_type: rentalType,
+    duration_days: durationDays,
+    rooms_count: roomsCount,
     listing_id: listingId,
     listing_title: listingTitle,
     listing_image: listingImage,
@@ -324,6 +332,9 @@ export async function createBooking(bookingPayload) {
         customer_email: record.customer_email,
         customer_phone: record.customer_phone,
         items: record.items,
+        rental_type: rentalType,
+        duration_days: durationDays,
+        rooms_count: roomsCount,
         protection_options: record.protection_options || {},
         subtotal: record.subtotal,
         options_total: record.options_total,

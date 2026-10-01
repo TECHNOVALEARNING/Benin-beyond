@@ -415,13 +415,12 @@
 /* ========================================================================= */
 /* IMPRESSION PROFESSIONNELLE DES REÇUS & BONS DE RÉSERVATION (MEDIA PRINT) */
 /* ========================================================================= */
-@media print {
-  /* Réinitialiser les marges de la page d'impression */
-  @page {
-    margin: 1.2cm;
-    size: auto;
-  }
+@page {
+  margin: 0; /* Élimine radicalement l'en-tête (date/titre) et le pied de page (URL) par défaut des navigateurs */
+  size: A4 portrait;
+}
 
+@media print {
   /* Forcer le fond blanc et le texte sombre pour une impression nette et économe */
   html, body {
     background: #ffffff !important;
@@ -433,6 +432,8 @@
     width: 100% !important;
     height: auto !important;
     overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Masquer tous les composants superflus du site : navbar, footer, sidebar, boutons, filtres, toasts */
@@ -442,14 +443,24 @@
   footer,
   button,
   .no-print,
-  .fixed.inset-0,
-  [role="dialog"] > div:first-child,
   [data-no-print="true"] {
     display: none !important;
     visibility: hidden !important;
   }
 
-  /* Masquer tous les enfants de body sauf la zone désignée pour l'impression */
+  /* Pour les modals de fond, ne jamais les masquer si elles contiennent un reçu imprimable */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Masquer tous les éléments frères sauf la zone désignée pour l'impression */
   body * {
     visibility: hidden;
   }
@@ -462,24 +473,23 @@
     visibility: visible !important;
   }
 
-  /* Positionner le reçu proprement en haut de la page imprimée */
+  /* Positionner le reçu proprement en pleine page sans fond sombre ni bordure parasite */
   #printable-voucher,
   .printable-receipt {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 auto !important;
-    padding: 24px 28px !important;
+    padding: 16mm 20mm !important;
     background: #ffffff !important;
-    color: #111827 !important;
-    border: 1px solid #d1d5db !important;
-    border-radius: 12px !important;
+    color: #0f172a !important;
+    border: none !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    z-index: 99999 !important;
   }
 
   /* Rétablir les contrastes et supprimer les fonds sombres des cartes imbriquées */

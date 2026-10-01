@@ -66,6 +66,7 @@ import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
+import { printInvoiceDocument } from '../utils/invoicePrinter';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -129,6 +130,12 @@ export function PartnerDashboardPage() {
   const [roomsCount, setRoomsCount] = useState(1);
   const [availabilityType, setAvailabilityType] = useState('always'); // 'always' | 'custom_period'
 
+  // Vehicle-specific states (Strictement dissocié des chambres)
+  const [seatsCount, setSeatsCount] = useState(5);
+  const [transmission, setTransmission] = useState('automatique'); // 'automatique' | 'manuelle'
+  const [fuelType, setFuelType] = useState('essence'); // 'essence' | 'diesel' | 'hybride' | 'electrique'
+  const [withDriver, setWithDriver] = useState(false);
+
   // Custom Photos & Video state
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
@@ -158,6 +165,10 @@ export function PartnerDashboardPage() {
   const [editFormDescription, setEditFormDescription] = useState('');
   const [editFormSpecs, setEditFormSpecs] = useState('');
   const [editFormRoomsCount, setEditFormRoomsCount] = useState(1);
+  const [editFormSeatsCount, setEditFormSeatsCount] = useState(5);
+  const [editFormTransmission, setEditFormTransmission] = useState('automatique');
+  const [editFormFuelType, setEditFormFuelType] = useState('essence');
+  const [editFormWithDriver, setEditFormWithDriver] = useState(false);
   const [editFormAvailableFrom, setEditFormAvailableFrom] = useState('');
   const [editFormAvailableTo, setEditFormAvailableTo] = useState('');
   const [editUploadedPhotos, setEditUploadedPhotos] = useState([]);
@@ -626,7 +637,7 @@ export function PartnerDashboardPage() {
   // GESTION DE LA MODIFICATION D'UNE ANNONCE
   // ==========================================
   const handleOpenEditModal = (item) => {
-    if (!item) return;
+    const isVeh = item.type === 'drive' || item.subcategory === 'car';
     setEditingListingModal(item);
     setEditFormTitle(item.title || '');
     setEditFormType(item.type || 'stay');
@@ -637,7 +648,11 @@ export function PartnerDashboardPage() {
     setEditFormPurpose(item.purpose || (item.price_unit === 'vente totale' ? 'vente' : 'location'));
     setEditFormDescription(item.description || '');
     setEditFormSpecs(Array.isArray(item.specs) ? item.specs.join(', ') : (item.specs || ''));
-    setEditFormRoomsCount(item.rooms_count || item.availability?.rooms_count || 1);
+    setEditFormRoomsCount(isVeh ? 0 : (item.rooms_count || item.availability?.rooms_count || 1));
+    setEditFormSeatsCount(item.vehicle_seats || (isVeh ? (item.rooms_count || 5) : 5));
+    setEditFormTransmission(item.transmission || 'automatique');
+    setEditFormFuelType(item.fuel_type || 'essence');
+    setEditFormWithDriver(Boolean(item.with_driver));
     setEditFormAvailableFrom(item.available_from || item.availability?.available_from || '');
     setEditFormAvailableTo(item.available_to || item.availability?.available_to || '');
     setEditUploadedPhotos(Array.isArray(item.gallery) ? [...item.gallery] : []);
@@ -737,8 +752,10 @@ export function PartnerDashboardPage() {
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const isVeh = editFormType === 'drive' || editFormSubcategory === 'car';
       const priceNum = parseInt(editFormPrice, 10) || Number(editingListingModal.price) || 50000;
-      const roomsNum = parseInt(editFormRoomsCount, 10) || 1;
+      const roomsNum = isVeh ? 0 : (parseInt(editFormRoomsCount, 10) || 1);
+      const seatsNum = isVeh ? (parseInt(editFormSeatsCount, 10) || 5) : 0;
 
       // Si l'annonce était refusée, la mise à jour réactive l'annonce si l'hôte est certifié
       const nextStatus = editingListingModal.status === 'refused'
@@ -752,23 +769,32 @@ export function PartnerDashboardPage() {
       const updates = {
         title: editFormTitle.trim(),
         type: editFormType,
-        subcategory: editFormType === 'stay' ? editFormSubcategory : (editFormSubcategory === 'villa' || editFormSubcategory === 'hotel' ? 'car' : editFormSubcategory),
+        subcategory: editFormType === 'stay' ? editFormSubcategory : 'car',
         location: editFormLocation.trim() || 'Cotonou, Bénin',
         price: priceNum,
-        price_unit: editFormPurpose === 'vente' ? 'vente totale' : editFormPriceUnit,
+        price_unit: editFormPurpose === 'vente' ? 'vente totale' : (isVeh ? 'jour' : editFormPriceUnit),
         purpose: editFormPurpose,
         description: editFormDescription.trim(),
         summary: editFormDescription.trim().slice(0, 160),
-        specs: specsArray.length > 0 ? specsArray : ['Standing supérieur', 'Sécurité 24/7'],
+        specs: specsArray.length > 0 ? specsArray : (isVeh ? ['Climatisation', `${seatsNum} places`, editFormTransmission === 'automatique' ? 'Boîte Automatique' : 'Boîte Manuelle'] : ['Standing supérieur', 'Sécurité 24/7']),
         rooms_count: roomsNum,
-        available_from: editFormAvailableFrom || null,
-        available_to: editFormAvailableTo || null,
+        vehicle_seats: seatsNum,
+        transmission: isVeh ? editFormTransmission : null,
+        fuel_type: isVeh ? editFormFuelType : null,
+        with_driver: isVeh ? editFormWithDriver : false,
+        available_from: isVeh ? null : (editFormAvailableFrom || null),
+        available_to: isVeh ? null : (editFormAvailableTo || null),
         gallery: editUploadedPhotos,
         video_url: editingListingModal.video_url || null,
         status: nextStatus,
         rejection_reason: editingListingModal.status === 'refused' ? null : (editingListingModal.rejection_reason || null),
         badge: nextBadge,
-        availability: {
+        availability: isVeh ? {
+          type: 'always',
+          available_from: null,
+          available_to: null,
+          rooms_count: 0
+        } : {
           type: editFormAvailableFrom || editFormAvailableTo ? 'custom_period' : 'always',
           available_from: editFormAvailableFrom || null,
           available_to: editFormAvailableTo || null,
@@ -826,29 +852,45 @@ export function PartnerDashboardPage() {
       finalGallery.unshift(feat);
     }
 
+    const isVeh = formType === 'drive';
+    const roomsNum = isVeh ? 0 : (formSubcategory === 'hotel' ? (parseInt(roomsCount, 10) || 1) : Math.max(1, parseInt(roomsCount, 10) || 1));
+    const seatsNum = isVeh ? (parseInt(seatsCount, 10) || 5) : 0;
+
     const newListing = await addListing({
       title: formTitle || (formType === 'stay' ? (formSubcategory === 'hotel' ? 'Chambre d’Hôtel de Standing' : 'Résidence de Standing') : 'Véhicule de Prestige'),
       type: formType,
       subcategory: formType === 'stay' ? formSubcategory : 'car',
       location: formLocation,
       price: priceNum,
-      price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
-      description: formDescription || 'Hébergement ou véhicule haut de gamme vérifié par Bénin Beyond.',
-      badge: formSubcategory === 'hotel'
-        ? `${roomsCount || 1} chambre(s) dispo`
-        : (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente de certification KYC'),
-      specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing'],
+      price_unit: formPurpose === 'vente' ? 'vente totale' : (isVeh ? 'jour' : formPriceUnit),
+      rooms_count: roomsNum,
+      vehicle_seats: seatsNum,
+      transmission: isVeh ? transmission : null,
+      fuel_type: isVeh ? fuelType : null,
+      with_driver: isVeh ? withDriver : false,
+      description: formDescription || (isVeh ? 'Véhicule haut de gamme vérifié par Bénin Beyond.' : 'Hébergement haut de gamme vérifié par Bénin Beyond.'),
+      badge: isVeh
+        ? `${seatsNum} places · ${transmission === 'automatique' ? 'Auto' : 'Manuelle'}`
+        : (formSubcategory === 'hotel'
+          ? `${roomsNum} chambre(s) dispo`
+          : (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente de certification KYC')),
+      specs: specsArray.length > 0 ? specsArray : (isVeh ? ['Climatisation', `${seatsNum} places`, transmission === 'automatique' ? 'Boîte Automatique' : 'Boîte Manuelle'] : ['Climatisation', 'Sécurité 24/7', 'Standing']),
       gallery: finalGallery,
       video_url: null,
       status: isPartnerCertified ? 'active' : 'pending', // Les hôtes certifiés sont publiés directement en ligne
       owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : (user?.id || null),
       owner_name: user?.name || (isPartnerCertified ? 'Propriétaire Certifié' : 'Partenaire Hôte'),
       owner_email: user?.email || '',
-      availability: {
+      availability: isVeh ? {
+        type: 'always',
+        available_from: null,
+        available_to: null,
+        rooms_count: 0
+      } : {
         type: availabilityType,
         available_from: availableFrom || null,
         available_to: availableTo || null,
-        rooms_count: parseInt(roomsCount, 10) || 1
+        rooms_count: roomsNum
       }
     });
 
@@ -2098,6 +2140,87 @@ export function PartnerDashboardPage() {
                           onChange={(e) => setAvailableTo(e.target.value)}
                           className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
                         />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Spécifications dédiées pour les Véhicules */}
+                {formType === 'drive' && (
+                  <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5" />
+                        <span>Caractéristiques Techniques du Véhicule</span>
+                      </span>
+                      <span className="text-[10px] text-primary font-bold bg-primary/15 px-2 py-0.5 rounded-full">
+                        Flotte & Mobilité (0 chambre)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-foreground/70">
+                      Renseignez les spécifications réelles du véhicule. Aucun compte de chambre d'hôtel n'est appliqué aux véhicules.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Places assises *
+                        </label>
+                        <select
+                          value={seatsCount}
+                          onChange={(e) => setSeatsCount(Number(e.target.value))}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        >
+                          <option value={2}>2 places (Sport / Coupé)</option>
+                          <option value={4}>4 places (Berline compacte)</option>
+                          <option value={5}>5 places (Berline / SUV standard)</option>
+                          <option value={7}>7 places (Grand SUV / Familial)</option>
+                          <option value={9}>9 places (Van VIP / Minibus)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Boîte de vitesse
+                        </label>
+                        <select
+                          value={transmission}
+                          onChange={(e) => setTransmission(e.target.value)}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        >
+                          <option value="automatique">Automatique</option>
+                          <option value="manuelle">Manuelle</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Carburant
+                        </label>
+                        <select
+                          value={fuelType}
+                          onChange={(e) => setFuelType(e.target.value)}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        >
+                          <option value="essence">Essence</option>
+                          <option value="diesel">Diesel</option>
+                          <option value="hybride">Hybride</option>
+                          <option value="electrique">100% Électrique</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                          Option Chauffeur VIP
+                        </label>
+                        <select
+                          value={withDriver ? 'yes' : 'no'}
+                          onChange={(e) => setWithDriver(e.target.value === 'yes')}
+                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        >
+                          <option value="no">Sans chauffeur (Autonome)</option>
+                          <option value="yes">Avec chauffeur dédié inclus</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -3720,46 +3843,111 @@ export function PartnerDashboardPage() {
                 </div>
               </div>
 
-              {/* 4. Capacité & Disponibilité */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                    {editFormType === 'stay' ? 'Chambres / Pièces' : 'Nombre de places assises'}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={editFormRoomsCount}
-                    onChange={(e) => setEditFormRoomsCount(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
+              {/* 4. Capacité & Spécifications */}
+              {editFormType === 'stay' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Chambres / Pièces *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={editFormRoomsCount}
+                      onChange={(e) => setEditFormRoomsCount(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                    Disponible à partir du
-                  </label>
-                  <input
-                    type="date"
-                    value={editFormAvailableFrom}
-                    onChange={(e) => setEditFormAvailableFrom(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Disponible à partir du
+                    </label>
+                    <input
+                      type="date"
+                      value={editFormAvailableFrom}
+                      onChange={(e) => setEditFormAvailableFrom(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                    Disponible jusqu'au
-                  </label>
-                  <input
-                    type="date"
-                    value={editFormAvailableTo}
-                    onChange={(e) => setEditFormAvailableTo(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Disponible jusqu'au
+                    </label>
+                    <input
+                      type="date"
+                      value={editFormAvailableTo}
+                      onChange={(e) => setEditFormAvailableTo(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-primary/5 p-3 rounded-2xl border border-primary/20">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Places assises *
+                    </label>
+                    <select
+                      value={editFormSeatsCount}
+                      onChange={(e) => setEditFormSeatsCount(Number(e.target.value))}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value={2}>2 places</option>
+                      <option value={4}>4 places</option>
+                      <option value={5}>5 places</option>
+                      <option value={7}>7 places</option>
+                      <option value={9}>9 places</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Boîte de vitesse
+                    </label>
+                    <select
+                      value={editFormTransmission}
+                      onChange={(e) => setEditFormTransmission(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="automatique">Automatique</option>
+                      <option value="manuelle">Manuelle</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Carburant
+                    </label>
+                    <select
+                      value={editFormFuelType}
+                      onChange={(e) => setEditFormFuelType(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="essence">Essence</option>
+                      <option value="diesel">Diesel</option>
+                      <option value="hybride">Hybride</option>
+                      <option value="electrique">100% Électrique</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      Chauffeur VIP
+                    </label>
+                    <select
+                      value={editFormWithDriver ? 'yes' : 'no'}
+                      onChange={(e) => setEditFormWithDriver(e.target.value === 'yes')}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="no">Sans chauffeur</option>
+                      <option value="yes">Avec chauffeur</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* 5. Galerie Photos */}
               <div className="space-y-3 pt-2 border-t border-foreground/10">
@@ -3954,7 +4142,7 @@ export function PartnerDashboardPage() {
       {/* 8. MODAL DÉTAILS DE LA RÉSERVATION CLIENT */}
       {/* ========================================================================= */}
       {selectedBookingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn print-friendly">
           <div className="printable-receipt relative w-full max-w-lg rounded-3xl bg-card border border-foreground/15 p-6 shadow-2xl space-y-5">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
@@ -4087,10 +4275,11 @@ export function PartnerDashboardPage() {
               <div className="flex items-center justify-end gap-2.5 no-print">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                  onClick={() => printInvoiceDocument(selectedBookingModal, { name: selectedBookingModal.customer_name, email: selectedBookingModal.customer_email, phone: selectedBookingModal.customer_phone }, { role: 'partner' })}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
                 >
-                  Imprimer Reçu
+                  <FontAwesomeIcon icon={faPrint} className="h-3 w-3" />
+                  <span>Imprimer Reçu</span>
                 </button>
                 <button
                   type="button"

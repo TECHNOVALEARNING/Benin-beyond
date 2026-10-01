@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBagShopping, faArrowRight, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faBagShopping, faArrowRight, faTrash, faCar, faShieldHalved, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -42,7 +42,10 @@ export function CartPage() {
         {/* Items List */}
         <div className="divide-y divide-foreground/10 border-t border-foreground/10">
           {items.map((item, index) => {
-            const duration = item.nights || item.days || item.qty || 1;
+            const isVehicle = item.type === 'drive' || item.rental_type === 'drive' || item.price_unit === 'jour';
+            const duration = isVehicle
+              ? (item.days || item.qty || 1)
+              : (item.nights || item.days || item.qty || 1);
             const itemTotal = (item.price || 0) * duration;
 
             return (
@@ -54,7 +57,7 @@ export function CartPage() {
               >
                 <div className="flex gap-4">
                   {/* Thumbnail */}
-                  <div className="h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-muted border border-foreground/10">
+                  <div className="h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-muted border border-foreground/10 relative">
                     {item.image ? (
                       <img
                         src={item.image}
@@ -66,19 +69,52 @@ export function CartPage() {
                         Photo
                       </div>
                     )}
+                    {isVehicle && (
+                      <div className="absolute top-1.5 left-1.5 rounded-full bg-primary/90 text-white p-1 shadow">
+                        <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Details */}
                   <div className="flex flex-1 flex-col">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-heading text-lg font-semibold leading-snug">
-                          {item.title}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-heading text-lg font-semibold leading-snug">
+                            {item.title}
+                          </h3>
+                          {isVehicle ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold">
+                              <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5" /> Véhicule (24h/j)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent-foreground px-2 py-0.5 text-[10px] font-bold">
+                              Hébergement
+                            </span>
+                          )}
+                        </div>
                         {item.location && (
                           <p className="text-sm text-foreground/60 mt-0.5">
                             {item.location}
                           </p>
+                        )}
+                        {/* Vehicle Specs summary if available */}
+                        {isVehicle && (item.vehicle_seats > 0 || item.transmission || item.with_driver) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-foreground/70">
+                            {item.vehicle_seats > 0 && (
+                              <span className="flex items-center gap-1">
+                                <FontAwesomeIcon icon={faUsers} className="h-2.5 w-2.5 text-primary" />
+                                {item.vehicle_seats} places
+                              </span>
+                            )}
+                            {item.transmission && (
+                              <span className="capitalize">· Boîte {item.transmission}</span>
+                            )}
+                            {item.with_driver && (
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">· Avec chauffeur</span>
+                            )}
+                          </div>
                         )}
                       </div>
                       <button
@@ -92,33 +128,43 @@ export function CartPage() {
 
                     {/* Duration / Quantity Adjuster */}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      {(item.price_unit === 'nuit' || item.price_unit === 'jour') ? (
+                      {(item.price_unit === 'nuit' || item.price_unit === 'jour' || isVehicle) ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-foreground/60 font-medium">Durée :</span>
+                          <span className="text-xs text-foreground/60 font-medium">
+                            {isVehicle ? 'Durée de location :' : 'Durée du séjour :'}
+                          </span>
                           <div className="inline-flex items-center rounded-lg border border-foreground/15 bg-background overflow-hidden shadow-sm">
                             <button
                               type="button"
                               onClick={() => {
                                 const newDuration = Math.max(1, duration - 1);
-                                updateItem(index, { nights: newDuration, days: newDuration, qty: newDuration });
+                                updateItem(index, {
+                                  nights: isVehicle ? 0 : newDuration,
+                                  days: isVehicle ? newDuration : 0,
+                                  qty: newDuration
+                                });
                               }}
                               disabled={duration <= 1}
                               className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted disabled:opacity-30 transition-colors"
-                              title="Diminuer d'un jour/nuit"
+                              title="Diminuer"
                             >
                               -
                             </button>
                             <span className="px-3 py-1 text-xs font-bold text-foreground min-w-[3.5rem] text-center font-mono bg-muted/30">
-                              {duration} {item.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}
+                              {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
                             </span>
                             <button
                               type="button"
                               onClick={() => {
                                 const newDuration = duration + 1;
-                                updateItem(index, { nights: newDuration, days: newDuration, qty: newDuration });
+                                updateItem(index, {
+                                  nights: isVehicle ? 0 : newDuration,
+                                  days: isVehicle ? newDuration : 0,
+                                  qty: newDuration
+                                });
                               }}
                               className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted transition-colors"
-                              title="Augmenter d'un jour/nuit"
+                              title="Augmenter"
                             >
                               +
                             </button>
@@ -137,7 +183,7 @@ export function CartPage() {
 
                     <div className="mt-auto flex items-center justify-between pt-3 border-t border-foreground/5">
                       <span className="text-xs text-foreground/60">
-                        {formatPrice(item.price)} × {duration} {item.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}
+                        {formatPrice(item.price)} × {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
                       </span>
                       <span className="font-heading text-lg font-bold text-primary">
                         {formatPrice(itemTotal)}

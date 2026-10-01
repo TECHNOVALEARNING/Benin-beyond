@@ -17,6 +17,7 @@ import { formatPrice } from '../data/initialListings';
 import { createBooking } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { printInvoiceDocument } from '../utils/invoicePrinter';
 
 const STEPS = ['Identité', 'Protection', 'Paiement'];
 
@@ -118,6 +119,7 @@ export function CheckoutPage() {
     }
 
     const firstItem = items[0] || {};
+    const isVehicleBooking = firstItem.type === 'drive' || firstItem.rental_type === 'drive' || firstItem.price_unit === 'jour';
     const formattedDates = firstItem.startDate && firstItem.endDate
       ? `Du ${firstItem.startDate} au ${firstItem.endDate}`
       : (firstItem.days ? `${firstItem.days} jour(s)` : (firstItem.nights ? `${firstItem.nights} nuit(s)` : 'Séjour / Prestation'));
@@ -130,6 +132,9 @@ export function CheckoutPage() {
       customer_email: clientEmail,
       customer_phone: customer.phone,
       items: items,
+      rental_type: isVehicleBooking ? 'drive' : (firstItem.rental_type || firstItem.type || 'stay'),
+      duration_days: isVehicleBooking ? (firstItem.days || 1) : null,
+      rooms_count: isVehicleBooking ? 0 : (firstItem.rooms_count || 1),
       listing_id: firstItem.listing_id || firstItem.listingId || firstItem.id || null,
       listing_title: firstItem.title || 'Réservation Bénin Beyond',
       listing_image: firstItem.image || firstItem.image_url || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
@@ -271,12 +276,16 @@ export function CheckoutPage() {
                 type="button"
                 onClick={() => {
                   setIsCountdownPaused(true);
-                  window.print();
+                  if (confirmedBooking) {
+                    printInvoiceDocument(confirmedBooking, customer || user);
+                  } else {
+                    window.print();
+                  }
                 }}
                 className="flex-1 rounded-full border border-foreground/20 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
               >
                 <FontAwesomeIcon icon={faPrint} className="h-4 w-4" />
-                <span>Imprimer le récapitulatif</span>
+                <span>Imprimer / Télécharger le voucher & facture</span>
               </button>
 
               {user ? (

@@ -110,11 +110,11 @@ export function EvolutionAreaChart({
 
   // Dimensions géométriques du canvas SVG adaptatives selon l'écran
   const svgWidth = isMobile ? 420 : 840;
-  const svgHeight = isMobile ? 230 : height;
-  const paddingLeft = isMobile ? 42 : 60;
+  const svgHeight = isMobile ? 285 : height;
+  const paddingLeft = isMobile ? 46 : 60;
   const paddingRight = isMobile ? 18 : 35;
-  const paddingTop = isMobile ? 30 : 45;
-  const paddingBottom = isMobile ? 35 : 45;
+  const paddingTop = isMobile ? 24 : 45;
+  const paddingBottom = isMobile ? 32 : 45;
 
   const innerWidth = svgWidth - paddingLeft - paddingRight;
   const innerHeight = svgHeight - paddingTop - paddingBottom;

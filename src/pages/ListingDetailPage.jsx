@@ -13,7 +13,10 @@ import {
   faVideo,
   faImages,
   faExpand,
-  faXmark
+  faXmark,
+  faCar,
+  faClock,
+  faSliders
 } from '@fortawesome/free-solid-svg-icons';
 import { getListingById } from '../services/listingService';
 import { useCart } from '../context/CartContext';
@@ -91,14 +94,19 @@ export function ListingDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [gallery.length]);
 
-  // Duration calculation
+  // Strict separation: Vehicle vs Accommodation
+  const isVehicle = listing?.type === 'drive' || listing?.subcategory === 'car' || listing?.category === 'transport';
+
+  // Duration calculation (Stays: nights, Vehicles: 24h rental days with 1-day minimum)
   const duration = (() => {
     if (!startDate || !endDate) return 1;
-    const diff = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     return diff > 0 ? diff : 1;
   })();
 
-  const isDaily = listing?.price_unit === 'nuit' || listing?.price_unit === 'jour';
+  const isDaily = listing?.price_unit === 'nuit' || listing?.price_unit === 'jour' || isVehicle;
   const effectiveMultiplier = isDaily ? duration : 1;
   const totalPrice = (listing?.price || 0) * effectiveMultiplier;
 
@@ -111,12 +119,18 @@ export function ListingDetailPage() {
       listing_id: listing.id,
       id: listing.id,
       type: listing.type,
+      rental_type: isVehicle ? 'drive' : (listing.type || 'stay'),
       title: listing.title,
       price: listing.price,
-      price_unit: listing.price_unit,
+      price_unit: isVehicle ? 'jour' : (listing.price_unit || 'nuit'),
       image: listing.gallery?.[0] || '',
-      nights: effectiveMultiplier,
-      days: effectiveMultiplier,
+      nights: isVehicle ? 0 : effectiveMultiplier,
+      days: isVehicle ? effectiveMultiplier : 0,
+      rooms_count: isVehicle ? 0 : (listing.rooms_count || 1),
+      vehicle_seats: isVehicle ? (listing.vehicle_seats || listing.seats || 5) : 0,
+      transmission: listing.transmission || null,
+      fuel_type: listing.fuel_type || null,
+      with_driver: listing.with_driver || false,
       guests: guests,
       startDate: startDate,
       endDate: endDate,
@@ -479,22 +493,54 @@ export function ListingDetailPage() {
               </div>
             </div>
 
-            {/* Disponibilité Spécifique de la Chambre d'Hôtel */}
-            {listing.availability?.available_from && (
-              <div className="mt-4 rounded-xl bg-accent/15 border border-accent/30 p-3 text-xs text-foreground">
-                <p className="font-bold text-accent uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                  <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5" />
-                  <span>Période de disponibilité hôtelière</span>
-                </p>
-                <p className="mt-1 font-semibold text-foreground">
-                  Du {new Date(listing.availability.available_from).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} au {new Date(listing.availability.available_to || Date.now()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-                {listing.availability.rooms_count > 0 && (
-                  <p className="text-[11px] text-foreground/70 mt-0.5">
-                    {listing.availability.rooms_count} chambre(s) restante(s) pour cette période
+            {/* Disponibilité Véhicule ou Disponibilité Chambre d'Hôtel */}
+            {isVehicle ? (
+              <div className="mt-4 rounded-xl bg-primary/10 border border-primary/20 p-3.5 text-xs text-foreground space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-primary uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5" />
+                    <span>Véhicule certifié disponible</span>
                   </p>
-                )}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+                    Tarif / 24h
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-foreground/80">
+                  <div className="flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faUsers} className="text-primary/70 h-3 w-3 shrink-0" />
+                    <span>{listing.vehicle_seats || listing.seats || (listing.type === 'drive' && listing.rooms_count > 0 ? listing.rooms_count : 5)} places</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 capitalize">
+                    <FontAwesomeIcon icon={faSliders} className="text-primary/70 h-3 w-3 shrink-0" />
+                    <span>Boîte {listing.transmission || 'Automatique'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 capitalize">
+                    <FontAwesomeIcon icon={faClock} className="text-primary/70 h-3 w-3 shrink-0" />
+                    <span>{listing.fuel_type || 'Essence'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faShieldHalved} className="text-primary/70 h-3 w-3 shrink-0" />
+                    <span>{listing.with_driver ? 'Avec chauffeur' : 'Sans chauffeur'}</span>
+                  </div>
+                </div>
               </div>
+            ) : (
+              listing.availability?.available_from && (
+                <div className="mt-4 rounded-xl bg-accent/15 border border-accent/30 p-3 text-xs text-foreground">
+                  <p className="font-bold text-accent uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5" />
+                    <span>Période de disponibilité hôtelière</span>
+                  </p>
+                  <p className="mt-1 font-semibold text-foreground">
+                    Du {new Date(listing.availability.available_from).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} au {new Date(listing.availability.available_to || Date.now()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                  {listing.availability.rooms_count > 0 && (
+                    <p className="text-[11px] text-foreground/70 mt-0.5">
+                      {listing.availability.rooms_count} chambre(s) restante(s) pour cette période
+                    </p>
+                  )}
+                </div>
+              )
             )}
 
             {/* Date Pickers */}
@@ -504,7 +550,8 @@ export function ListingDetailPage() {
                   <div className="grid grid-cols-2 gap-2 rounded-lg border border-foreground/15 p-2 bg-background">
                     <div>
                       <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                        <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Arrivée
+                        <FontAwesomeIcon icon={isVehicle ? faCar : faCalendarDays} className="h-3 w-3" />
+                        {isVehicle ? 'Prise en charge' : 'Arrivée'}
                       </label>
                       <input
                         type="date"
@@ -513,9 +560,8 @@ export function ListingDetailPage() {
                         onChange={(e) => {
                           const newStart = e.target.value;
                           setStartDate(newStart);
-                          if (new Date(endDate) <= new Date(newStart)) {
-                            const nextDay = new Date(new Date(newStart).getTime() + 86400000);
-                            setEndDate(nextDay.toISOString().split('T')[0]);
+                          if (new Date(endDate) < new Date(newStart)) {
+                            setEndDate(newStart);
                           }
                         }}
                         className="mt-1 w-full bg-transparent text-xs font-medium outline-none text-foreground cursor-pointer"
@@ -523,7 +569,8 @@ export function ListingDetailPage() {
                     </div>
                     <div className="border-l border-foreground/15 pl-2">
                       <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                        <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" /> Départ
+                        <FontAwesomeIcon icon={isVehicle ? faClock : faCalendarDays} className="h-3 w-3" />
+                        {isVehicle ? 'Restitution' : 'Départ'}
                       </label>
                       <input
                         type="date"
@@ -538,7 +585,8 @@ export function ListingDetailPage() {
                   {/* Quick duration presets */}
                   <div className="flex items-center justify-between text-xs px-1">
                     <span className="text-[11px] text-foreground/60 font-medium">
-                      Durée : <strong className="text-primary font-mono">{duration} {listing.price_unit === 'nuit' ? (duration > 1 ? 'nuits' : 'nuit') : (duration > 1 ? 'jours' : 'jour')}</strong>
+                      Durée : <strong className="text-primary font-mono">{duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}</strong>
+                      {isVehicle && <span className="text-[10px] text-foreground/50 ml-1">(24h/j)</span>}
                     </span>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 7].map((num) => (
@@ -556,7 +604,7 @@ export function ListingDetailPage() {
                               : 'bg-muted/40 text-foreground/70 border-foreground/10 hover:border-foreground/30'
                           }`}
                         >
-                          {num} {listing.price_unit === 'nuit' ? 'n' : 'j'}
+                          {num} {isVehicle ? 'j' : 'n'}
                         </button>
                       ))}
                     </div>

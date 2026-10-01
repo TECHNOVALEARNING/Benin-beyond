@@ -65,7 +65,11 @@ CREATE TABLE IF NOT EXISTS public.listings (
   price_unit TEXT NOT NULL DEFAULT 'nuit' CHECK (
     price_unit IN ('nuit', 'jour', 'repas', 'forfait', 'personne', 'vente totale')
   ),
-  rooms_count INTEGER DEFAULT 1 CHECK (rooms_count >= 1),
+  rooms_count INTEGER DEFAULT 0 CHECK (rooms_count >= 0),
+  vehicle_seats INTEGER DEFAULT 0 CHECK (vehicle_seats >= 0),
+  transmission TEXT DEFAULT 'automatique',
+  fuel_type TEXT DEFAULT 'essence',
+  with_driver BOOLEAN DEFAULT FALSE,
   available_from DATE,
   available_to DATE,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'rejected', 'suspended')),
@@ -88,7 +92,11 @@ CREATE TABLE IF NOT EXISTS public.listings (
 
 -- Migration incrémentale : colonnes listings
 ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS subcategory TEXT NOT NULL DEFAULT 'villa';
-ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS rooms_count INTEGER DEFAULT 1;
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS rooms_count INTEGER DEFAULT 0;
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS vehicle_seats INTEGER DEFAULT 0;
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS transmission TEXT DEFAULT 'automatique';
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS fuel_type TEXT DEFAULT 'essence';
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS with_driver BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS available_from DATE;
 ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS available_to DATE;
 ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';

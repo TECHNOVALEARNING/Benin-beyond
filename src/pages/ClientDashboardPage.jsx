@@ -28,6 +28,7 @@ import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
+import { printInvoiceDocument } from '../utils/invoicePrinter';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -601,7 +602,7 @@ export function ClientDashboardPage() {
 
       {/* 5. Printable Voucher Modal */}
       {selectedVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in print-friendly">
           <div className="relative w-full max-w-xl rounded-3xl bg-card border border-foreground/10 p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
             <button
               onClick={() => setSelectedVoucher(null)}
@@ -611,85 +612,102 @@ export function ClientDashboardPage() {
             </button>
 
             {/* Voucher Body (Print-ready) */}
-            <div id="printable-voucher" className="printable-receipt border-2 border-dashed border-foreground/20 rounded-2xl p-6 bg-background">
-              {/* Header */}
-              <div className="flex items-start justify-between border-b border-foreground/10 pb-4">
-                <div>
-                  <h3 className="font-heading text-xl font-black tracking-tight text-foreground">
-                    Bénin Beyond
-                  </h3>
-                  <p className="text-[11px] text-foreground/60">Pass Voyageur & Justificatif Officiel</p>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono text-xs font-bold text-primary block">
-                    {selectedVoucher.booking_ref}
-                  </span>
-                  <span className="inline-block rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-semibold mt-1">
-                    RÉSERVATION VALIDÉE
-                  </span>
-                </div>
-              </div>
+            {(() => {
+              const isVehicleVoucher = selectedVoucher.rental_type === 'drive' || selectedVoucher.type === 'drive' || selectedVoucher.items?.[0]?.type === 'drive';
+              return (
+                <div id="printable-voucher" className="printable-receipt border-2 border-dashed border-foreground/20 rounded-2xl p-6 bg-background">
+                  {/* Header */}
+                  <div className="flex items-start justify-between border-b border-foreground/10 pb-4">
+                    <div>
+                      <h3 className="font-heading text-xl font-black tracking-tight text-foreground uppercase">
+                        Bénin <span className="text-primary">Beyond</span>
+                      </h3>
+                      <p className="text-[11px] text-foreground/60 font-medium">
+                        {isVehicleVoucher ? 'Facture & Bon de Location de Véhicule' : 'Facture & Voucher Officiel de Réservation'}
+                      </p>
+                      <p className="text-[10px] text-foreground/40 mt-0.5">Conciergerie Privée d'Excellence · Cotonou, Bénin</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-bold text-primary block">
+                        {selectedVoucher.booking_ref}
+                      </span>
+                      <span className="inline-block rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-[10px] font-bold mt-1">
+                        ✓ ENCAISSÉ & VALIDÉ
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Details Table */}
-              <div className="mt-4 space-y-3 text-xs">
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Voyageur :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.customer_name || user?.name}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">E-mail / Contact :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.customer_email || user?.email}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Téléphone :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.customer_phone || '+229 97 00 00 00'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Prestation :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.listing_title || selectedVoucher.items?.[0]?.title}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Lieu / Destination :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.location || 'Bénin (Littoral)'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Période :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.dates || 'Selon calendrier convenu'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-foreground/5">
-                  <span className="text-foreground/60">Mode de règlement :</span>
-                  <span className="font-semibold text-foreground">{selectedVoucher.payment_method || 'Paiement Sécurisé'}</span>
-                </div>
-                <div className="flex justify-between py-2 text-sm font-bold text-primary">
-                  <span>Montant Total Réglé :</span>
-                  <span>{formatPrice(selectedVoucher.total_amount || selectedVoucher.gross_amount || 0)}</span>
-                </div>
-              </div>
+                  {/* Details Table */}
+                  <div className="mt-4 space-y-2.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">Voyageur / Facturé à :</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.customer_name || user?.name || 'Client Bénin Beyond'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">E-mail de confirmation :</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.customer_email || user?.email || 'Non renseigné'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">Téléphone de contact :</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.customer_phone || '+229 00 00 00 00'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">Prestation réservée :</span>
+                      <span className="font-semibold text-foreground text-right max-w-[260px] truncate">{selectedVoucher.listing_title || selectedVoucher.items?.[0]?.title || (isVehicleVoucher ? 'Véhicule de prestige' : 'Séjour de prestige')}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">{isVehicleVoucher ? 'Lieu de mise à disposition :' : 'Lieu / Destination :'}</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.location || 'Bénin (Littoral)'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">{isVehicleVoucher ? 'Durée de location (24h/j) :' : 'Période du séjour :'}</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.dates || 'Selon calendrier convenu'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-foreground/5">
+                      <span className="text-foreground/60">Mode de règlement :</span>
+                      <span className="font-semibold text-foreground">{selectedVoucher.payment_method || 'Paiement Sécurisé'}</span>
+                    </div>
+                    <div className="flex justify-between py-2 text-sm font-bold text-primary border-t border-foreground/10 mt-2">
+                      <span>Montant Total Réglé :</span>
+                      <span className="font-mono text-base">{formatPrice(selectedVoucher.total_amount || selectedVoucher.gross_amount || 0)}</span>
+                    </div>
+                  </div>
 
-              {/* Instructions */}
-              <div className="mt-4 rounded-xl bg-accent/10 border border-accent/20 p-3 text-[11px] text-foreground/80 flex items-start gap-2">
-                <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-                <span>
-                  Présentez ce bon lors de votre arrivée ou auprès de votre chauffeur / concierge Bénin Beyond. Assistance 24/7 disponible.
-                </span>
-              </div>
-            </div>
+                  {/* Instructions */}
+                  <div className="mt-4 rounded-xl bg-accent/10 border border-accent/20 p-3 text-[11px] text-foreground/80 flex items-start gap-2">
+                    <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+                    <span>
+                      {isVehicleVoucher
+                        ? 'Présentez ce bon officiel lors de la mise à disposition de votre véhicule auprès de votre agent / chauffeur Bénin Beyond. Assistance VIP 24/7 incluse.'
+                        : 'Présentez ce voucher officiel lors de votre arrivée ou auprès de votre hôte / concierge Bénin Beyond. Assistance VIP 24/7 incluse.'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Print Action Buttons */}
-            <div className="mt-6 flex items-center justify-end gap-3 no-print">
-              <button
-                onClick={() => setSelectedVoucher(null)}
-                className="rounded-full px-5 py-2 text-xs font-semibold text-foreground/70 hover:bg-foreground/10"
-              >
-                Fermer
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
-              >
-                <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
-                <span>Imprimer le voucher</span>
-              </button>
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+              <span className="text-[11px] text-foreground/50 hidden sm:inline">
+                Document certifié sans lien web parasite
+              </span>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVoucher(null)}
+                  className="rounded-full px-5 py-2 text-xs font-semibold text-foreground/70 hover:bg-foreground/10 transition-colors"
+                >
+                  Fermer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => printInvoiceDocument(selectedVoucher, user)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-primary/90 active:scale-95 transition-all"
+                >
+                  <FontAwesomeIcon icon={faPrint} className="h-3.5 w-3.5" />
+                  <span>Imprimer / Télécharger la facture</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -110,7 +110,11 @@ async function syncLocalListingsToSupabase(localListings = []) {
         location: item.location || 'Cotonou',
         price: Number(item.price) || 0,
         price_unit: item.price_unit || (item.type === 'drive' ? 'jour' : 'nuit'),
-        rooms_count: item.rooms_count ? Number(item.rooms_count) : 1,
+        rooms_count: item.type === 'drive' ? 0 : Math.max(1, Number(item.rooms_count) || 1),
+        vehicle_seats: item.type === 'drive' ? (Number(item.vehicle_seats) || 5) : 0,
+        transmission: item.type === 'drive' ? (item.transmission || 'automatique') : null,
+        fuel_type: item.type === 'drive' ? (item.fuel_type || 'essence') : null,
+        with_driver: item.type === 'drive' ? Boolean(item.with_driver) : false,
         available_from: item.available_from || null,
         available_to: item.available_to || null,
         status: item.status || 'active',
@@ -289,7 +293,11 @@ export async function addListing(listingData) {
     location: listingData.location || 'Cotonou',
     price: Number(listingData.price) || 50000,
     price_unit: listingData.price_unit || (listingData.type === 'drive' ? 'jour' : 'nuit'),
-    rooms_count: listingData.rooms_count ? Number(listingData.rooms_count) : 1,
+    rooms_count: (listingData.type === 'drive' || listingData.subcategory === 'car') ? 0 : Math.max(1, Number(listingData.rooms_count) || 1),
+    vehicle_seats: (listingData.type === 'drive' || listingData.subcategory === 'car') ? (Number(listingData.vehicle_seats) || 5) : 0,
+    transmission: (listingData.type === 'drive' || listingData.subcategory === 'car') ? (listingData.transmission || 'automatique') : null,
+    fuel_type: (listingData.type === 'drive' || listingData.subcategory === 'car') ? (listingData.fuel_type || 'essence') : null,
+    with_driver: (listingData.type === 'drive' || listingData.subcategory === 'car') ? Boolean(listingData.with_driver) : false,
     available_from: listingData.available_from || null,
     available_to: listingData.available_to || null,
     description: listingData.description || '',
@@ -335,6 +343,10 @@ export async function addListing(listingData) {
         price: newListing.price,
         price_unit: newListing.price_unit,
         rooms_count: newListing.rooms_count,
+        vehicle_seats: newListing.vehicle_seats,
+        transmission: newListing.transmission,
+        fuel_type: newListing.fuel_type,
+        with_driver: newListing.with_driver,
         available_from: newListing.available_from,
         available_to: newListing.available_to,
         status: newListing.status,
@@ -421,6 +433,10 @@ export async function updateListing(id, updates = {}) {
         'price',
         'price_unit',
         'rooms_count',
+        'vehicle_seats',
+        'transmission',
+        'fuel_type',
+        'with_driver',
         'available_from',
         'available_to',
         'status',
@@ -437,13 +453,19 @@ export async function updateListing(id, updates = {}) {
 
       allowedFields.forEach((field) => {
         if (updates[field] !== undefined) {
-          if (field === 'price' || field === 'rooms_count') {
+          if (field === 'price' || field === 'rooms_count' || field === 'vehicle_seats') {
             dbPayload[field] = Number(updates[field]) || 0;
           } else {
             dbPayload[field] = updates[field];
           }
         }
       });
+
+      // Règle d'or : Pour tout véhicule, rooms_count est strictement forcé à 0
+      const effectiveType = updates.type || (index >= 0 ? custom[index]?.type : undefined);
+      if (effectiveType === 'drive') {
+        dbPayload.rooms_count = 0;
+      }
 
       if (updates.description && updates.summary === undefined) {
         dbPayload.summary = updates.description.slice(0, 160);
