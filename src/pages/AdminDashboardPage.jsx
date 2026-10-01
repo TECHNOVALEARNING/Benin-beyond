@@ -205,7 +205,7 @@ export function AdminDashboardPage() {
   const [formPriceUnit, setFormPriceUnit] = useState('nuit');
   const [formPurpose, setFormPurpose] = useState('location'); // 'location' | 'vente'
   const [formDescription, setFormDescription] = useState('');
-  const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+  const [formSpecs, setFormSpecs] = useState('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
   const [adminInstantPublish, setAdminInstantPublish] = useState(true); // Direct online as Super-Admin
 
   // Pack Creation Modal & Form States (Super-Admin Exclusive)
@@ -3582,6 +3582,9 @@ export function AdminDashboardPage() {
                       onClick={() => {
                         setFormType('stay');
                         setFormPriceUnit('nuit');
+                        setFormSubcategory('villa');
+                        setRoomsCount(1);
+                        setFormSpecs('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
                       }}
                       className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'stay'
@@ -3603,6 +3606,9 @@ export function AdminDashboardPage() {
                       onClick={() => {
                         setFormType('drive');
                         setFormPriceUnit('jour');
+                        setFormSubcategory('car');
+                        setRoomsCount(0);
+                        setFormSpecs('Climatisation, Boîte automatique, Bluetooth, Caméra de recul, GPS');
                       }}
                       className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'drive'
@@ -3805,8 +3811,8 @@ export function AdminDashboardPage() {
                     onChange={(e) => setFormSpecs(e.target.value)}
                     placeholder={
                       formType === 'stay'
-                        ? '4 Chambres, Piscine privée, Climatisation, Wifi Fibre'
-                        : '7 Places, Automatique, Climatisation, Essence'
+                        ? 'Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7'
+                        : 'Climatisation, Boîte automatique, GPS, Bluetooth, Caméra de recul'
                     }
                     className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                   />

@@ -122,7 +122,7 @@ export function PartnerDashboardPage() {
   const [formPriceUnit, setFormPriceUnit] = useState('nuit');
   const [formPurpose, setFormPurpose] = useState('location'); // 'location' | 'vente'
   const [formDescription, setFormDescription] = useState('');
-  const [formSpecs, setFormSpecs] = useState('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+  const [formSpecs, setFormSpecs] = useState('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
 
   // Hotel & Room Availability states
   const [availableFrom, setAvailableFrom] = useState('');
@@ -647,7 +647,11 @@ export function PartnerDashboardPage() {
     setEditFormPriceUnit(item.price_unit || (item.type === 'drive' ? 'jour' : 'nuit'));
     setEditFormPurpose(item.purpose || (item.price_unit === 'vente totale' ? 'vente' : 'location'));
     setEditFormDescription(item.description || '');
-    setEditFormSpecs(Array.isArray(item.specs) ? item.specs.join(', ') : (item.specs || ''));
+    const rawSpecsList = Array.isArray(item.specs) ? item.specs : (item.specs || '').split(',');
+    const sanitizedSpecs = isVeh
+      ? rawSpecsList.filter(s => !/chambre|piscine|cuisine|lit|suite/i.test(String(s).trim()))
+      : rawSpecsList.filter(s => !/boîte|boite|vitesse|carburant|cylindrée/i.test(String(s).trim()));
+    setEditFormSpecs(sanitizedSpecs.map(s => String(s).trim()).filter(Boolean).join(', '));
     setEditFormRoomsCount(isVeh ? 0 : (item.rooms_count || item.availability?.rooms_count || 1));
     setEditFormSeatsCount(item.vehicle_seats || (isVeh ? (item.rooms_count || 5) : 5));
     setEditFormTransmission(item.transmission || 'automatique');
@@ -1976,6 +1980,9 @@ export function PartnerDashboardPage() {
                       onClick={() => {
                         setFormType('stay');
                         setFormPriceUnit('nuit');
+                        setFormSubcategory('villa');
+                        setRoomsCount(1);
+                        setFormSpecs('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
                       }}
                       className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'stay'
@@ -1997,6 +2004,9 @@ export function PartnerDashboardPage() {
                       onClick={() => {
                         setFormType('drive');
                         setFormPriceUnit('jour');
+                        setFormSubcategory('car');
+                        setRoomsCount(0);
+                        setFormSpecs('Climatisation, Boîte automatique, Bluetooth, Caméra de recul, GPS');
                       }}
                       className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
                         formType === 'drive'
@@ -2022,7 +2032,7 @@ export function PartnerDashboardPage() {
                         type="button"
                         onClick={() => {
                           setFormSubcategory('villa');
-                          setFormSpecs('4 Chambres, Piscine privée, Climatisation, Wi-Fi Fibre');
+                          setFormSpecs('Wi-Fi Fibre, Climatisation, Piscine privée, Sécurité 24/7');
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                           formSubcategory === 'villa'
@@ -4048,30 +4058,49 @@ export function PartnerDashboardPage() {
               <div className="space-y-4 pt-2 border-t border-foreground/10">
                 <div>
                   <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                    Équipements & Caractéristiques clés (séparés par des virgules)
+                    {editFormType === 'drive'
+                      ? 'Caractéristiques & Options du Véhicule (séparées par des virgules)'
+                      : 'Équipements & Prestations de l\'Hébergement (séparés par des virgules)'}
                   </label>
                   <input
                     type="text"
                     value={editFormSpecs}
                     onChange={(e) => setEditFormSpecs(e.target.value)}
-                    placeholder="Climatisation, Piscine privée, Wi-Fi Fibre, Sécurité 24/7"
+                    placeholder={
+                      editFormType === 'drive'
+                        ? 'Climatisation, Boîte automatique, GPS, Bluetooth, Caméra de recul'
+                        : 'Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7'
+                    }
                     className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                   />
                   {/* Suggestions rapides */}
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     <span className="text-[10px] text-foreground/50 self-center mr-1">Ajouter rapidement :</span>
-                    {[
-                      'Piscine privée',
-                      'Wi-Fi Fibre',
-                      'Climatisation',
-                      'Groupe électrogène',
-                      'Sécurité 24/7',
-                      'Cuisine équipée',
-                      'Vue mer',
-                      'Chauffeur inclus',
-                      'Boîte automatique',
-                      'Garage privé'
-                    ].map((tag, tIdx) => (
+                    {(editFormType === 'drive'
+                      ? [
+                          'Boîte automatique',
+                          'Climatisation',
+                          'GPS Intégré',
+                          'Bluetooth',
+                          'Caméra de recul',
+                          'Sièges en cuir',
+                          '4x4 / Tout-terrain',
+                          'Chauffeur inclus',
+                          'Régulateur de vitesse',
+                          'Toit panoramique'
+                        ]
+                      : [
+                          'Piscine privée',
+                          'Wi-Fi Fibre',
+                          'Climatisation',
+                          'Groupe électrogène',
+                          'Sécurité 24/7',
+                          'Cuisine équipée',
+                          'Vue mer',
+                          'Parking privé',
+                          'Terrasse aménagée'
+                        ]
+                    ).map((tag, tIdx) => (
                       <button
                         key={tIdx}
                         type="button"

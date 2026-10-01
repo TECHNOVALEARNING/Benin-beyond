@@ -55,9 +55,16 @@ export function ExplorePage() {
   const filteredListings = useMemo(() => {
     let result = listings;
 
-    // Filter by category
-    if (currentTab !== 'all') {
-      result = result.filter((item) => item.type === currentTab);
+    // Strict separation: Stays vs Vehicles (Zero cross-contamination)
+    if (currentTab === 'stay') {
+      result = result.filter(
+        (item) =>
+          (item.type === 'stay' || item.subcategory === 'villa' || item.subcategory === 'hotel') &&
+          item.type !== 'drive' &&
+          item.subcategory !== 'car'
+      );
+    } else if (currentTab === 'drive') {
+      result = result.filter((item) => item.type === 'drive' || item.subcategory === 'car');
     }
 
     // Filter by query

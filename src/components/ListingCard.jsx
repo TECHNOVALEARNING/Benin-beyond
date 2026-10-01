@@ -1,11 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLocationDot, faArrowUpRightFromSquare, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faLocationDot, faArrowUpRightFromSquare, faVideo, faCar } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
 
 export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
   if (!listing) return null;
+
+  const isVehicle = listing.type === 'drive' || listing.subcategory === 'car';
+  const displaySpecs = isVehicle
+    ? (listing.specs || []).filter((s) => !/chambre|piscine|cuisine|lit|suite/i.test(String(s)))
+    : (listing.specs || []).filter((s) => !/boîte|boite|vitesse|carburant|km|cylindrée/i.test(String(s)));
 
   const image = (listing.gallery && listing.gallery[0]) || '';
   const ratioClass = aspectRatio || (featured ? 'aspect-[16/10]' : 'aspect-[16/10]');
@@ -47,9 +52,9 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
         )}
 
         {/* Specs tags au Hover avec slide up fluide */}
-        {listing.specs && listing.specs.length > 0 && (
+        {displaySpecs && displaySpecs.length > 0 && (
           <div className="absolute left-3 top-3 right-3 z-20 flex flex-wrap gap-1.5 opacity-0 translate-y-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none">
-            {listing.specs.slice(0, 4).map((spec) => (
+            {displaySpecs.slice(0, 4).map((spec) => (
               <span
                 key={spec}
                 className="inline-flex items-center rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur-md shadow-sm"
@@ -60,13 +65,22 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
           </div>
         )}
 
-        {/* Badge Disponibilité Hôtel */}
-        {listing.availability?.available_from && (
+        {/* Badge Disponibilité (Véhicule ou Hôtel) */}
+        {isVehicle ? (
           <div className="absolute left-3 bottom-3 z-10">
-            <span className="inline-flex items-center rounded-md bg-black/75 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white border border-white/15 shadow-sm">
-              Dispo : {listing.availability.available_from.slice(5)} au {listing.availability.available_to?.slice(5) || '...'}
+            <span className="inline-flex items-center gap-1 rounded-md bg-black/75 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white border border-white/15 shadow-sm">
+              <FontAwesomeIcon icon={faCar} className="text-emerald-400 text-[9px]" />
+              <span>{listing.vehicle_seats ? `${listing.vehicle_seats} places` : 'Véhicule certifié'}</span>
             </span>
           </div>
+        ) : (
+          listing.availability?.available_from && (
+            <div className="absolute left-3 bottom-3 z-10">
+              <span className="inline-flex items-center rounded-md bg-black/75 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white border border-white/15 shadow-sm">
+                Dispo : {listing.availability.available_from.slice(5)} au {listing.availability.available_to?.slice(5) || '...'}
+              </span>
+            </div>
+          )
         )}
 
         {/* Badge Prix Terracotta en bas à droite de l'image */}
