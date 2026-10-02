@@ -56,12 +56,12 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings, suspendOwnerListings } from '../services/listingService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
 import { getReviews, deleteReview } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
-import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC, createAssistantAdmin } from '../services/userService';
+import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC, resetPartnerKYC, createAssistantAdmin } from '../services/userService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
@@ -148,6 +148,10 @@ export function AdminDashboardPage() {
   const [userFormRole, setUserFormRole] = useState('client');
   const [userFormCompany, setUserFormCompany] = useState('');
   const [userFormIsActive, setUserFormIsActive] = useState(true);
+  const [userFormKycStatus, setUserFormKycStatus] = useState('pending');
+  const [userKycFilter, setUserKycFilter] = useState('all'); // 'all' | 'verified' | 'pending' | 'rejected'
+  const [partnerSearch, setPartnerSearch] = useState('');
+  const [partnerKycFilter, setPartnerKycFilter] = useState('all'); // 'all' | 'pending' | 'verified' | 'rejected'
 
   // Assistant Admin (Sub-Admin) creation modal state (Super-Admin exclusive)
   const [showAddAssistantModal, setShowAddAssistantModal] = useState(false);
@@ -415,6 +419,7 @@ export function AdminDashboardPage() {
     setUserFormRole(targetUser.role || 'client');
     setUserFormCompany(targetUser.company || '');
     setUserFormIsActive(targetUser.is_active !== false);
+    setUserFormKycStatus(targetUser.kyc_status === 'rejected' ? 'rejected' : (targetUser.kyc_status === 'verified' || targetUser.verified ? 'verified' : 'pending'));
     setShowUserModal(true);
   };
 
@@ -423,17 +428,52 @@ export function AdminDashboardPage() {
     if (!editingUser) return;
 
     try {
+      const isVerified = userFormKycStatus === 'verified';
       await updateUser(editingUser.id, {
         email: userFormEmail,
         name: userFormName,
         phone: userFormPhone || 'Non renseigné',
         role: userFormRole,
         company: userFormCompany,
-        is_active: userFormIsActive
+        is_active: userFormIsActive,
+        kyc_status: (userFormRole === 'owner' || userFormRole === 'partner') ? userFormKycStatus : ((userFormRole === 'admin' || userFormRole === 'subadmin') ? 'verified' : 'pending'),
+        verified: (userFormRole === 'admin' || userFormRole === 'subadmin') ? true : isVerified
       });
+
+      // Si le partenaire est certifié actif, activer automatiquement ses annonces en attente
+      if (isVerified && (userFormRole === 'owner' || userFormRole === 'partner')) {
+        const { activatedCount, updatedListings } = await activateOwnerListings(editingUser.id, userFormEmail);
+        if (activatedCount > 0 && Array.isArray(updatedListings)) {
+          setListings(updatedListings);
+        }
+      }
+
       showToast(`Utilisateur "${userFormName}" mis à jour avec succès !`);
       const updated = await getUsers();
       setUsersList(updated);
+
+      // Synchroniser également la liste des partenaires
+      const ownerUsers = updated.filter((u) => u.role === 'owner' || u.role === 'partner');
+      setPartners(ownerUsers.map((p) => ({
+        id: p.id,
+        name: p.name || p.email.split('@')[0],
+        company: p.company || 'Partenaire Bénin Beyond',
+        email: p.email,
+        phone: p.phone || 'Non renseigné',
+        listingsCount: (listings || []).filter((l) => l.owner_id === p.id || l.owner_email === p.email).length,
+        kycStatus: p.kyc_status === 'rejected' ? 'rejected' : (p.kyc_status === 'verified' || p.verified ? 'verified' : 'pending'),
+        taxId: p.tax_id || 'Non renseigné',
+        rccm: p.rccm || '',
+        cip: p.cip || '',
+        partnerType: p.partner_type || 'stay',
+        docType: p.kyc_doc_type || 'Dossier Justificatif',
+        docUrl: p.kyc_doc_url || '',
+        joined: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Récemment',
+        rejectionReason: p.rejection_reason || '',
+        isActive: p.is_active !== false,
+        balance: 0
+      })));
+
       setShowUserModal(false);
     } catch (err) {
       showToast(err.message || 'Erreur lors de la modification');
@@ -1264,6 +1304,44 @@ export function AdminDashboardPage() {
     }
   };
 
+  const handleResetPartnerKyc = async (partnerId, partnerEmail = '') => {
+    try {
+      await resetPartnerKYC(partnerId, partnerEmail);
+
+      // Suspension automatique et immédiate de toutes les annonces actives du partenaire
+      const { suspendedCount, updatedListings } = await suspendOwnerListings(partnerId, partnerEmail);
+      if (suspendedCount > 0 && Array.isArray(updatedListings)) {
+        setListings(updatedListings);
+      }
+
+      setPartners((prev) =>
+        prev.map((p) =>
+          p.id === partnerId || (partnerEmail && p.email?.toLowerCase() === partnerEmail.toLowerCase())
+            ? { ...p, kycStatus: 'pending', rejectionReason: '' }
+            : p
+        )
+      );
+      setUsersList((prev) =>
+        prev.map((u) =>
+          u.id === partnerId || (partnerEmail && u.email?.toLowerCase() === partnerEmail.toLowerCase())
+            ? { ...u, verified: false, kyc_status: 'pending', rejection_reason: '' }
+            : u
+        )
+      );
+      if (selectedKycModal && (selectedKycModal.id === partnerId || selectedKycModal.email === partnerEmail)) {
+        setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'pending', rejectionReason: '' }));
+      }
+      showToast(
+        suspendedCount > 0
+          ? `Partenaire remis en attente (Pending) : ${suspendedCount} annonce(s) retirée(s) de la marketplace.`
+          : 'Partenaire remis en statut d\'audit en attente (Pending).'
+      );
+    } catch (err) {
+      console.error('Erreur réinitialisation statut:', err);
+      showToast('Erreur lors de la réinitialisation du statut.');
+    }
+  };
+
   const handleOpenRejectKycModal = (partner) => {
     setRejectionKycPartner(partner);
     setRejectionKycPresetReason('Numéro IFU invalide ou non conforme DGI Bénin');
@@ -1278,6 +1356,13 @@ export function AdminDashboardPage() {
 
     try {
       await rejectPartnerKYC(rejectionKycPartner.id, rejectionKycPartner.email, finalReason);
+
+      // Retirer immédiatement les annonces actives de la mise en ligne
+      const { suspendedCount, updatedListings } = await suspendOwnerListings(rejectionKycPartner.id, rejectionKycPartner.email);
+      if (suspendedCount > 0 && Array.isArray(updatedListings)) {
+        setListings(updatedListings);
+      }
+
       setPartners((prev) =>
         prev.map((p) =>
           p.id === rejectionKycPartner.id || (rejectionKycPartner.email && p.email?.toLowerCase() === rejectionKycPartner.email.toLowerCase())
@@ -1295,7 +1380,11 @@ export function AdminDashboardPage() {
       if (selectedKycModal && (selectedKycModal.id === rejectionKycPartner.id || selectedKycModal.email === rejectionKycPartner.email)) {
         setSelectedKycModal((prev) => ({ ...prev, kycStatus: 'rejected', rejectionReason: finalReason }));
       }
-      showToast('Dossier KYC rejeté : motif de non-conformité notifié au partenaire.');
+      showToast(
+        suspendedCount > 0
+          ? `Dossier KYC rejeté : motif notifié et ${suspendedCount} annonce(s) retirée(s) de la marketplace.`
+          : 'Dossier KYC rejeté : motif de non-conformité notifié au partenaire.'
+      );
       setRejectionKycPartner(null);
     } catch (err) {
       console.error('Erreur rejet KYC:', err);
@@ -1363,9 +1452,19 @@ export function AdminDashboardPage() {
         (userStatusFilter === 'active' && u.is_active !== false) ||
         (userStatusFilter === 'suspended' && u.is_active === false);
 
-      return matchSearch && matchRole && matchStatus;
+      const isVerified = Boolean(u.kyc_status === 'verified' || u.verified);
+      const isPending = !isVerified && u.kyc_status !== 'rejected';
+      const isRejected = u.kyc_status === 'rejected';
+
+      const matchKyc =
+        userKycFilter === 'all' ||
+        (userKycFilter === 'verified' && isVerified) ||
+        (userKycFilter === 'pending' && isPending) ||
+        (userKycFilter === 'rejected' && isRejected);
+
+      return matchSearch && matchRole && matchStatus && matchKyc;
     });
-  }, [usersList, userSearch, userRoleFilter, userStatusFilter]);
+  }, [usersList, userSearch, userRoleFilter, userStatusFilter, userKycFilter]);
 
   const userMetrics = useMemo(() => {
     const total = usersList.length;
@@ -1373,8 +1472,40 @@ export function AdminDashboardPage() {
     const owners = usersList.filter((u) => (u.role === 'owner' || u.role === 'partner') && u.is_active !== false).length;
     const subadmins = usersList.filter((u) => u.role === 'subadmin' && u.is_active !== false).length;
     const suspended = usersList.filter((u) => u.is_active === false).length;
-    return { total, clients, owners, subadmins, suspended };
+    const pendingOwners = usersList.filter((u) => (u.role === 'owner' || u.role === 'partner') && u.kyc_status !== 'verified' && !u.verified && u.kyc_status !== 'rejected').length;
+    const verifiedOwners = usersList.filter((u) => (u.role === 'owner' || u.role === 'partner') && (u.kyc_status === 'verified' || u.verified)).length;
+    return { total, clients, owners, subadmins, suspended, pendingOwners, verifiedOwners };
   }, [usersList]);
+
+  // Filtered partners & counts
+  const filteredPartners = useMemo(() => {
+    return partners.filter((p) => {
+      const q = (partnerSearch || '').toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        p.name?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.company?.toLowerCase().includes(q) ||
+        p.taxId?.toLowerCase().includes(q);
+
+      const status = p.kycStatus === 'rejected' ? 'rejected' : (p.kycStatus === 'verified' ? 'verified' : 'pending');
+      const matchStatus =
+        partnerKycFilter === 'all' ||
+        (partnerKycFilter === 'pending' && status === 'pending') ||
+        (partnerKycFilter === 'verified' && status === 'verified') ||
+        (partnerKycFilter === 'rejected' && status === 'rejected');
+
+      return matchSearch && matchStatus;
+    });
+  }, [partners, partnerSearch, partnerKycFilter]);
+
+  const partnerMetrics = useMemo(() => {
+    const total = partners.length;
+    const pending = partners.filter((p) => (p.kycStatus || 'pending') === 'pending').length;
+    const verified = partners.filter((p) => p.kycStatus === 'verified').length;
+    const rejected = partners.filter((p) => p.kycStatus === 'rejected').length;
+    return { total, pending, verified, rejected };
+  }, [partners]);
 
   const filteredReviews = useMemo(() => {
     return reviewsList.filter((rev) => {
@@ -2477,6 +2608,274 @@ export function AdminDashboardPage() {
           {/* ========================================================================= */}
           {currentSection === 'partners' && (
             <div className="space-y-8 animate-section-stagger">
+              {/* Header & KPI Summary */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/30 text-accent-foreground text-[11px] font-bold uppercase tracking-wider mb-2">
+                    <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
+                    Gouvernance des Propriétaires & Audits
+                  </div>
+                  <h2 className="font-heading text-2xl font-black text-foreground">
+                    Hôtes, Partenaires & Certification KYC
+                  </h2>
+                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
+                    Validez la conformité réglementaire (IFU, RCCM, CIP) des propriétaires d'hébergements et de véhicules.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-700">
+                    <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{partnerMetrics.verified} Partenaires Certifiés Actifs</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Information Banner on Auto-Publishing */}
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+                <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div className="text-xs text-foreground/80 space-y-1">
+                  <p className="font-bold text-foreground">
+                    Règle de Publication Automatique des Annonces :
+                  </p>
+                  <p className="text-foreground/70 text-[11.5px]">
+                    Dès qu'un propriétaire est passé en statut <strong>"Certifié Conforme (Actif)"</strong>, toutes ses annonces actuellement en attente sont publiées automatiquement sur le site public. Par la suite, toutes ses nouvelles annonces seront également <strong>mises en ligne instantanément</strong> sans exiger d'approbation manuelle à chaque publication.
+                  </p>
+                </div>
+              </div>
+
+              {/* Stat Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
+                    Total Partenaires
+                  </span>
+                  <p className="font-heading text-2xl font-black text-foreground">{partnerMetrics.total}</p>
+                  <p className="text-[10px] text-foreground/50 mt-0.5">Propriétaires enregistrés</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 block mb-1">
+                    En attente d'audit
+                  </span>
+                  <p className="font-heading text-2xl font-black text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                    <span>{partnerMetrics.pending}</span>
+                    {partnerMetrics.pending > 0 && (
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                    )}
+                  </p>
+                  <p className="text-[10px] text-amber-600/80 mt-0.5">Dossiers à valider</p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
+                    Certifiés Conformes
+                  </span>
+                  <p className="font-heading text-2xl font-black text-emerald-700">{partnerMetrics.verified}</p>
+                  <p className="text-[10px] text-emerald-600/70 mt-0.5">Publications directes actives</p>
+                </div>
+
+                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent-foreground block mb-1">
+                    Versements en Attente
+                  </span>
+                  <p className="font-heading text-2xl font-black text-accent-foreground">
+                    {payouts.filter((p) => p.status === 'pending').length}
+                  </p>
+                  <p className="text-[10px] text-accent-foreground/70 mt-0.5">Demandes de retraits</p>
+                </div>
+              </div>
+
+              {/* Partners Directory & KYC Audit */}
+              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-foreground/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-heading text-base font-bold text-foreground">
+                      Annuaire des Hôtes & Audits Légaux (KYC)
+                    </h3>
+                    <p className="text-xs text-foreground/60 mt-0.5">
+                      Vérification des titres fonciers, cartes grises et pièces d'identité
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    {/* Search Input */}
+                    <div className="relative w-full sm:w-64">
+                      <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 h-3 w-3" />
+                      <input
+                        type="text"
+                        value={partnerSearch}
+                        onChange={(e) => setPartnerSearch(e.target.value)}
+                        placeholder="Rechercher nom, enseigne, IFU..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-background border border-foreground/15 text-xs text-foreground placeholder:text-foreground/40 focus:ring-1 focus:ring-primary focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Filter Tabs */}
+                    <div className="flex items-center gap-1 rounded-2xl bg-muted p-1">
+                      {[
+                        { key: 'all', label: `Tous (${partnerMetrics.total})` },
+                        { key: 'pending', label: `⏳ En attente (${partnerMetrics.pending})` },
+                        { key: 'verified', label: `✓ Certifiés (${partnerMetrics.verified})` },
+                        { key: 'rejected', label: `✕ Rejetés (${partnerMetrics.rejected})` }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setPartnerKycFilter(tab.key)}
+                          className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold transition-all shrink-0 ${
+                            partnerKycFilter === tab.key
+                              ? 'bg-card text-foreground shadow-xs font-bold'
+                              : 'text-foreground/60 hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4">Hôte / Représentant</th>
+                        <th className="p-4">Enseigne commerciale</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">Conformité Bénin (IFU & Pièce)</th>
+                        <th className="p-4">Statut KYC</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {filteredPartners.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
+                            Aucun partenaire trouvé avec ces filtres.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredPartners.map((p) => (
+                          <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="p-4">
+                              <p className="font-bold text-foreground">{p.name}</p>
+                              <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                {p.partnerType === 'stay' ? '🏡 Hébergements' : p.partnerType === 'drive' ? '🚗 Mobilité VIP' : '🌟 Stay & Drive'}
+                              </span>
+                            </td>
+                            <td className="p-4 text-foreground/80 font-medium">
+                              {p.company}
+                            </td>
+                            <td className="p-4">
+                              <p className="text-foreground/80 font-mono text-[11px]">{p.phone}</p>
+                              <p className="text-[11px] text-foreground/50">{p.email}</p>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-mono text-[11px] font-bold text-foreground">
+                                  IFU: {p.taxId || 'Non renseigné'}
+                                </span>
+                                {p.rccm && (
+                                  <span className="font-mono text-[10px] text-foreground/70">
+                                    RCCM: {p.rccm}
+                                  </span>
+                                )}
+                                {p.cip && (
+                                  <span className="font-mono text-[10px] text-foreground/70">
+                                    CIP: {p.cip}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-foreground/50 italic truncate max-w-[180px]">
+                                  {p.docType}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              {p.kycStatus === 'verified' ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                  <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
+                                  Certifié Conforme (Actif)
+                                </span>
+                              ) : p.kycStatus === 'rejected' ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold cursor-help"
+                                  title={p.rejectionReason || 'Dossier non conforme'}
+                                >
+                                  <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                  Non conforme (Rejeté)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-[10px] font-bold animate-pulse">
+                                  <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                                  Audit en attente (Pending)
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedKycModal(p)}
+                                  className="rounded-lg border border-foreground/20 bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-colors flex items-center gap-1.5 shadow-xs"
+                                  title="Inspecter le dossier KYC complet"
+                                >
+                                  <FontAwesomeIcon icon={faEye} className="h-3 w-3 text-primary" />
+                                  <span>Dossier</span>
+                                </button>
+                                {p.kycStatus === 'verified' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResetPartnerKyc(p.id, p.email)}
+                                      className="rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-700 transition-colors flex items-center gap-1 shadow-xs"
+                                      title="Suspendre ce partenaire et le remettre en attente (retire ses annonces de la marketplace)"
+                                    >
+                                      <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                                      <span>Suspendre (En attente)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRejectKycModal(p)}
+                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-xs flex items-center gap-1"
+                                      title="Refuser ou révoquer le dossier KYC avec motif"
+                                    >
+                                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                      <span>Refuser</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
+                                      className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1 active:scale-95"
+                                      title="Valider la conformité et passer en actif (active automatiquement toutes les annonces)"
+                                    >
+                                      <FontAwesomeIcon icon={faCircleCheck} className="h-3 w-3" />
+                                      <span>Activer (Vérifié)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRejectKycModal(p)}
+                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-xs flex items-center gap-1"
+                                      title="Refuser le dossier KYC avec motif"
+                                    >
+                                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                      <span>Refuser</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Payout Requests Pending Admin Approval */}
               <div className="rounded-3xl border border-accent/40 bg-card p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/10">
@@ -2547,140 +2946,6 @@ export function AdminDashboardPage() {
                       </div>
                     ))
                   )}
-                </div>
-              </div>
-
-              {/* Partners Directory & KYC Audit */}
-              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-foreground/10 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Annuaire des Hôtes & Audits Légaux (KYC)
-                    </h3>
-                    <p className="text-xs text-foreground/60 mt-0.5">
-                      Vérification des titres fonciers, cartes grises et pièces d'identité
-                    </p>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
-                      <tr>
-                        <th className="p-4">Hôte / Représentant</th>
-                        <th className="p-4">Enseigne commerciale</th>
-                        <th className="p-4">Contact</th>
-                        <th className="p-4">Conformité Bénin (IFU & Pièce)</th>
-                        <th className="p-4">Statut KYC</th>
-                        <th className="p-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-foreground/5">
-                      {partners.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
-                            Aucun partenaire inscrit pour le moment. Les nouveaux propriétaires et loueurs apparaîtront automatiquement ici lors de leur inscription.
-                          </td>
-                        </tr>
-                      ) : (
-                        partners.map((p) => (
-                          <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="p-4">
-                              <p className="font-bold text-foreground">{p.name}</p>
-                              <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                                {p.partnerType === 'stay' ? '🏡 Hébergements' : p.partnerType === 'drive' ? '🚗 Mobilité VIP' : '🌟 Stay & Drive'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-foreground/80 font-medium">
-                              {p.company}
-                            </td>
-                            <td className="p-4">
-                              <p className="text-foreground/80 font-mono text-[11px]">{p.phone}</p>
-                              <p className="text-[11px] text-foreground/50">{p.email}</p>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-mono text-[11px] font-bold text-foreground">
-                                  IFU: {p.taxId || 'Non renseigné'}
-                                </span>
-                                {p.rccm && (
-                                  <span className="font-mono text-[10px] text-foreground/70">
-                                    RCCM: {p.rccm}
-                                  </span>
-                                )}
-                                {p.cip && (
-                                  <span className="font-mono text-[10px] text-foreground/70">
-                                    CIP: {p.cip}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-foreground/50 italic truncate max-w-[180px]">
-                                  {p.docType}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              {p.kycStatus === 'verified' ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-                                  Certifié Conforme
-                                </span>
-                              ) : p.kycStatus === 'rejected' ? (
-                                <span
-                                  className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold cursor-help"
-                                  title={p.rejectionReason || 'Dossier non conforme'}
-                                >
-                                  <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                                  Non conforme (Rejeté)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
-                                  Audit en attente
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedKycModal(p)}
-                                  className="rounded-lg border border-foreground/20 bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-colors flex items-center gap-1.5 shadow-sm"
-                                  title="Inspecter le dossier KYC complet"
-                                >
-                                  <FontAwesomeIcon icon={faEye} className="h-3 w-3 text-primary" />
-                                  <span>Dossier</span>
-                                </button>
-                                {p.kycStatus === 'verified' ? (
-                                  <span className="text-[11px] text-emerald-600 font-bold px-2 py-0.5">
-                                    ✓ Validé
-                                  </span>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
-                                      className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-sm"
-                                      title="Valider la conformité du dossier"
-                                    >
-                                      Valider
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenRejectKycModal(p)}
-                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-sm"
-                                      title="Refuser le dossier KYC avec motif"
-                                    >
-                                      Refuser
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
                 </div>
               </div>
             </div>
@@ -2808,9 +3073,21 @@ export function AdminDashboardPage() {
                     onChange={(e) => setUserStatusFilter(e.target.value)}
                     className="w-full sm:w-auto rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
                   >
-                    <option value="all">Tous les statuts</option>
+                    <option value="all">Tous les accès</option>
                     <option value="active">✓ Actifs uniquement</option>
                     <option value="suspended">✕ Suspendus uniquement</option>
+                  </select>
+
+                  {/* KYC filter */}
+                  <select
+                    value={userKycFilter}
+                    onChange={(e) => setUserKycFilter(e.target.value)}
+                    className="w-full sm:w-auto rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
+                  >
+                    <option value="all">Toutes certifications KYC</option>
+                    <option value="verified">✓ Hôtes Certifiés (Actifs)</option>
+                    <option value="pending">⏳ Hôtes en Attente (Pending)</option>
+                    <option value="rejected">✕ Hôtes Rejetés</option>
                   </select>
                 </div>
               </div>
@@ -2826,13 +3103,14 @@ export function AdminDashboardPage() {
                         <th className="p-4">Société / Pôle</th>
                         <th className="p-4">Téléphone</th>
                         <th className="p-4">Statut Compte</th>
+                        <th className="p-4">Conformité KYC</th>
                         <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/5">
                       {filteredUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
+                          <td colSpan={7} className="p-8 text-center text-xs text-foreground/50">
                             Aucun utilisateur trouvé avec ces critères de recherche.
                           </td>
                         </tr>
@@ -2910,6 +3188,80 @@ export function AdminDashboardPage() {
                                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                                     Suspendu / Désactivé
                                   </span>
+                                )}
+                              </td>
+
+                              <td className="p-4">
+                                {u.role === 'owner' || u.role === 'partner' ? (
+                                  u.kyc_status === 'verified' || u.verified ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                        ✓ Certifié
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResetPartnerKyc(u.id, u.email)}
+                                        className="rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/25 text-amber-700 text-[10px] font-bold px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        title="Suspendre ce partenaire et le remettre en attente (retire ses annonces de la mise en ligne)"
+                                      >
+                                        <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
+                                        <span>Suspendre</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRejectKycModal(u)}
+                                        className="rounded-md border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 transition-colors flex items-center gap-1"
+                                        title="Refuser ou révoquer le dossier KYC de ce partenaire"
+                                      >
+                                        <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
+                                        <span>Refuser</span>
+                                      </button>
+                                    </div>
+                                  ) : u.kyc_status === 'rejected' ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                        ✕ Rejeté
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleVerifyPartnerKyc(u.id, u.email)}
+                                        className="rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        title="Réhabiliter et certifier ce propriétaire (publie ses annonces)"
+                                      >
+                                        <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
+                                        <span>Activer</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold animate-pulse">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                        ⏳ En attente
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleVerifyPartnerKyc(u.id, u.email)}
+                                        className="rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        title="Activer et certifier immédiatement ce propriétaire (publie ses annonces)"
+                                      >
+                                        <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
+                                        <span>Valider</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRejectKycModal(u)}
+                                        className="rounded-md border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 transition-colors flex items-center gap-1"
+                                        title="Refuser le dossier KYC"
+                                      >
+                                        <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
+                                        <span>Refuser</span>
+                                      </button>
+                                    </div>
+                                  )
+                                ) : (
+                                  <span className="text-foreground/40 text-[11px]">—</span>
                                 )}
                               </td>
 
@@ -5296,18 +5648,44 @@ export function AdminDashboardPage() {
               </div>
 
               {(userFormRole === 'owner' || userFormRole === 'partner') && (
-                <div>
-                  <label className="text-xs font-bold text-foreground block mb-1">
-                    Société / Nom de la structure hôte
-                  </label>
-                  <input
-                    type="text"
-                    value={userFormCompany}
-                    onChange={(e) => setUserFormCompany(e.target.value)}
-                    placeholder="Ex: Villa Royale Ouidah SARL"
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Société / Nom de la structure hôte
+                    </label>
+                    <input
+                      type="text"
+                      value={userFormCompany}
+                      onChange={(e) => setUserFormCompany(e.target.value)}
+                      placeholder="Ex: Villa Royale Ouidah SARL"
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3 text-primary" />
+                        Certification & Statut KYC Partenaire
+                      </label>
+                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                        Validation Admin
+                      </span>
+                    </div>
+                    <select
+                      value={userFormKycStatus}
+                      onChange={(e) => setUserFormKycStatus(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="pending">⏳ En attente de vérification (Pending)</option>
+                      <option value="verified">✓ Certifié conforme / Actif (Publication directe activée)</option>
+                      <option value="rejected">✕ Rejeté / Non conforme</option>
+                    </select>
+                    <p className="text-[11px] text-foreground/60 leading-relaxed">
+                      💡 <strong>Règle de publication :</strong> Dès qu'un hôte est <strong>« Certifié conforme / Actif »</strong>, toutes ses annonces en attente sont automatiquement activées, et ses futures créations d'annonces sont publiées en direct sans exiger de validation manuelle de l'admin.
+                    </p>
+                  </div>
+                </>
               )}
 
               {userFormRole === 'subadmin' && (
@@ -5747,7 +6125,7 @@ export function AdminDashboardPage() {
             </div>
 
             {/* Footer actions */}
-            <div className="border-t border-foreground/10 pt-4 flex items-center justify-end gap-2.5">
+            <div className="border-t border-foreground/10 pt-4 flex items-center justify-between gap-2.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => setSelectedKycModal(null)}
@@ -5755,27 +6133,51 @@ export function AdminDashboardPage() {
               >
                 Fermer
               </button>
-              {selectedKycModal.kycStatus !== 'verified' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenRejectKycModal(selectedKycModal)}
-                    className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5"
-                    title="Refuser le dossier KYC et spécifier le motif"
-                  >
-                    <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                    <span>Refuser le Dossier</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleVerifyPartnerKyc(selectedKycModal.id, selectedKycModal.email)}
-                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-2"
-                  >
-                    <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5" />
-                    <span>Certifier Conforme (Valider KYC)</span>
-                  </button>
-                </>
-              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedKycModal.kycStatus === 'verified' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleResetPartnerKyc(selectedKycModal.id, selectedKycModal.email)}
+                      className="rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-700 transition-all flex items-center gap-1.5 shadow-sm"
+                      title="Suspendre ce partenaire et le remettre en attente (ses annonces seront suspendues)"
+                    >
+                      <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
+                      <span>Suspendre (Remettre en attente)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRejectKycModal(selectedKycModal)}
+                      className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5"
+                      title="Refuser ou révoquer le dossier KYC avec motif"
+                    >
+                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                      <span>Refuser / Révoquer</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRejectKycModal(selectedKycModal)}
+                      className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-1.5"
+                      title="Refuser le dossier KYC et spécifier le motif"
+                    >
+                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                      <span>Refuser le Dossier</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyPartnerKyc(selectedKycModal.id, selectedKycModal.email)}
+                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-bold text-white shadow-md transition-all flex items-center gap-2"
+                    >
+                      <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5" />
+                      <span>Certifier Conforme (Valider KYC)</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

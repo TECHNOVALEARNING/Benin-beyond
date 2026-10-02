@@ -81,10 +81,15 @@ export function RegisterPage() {
       } else if (user.role === 'owner' || user.role === 'partner') {
         navigate('/dashboard/partner', { replace: true });
       } else if (user.role === 'client') {
-        navigate('/dashboard/client', { replace: true });
+        // Si l'utilisateur est sur l'onboarding partenaire, rediriger impérativement vers le dashboard partenaire
+        if (accountType === 'owner') {
+          navigate('/dashboard/partner', { replace: true });
+        } else {
+          navigate('/dashboard/client', { replace: true });
+        }
       }
     }
-  }, [user, navigate]);
+  }, [user, accountType, navigate]);
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];

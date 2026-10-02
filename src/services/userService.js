@@ -232,12 +232,14 @@ export async function getUsers() {
             emailMap.set(email, lu);
           } else {
             const existing = emailMap.get(email);
-            const override = overrides[email] || overrides[id] || {};
+            const mergedRole = override.role || (existing.role === 'admin' ? 'admin' : (existing.role === 'owner' || lu.role === 'owner' || lu.role === 'partner' ? 'owner' : existing.role));
             emailMap.set(email, {
               ...existing,
               ...lu,
               ...override,
-              kyc_status: override.kyc_status !== undefined ? override.kyc_status : (lu.kyc_status || existing.kyc_status),
+              role: mergedRole,
+              kyc_status: override.kyc_status !== undefined ? override.kyc_status : (lu.kyc_status || existing.kyc_status || 'pending'),
+              verified: override.verified !== undefined ? Boolean(override.verified) : Boolean(existing.verified || lu.verified || existing.kyc_status === 'verified' || lu.kyc_status === 'verified'),
               is_active: override.is_active !== undefined ? override.is_active : (lu.is_active !== undefined ? lu.is_active : existing.is_active),
               rejection_reason: override.rejection_reason !== undefined ? override.rejection_reason : (lu.rejection_reason || existing.rejection_reason || '')
             });
@@ -382,15 +384,37 @@ export async function updateUser(userId, updates) {
       if (sanitizedUpdates.partner_type) payload.partner_type = sanitizedUpdates.partner_type;
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId || '');
-      let query = supabase.from('profiles').update(payload);
-      if (isUuid && cleanEmail) {
-        query = query.or(`id.eq.${userId},email.ilike.${cleanEmail}`);
-      } else if (isUuid) {
-        query = query.eq('id', userId);
-      } else if (cleanEmail) {
-        query = query.ilike('email', cleanEmail);
+      let updatedInSupabase = false;
+
+      if (isUuid) {
+        try {
+          const { error, data } = await supabase.from('profiles').update(payload).eq('id', userId).select();
+          if (!error && data && data.length > 0) {
+            updatedInSupabase = true;
+          }
+        } catch {}
       }
-      await query;
+
+      if (!updatedInSupabase && cleanEmail) {
+        try {
+          const { error, data } = await supabase.from('profiles').update(payload).ilike('email', cleanEmail).select();
+          if (!error && data && data.length > 0) {
+            updatedInSupabase = true;
+          }
+        } catch {}
+      }
+
+      if (!updatedInSupabase && cleanEmail) {
+        try {
+          await supabase.from('profiles').upsert({
+            ...(isUuid ? { id: userId } : {}),
+            email: cleanEmail,
+            ...payload
+          }, { onConflict: 'email' });
+        } catch (e) {
+          console.warn('Erreur upsert profile Supabase:', e);
+        }
+      }
     } catch (e) {
       console.warn('Erreur updateUser Supabase:', e);
     }
@@ -515,12 +539,13 @@ export async function deleteUser(userId, userEmail = '') {
 }
 
 /**
- * Valider le KYC d'un partenaire hôte / loueur
+ * Valider le KYC d'un partenaire hôte / loueur (Activation du compte et publications directes)
  */
 export async function verifyPartnerKYC(userId, userEmail = '') {
   return updateUser(userId, {
     email: userEmail,
     verified: true,
+    is_active: true,
     kyc_status: 'verified',
     rejection_reason: ''
   });
@@ -535,5 +560,17 @@ export async function rejectPartnerKYC(userId, userEmail = '', reason = '') {
     verified: false,
     kyc_status: 'rejected',
     rejection_reason: reason || 'Dossier KYC incomplet ou pièces non conformes.'
+  });
+}
+
+/**
+ * Remettre le KYC d'un partenaire en statut d'audit (Pending)
+ */
+export async function resetPartnerKYC(userId, userEmail = '') {
+  return updateUser(userId, {
+    email: userEmail,
+    verified: false,
+    kyc_status: 'pending',
+    rejection_reason: ''
   });
 }

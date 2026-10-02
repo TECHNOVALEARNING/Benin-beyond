@@ -179,9 +179,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
-    // Vérifier la session active Supabase au montage
+    // Vérifier la session active Supabase au montage (et synchroniser le profil en tâche de fond)
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user && !user) {
+      if (session?.user) {
         await syncSupabaseSession(session.user);
       }
     });
@@ -195,8 +195,19 @@ export function AuthProvider({ children }) {
       }
     });
 
+    // Rafraîchissement en direct lorsque l'utilisateur revient sur l'onglet
+    const handleFocus = () => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          syncSupabaseSession(session.user);
+        }
+      });
+    };
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       subscription?.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -229,9 +240,10 @@ export function AuthProvider({ children }) {
       console.warn('Erreur synchronisation profil Supabase:', e);
     }
 
-    // 3. Récupérer intention OAuth si initiée depuis /register ou /login
+    // 3. Récupérer intention OAuth ou enregistrement en cours
     const intendedRole = localStorage.getItem('benin_beyond_oauth_intended_role');
     const intendedCompany = localStorage.getItem('benin_beyond_oauth_intended_company');
+    const registrationRole = localStorage.getItem('benin_beyond_registration_role');
     localStorage.removeItem('benin_beyond_oauth_intended_role');
     localStorage.removeItem('benin_beyond_oauth_intended_company');
 
@@ -239,7 +251,10 @@ export function AuthProvider({ children }) {
     const registeredList = getRegisteredUsers();
     const existingLocalUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
 
-    // 5. Vérifier si l'utilisateur possède déjà des annonces créées
+    // 5. Métadonnées directes de la session auth Supabase
+    const metadataRole = authUser.user_metadata?.role || authUser.app_metadata?.role;
+
+    // 6. Vérifier si l'utilisateur possède déjà des annonces créées
     let hasListings = false;
     try {
       if (isSupabaseConfigured && supabase) {
@@ -255,7 +270,11 @@ export function AuthProvider({ children }) {
     // Un propriétaire/partenaire ne doit JAMAIS être rétrogradé en client
     let candidateRole = profile?.role;
     if (!candidateRole || candidateRole === 'client') {
-      if (intendedRole === 'owner' || intendedRole === 'partner') {
+      if (metadataRole === 'owner' || metadataRole === 'partner') {
+        candidateRole = 'owner';
+      } else if (registrationRole === 'owner' || registrationRole === 'partner') {
+        candidateRole = 'owner';
+      } else if (intendedRole === 'owner' || intendedRole === 'partner') {
         candidateRole = 'owner';
       } else if (existingLocalUser?.role === 'owner' || existingLocalUser?.role === 'partner') {
         candidateRole = 'owner';
@@ -637,6 +656,37 @@ export function AuthProvider({ children }) {
       };
     }
 
+    // Enregistrer immédiatement l'intention de rôle et l'utilisateur localement
+    try {
+      localStorage.setItem('benin_beyond_registration_role', assignedRole);
+    } catch {}
+
+    const pendingUser = {
+      id: `usr_${Date.now()}`,
+      name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (name || cleanEmail.split('@')[0].replace(/[._]/g, ' ')),
+      email: cleanEmail,
+      phone: phone || 'Non renseigné',
+      role: assignedRole,
+      company: assignedRole === 'owner' ? (company || 'Partenaire Hébergement & Mobilité') : undefined,
+      partner_type: partnerType,
+      tax_id: taxId,
+      rccm: rccm,
+      cip: cip,
+      kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
+      kyc_doc_url: kycDocUrl,
+      kyc_status: assignedRole === 'admin' ? 'verified' : (assignedRole === 'owner' ? 'pending' : 'verified'),
+      verified: assignedRole === 'admin',
+      password: password,
+      provider: 'email',
+      avatar: assignedRole === 'admin'
+        ? DEMO_USERS.admin.avatar
+        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+      createdAt: new Date().toISOString()
+    };
+
+    saveRegisteredUser(pendingUser);
+    setUser(pendingUser);
+
     // 2. Si Supabase est actif, créer le compte dans Supabase Auth
     if (isSupabaseConfigured && supabase && password) {
       try {
@@ -690,39 +740,18 @@ export function AuthProvider({ children }) {
           } catch {}
 
           const registeredUser = await syncSupabaseSession(data.user);
+          localStorage.removeItem('benin_beyond_registration_role');
           return { success: true, user: registeredUser };
         }
       } catch (err) {
         console.warn('Supabase signUp fallback:', err);
+      } finally {
+        localStorage.removeItem('benin_beyond_registration_role');
       }
     }
 
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (name || cleanEmail.split('@')[0].replace(/[._]/g, ' ')),
-      email: cleanEmail,
-      phone: phone || 'Non renseigné',
-      role: assignedRole,
-      company: assignedRole === 'owner' ? (company || 'Partenaire Hébergement & Mobilité') : undefined,
-      partner_type: partnerType,
-      tax_id: taxId,
-      rccm: rccm,
-      cip: cip,
-      kyc_doc_type: kycDocType || (taxId ? 'Dossier IFU & Registre' : 'Justificatif CIP / Propriété'),
-      kyc_doc_url: kycDocUrl,
-      kyc_status: assignedRole === 'admin' ? 'verified' : (assignedRole === 'owner' ? 'pending' : 'verified'),
-      verified: assignedRole === 'admin',
-      password: password,
-      provider: 'email',
-      avatar: assignedRole === 'admin'
-        ? DEMO_USERS.admin.avatar
-        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-      createdAt: new Date().toISOString()
-    };
-
-    saveRegisteredUser(newUser);
-    setUser(newUser);
-    return { success: true, user: newUser };
+    localStorage.removeItem('benin_beyond_registration_role');
+    return { success: true, user: pendingUser };
   };
 
   /**

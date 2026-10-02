@@ -637,3 +637,66 @@ export async function activateOwnerListings(ownerId, ownerEmail = '') {
   return { activatedCount, updatedListings: updated };
 }
 
+/**
+ * Suspend automatiquement toutes les annonces actives d'un propriétaire lorsque son statut KYC est suspendu ou rejeté
+ */
+export async function suspendOwnerListings(ownerId, ownerEmail = '') {
+  const cleanEmail = (ownerEmail || '').trim().toLowerCase();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // 1. Cache local instantané
+  const custom = getCustomListings();
+  let suspendedCount = 0;
+  const updated = custom.map((item) => {
+    const matchId = Boolean(ownerId && (item.owner_id === ownerId || item.id === ownerId));
+    const matchEmail = Boolean(cleanEmail && item.owner_email && item.owner_email.trim().toLowerCase() === cleanEmail);
+    if ((matchId || matchEmail) && (item.status === 'active' || !item.status)) {
+      suspendedCount++;
+      return {
+        ...item,
+        status: 'pending',
+        badge: 'En attente de certification hôte',
+        rejection_reason: 'Statut du partenaire en cours d\'audit ou suspendu par la direction'
+      };
+    }
+    return item;
+  });
+
+  if (suspendedCount > 0) {
+    saveCustomListings(updated);
+  }
+
+  // 2. Base Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let targetOwnerId = ownerId && uuidRegex.test(ownerId) ? ownerId : null;
+      if (!targetOwnerId && cleanEmail) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        if (profile?.id) {
+          targetOwnerId = profile.id;
+        }
+      }
+
+      if (targetOwnerId) {
+        await supabase
+          .from('listings')
+          .update({
+            status: 'pending',
+            badge: 'En attente de certification hôte',
+            updated_date: new Date().toISOString()
+          })
+          .eq('owner_id', targetOwnerId)
+          .eq('status', 'active');
+      }
+    } catch (err) {
+      console.warn('Erreur Supabase suspendOwnerListings:', err);
+    }
+  }
+
+  return { suspendedCount, updatedListings: updated };
+}
+
