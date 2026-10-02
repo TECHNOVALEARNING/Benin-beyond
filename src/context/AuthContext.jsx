@@ -563,10 +563,15 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        const currentOrigin = typeof window !== 'undefined' && window.location.origin
+          ? window.location.origin.replace(/\/+$/, '')
+          : '';
+        const redirectTarget = currentOrigin ? `${currentOrigin}/login` : undefined;
+
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/login`,
+            redirectTo: redirectTarget,
             queryParams: {
               prompt: 'select_account',
               access_type: 'offline'
@@ -574,15 +579,15 @@ export function AuthProvider({ children }) {
           }
         });
         if (error) {
-          console.error('Supabase Google OAuth non configuré ou erreur:', error.message);
+          console.error('Google OAuth error:', error.message);
           return {
             success: false,
-            error: `Erreur Google OAuth : ${error.message}. Vérifiez que l'URL ${window.location.origin} est bien ajoutée dans les 'Redirect URLs' de Supabase (Authentication > URL Configuration).`
+            error: `Erreur Google OAuth : ${error.message}. Vérifiez que l'URL ${currentOrigin} est bien autorisée dans les paramètres de redirection.`
           };
         }
         return { success: true, data };
       } catch (err) {
-        console.error('Erreur Supabase Google OAuth:', err);
+        console.error('Erreur inattendue Google OAuth:', err);
         return {
           success: false,
           error: `Erreur inattendue Google OAuth : ${err.message}`
@@ -591,7 +596,7 @@ export function AuthProvider({ children }) {
     } else {
       return {
         success: false,
-        error: "Configuration Supabase manquante : Veuillez renseigner VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans les paramètres d'environnement."
+        error: "Configuration du serveur d'authentification manquante."
       };
     }
   };
