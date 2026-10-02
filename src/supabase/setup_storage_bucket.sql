@@ -39,12 +39,13 @@ USING (
 );
 
 -- 4. Politique de téléversement (Upload)
--- Permet aux utilisateurs et hôtes d'enregistrer leurs photos et vidéos
+-- Permet aux utilisateurs, administrateurs et hôtes d'enregistrer leurs photos et vidéos
 DROP POLICY IF EXISTS "Public Upload Listings Media" ON storage.objects;
 DROP POLICY IF EXISTS "Allow uploads to listings" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public uploads to listings" ON storage.objects;
 CREATE POLICY "Allow uploads to listings"
 ON storage.objects FOR INSERT
-TO authenticated, anon
+TO authenticated, anon, public
 WITH CHECK (bucket_id = 'listings');
 
 -- 5. Politique de mise à jour (Update)

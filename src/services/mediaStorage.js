@@ -57,10 +57,27 @@ export function buildStoragePath({
 }
 
 /**
+ * Convertit un fichier ou Blob en Data URL Base64 de manière asynchrone
+ */
+export function fileToDataUrl(file) {
+  return new Promise((resolve) => {
+    if (!file) return resolve('');
+    if (typeof file === 'string' && (file.startsWith('data:') || file.startsWith('http'))) {
+      return resolve(file);
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result || '');
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Téléverse un fichier (Image ou Vidéo) dans Supabase Storage dans un dossier structuré
+ * Avec repli automatique sans boucle infinie sur Base64 (photos) ou IndexedDB (vidéos).
  * @param {File|Blob} file 
  * @param {Object} options { userId, listingId, category }
- * @returns {Promise<string>} Retourne l'URL publique Supabase ou l'identifiant IndexedDB
+ * @returns {Promise<string>} Retourne l'URL publique Supabase, un Data URL Base64 ou l'identifiant IndexedDB
  */
 export async function uploadMediaFile(file, options = {}) {
   const {
@@ -70,6 +87,8 @@ export async function uploadMediaFile(file, options = {}) {
   } = options;
 
   if (!file) return '';
+
+  const contentType = file.type || (category === 'videos' ? 'video/mp4' : 'image/webp');
 
   // 1. Envoi prioritaire vers Supabase Storage dans le dossier approprié
   if (isSupabaseConfigured && supabase) {
@@ -85,7 +104,8 @@ export async function uploadMediaFile(file, options = {}) {
         .from('listings')
         .upload(storagePath, file, {
           cacheControl: '3600',
-          upsert: true
+          upsert: true,
+          contentType
         });
 
       if (!error && data?.path) {
@@ -100,30 +120,25 @@ export async function uploadMediaFile(file, options = {}) {
         console.warn('Supabase storage upload error:', error.message);
       }
     } catch (err) {
-      console.warn('Exception upload Supabase Storage (repli IndexedDB) :', err?.message || err);
+      console.warn('Exception upload Supabase Storage :', err?.message || err);
     }
   }
 
-  // 2. Repli persistant sur IndexedDB si hors-ligne ou bucket temporairement restreint
+  // 2. Repli immédiat et garanti :
+  // - Pour les photos : Data URL Base64 universel (lisible directement par toutes balises <img> et enregistrable en DB)
+  // - Pour les vidéos : IndexedDB local sécurisé
+  if (category === 'photos') {
+    const dataUrl = await fileToDataUrl(file);
+    if (dataUrl) return dataUrl;
+  }
+
   return saveMediaBlob(file, null, options);
 }
 
 /**
- * Enregistre un fichier média (vidéo, image) avec repli IndexedDB
+ * Enregistre un fichier média localement dans IndexedDB (sans rappel récursif vers Supabase)
  */
 export async function saveMediaBlob(file, optionalId = null, options = {}) {
-  // Tentative directe dans Supabase Storage si possible
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const uploadedUrl = await uploadMediaFile(file, options);
-      if (uploadedUrl && uploadedUrl.startsWith('http')) {
-        return uploadedUrl;
-      }
-    } catch (e) {
-      console.warn('Fallback IndexedDB saveMediaBlob:', e);
-    }
-  }
-
   // Stockage IndexedDB local
   try {
     const db = await openMediaDB();
@@ -145,12 +160,7 @@ export async function saveMediaBlob(file, optionalId = null, options = {}) {
     });
   } catch (err) {
     console.warn('Erreur sauvegarde média IndexedDB, fallback FileReader:', err);
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => resolve('');
-      reader.readAsDataURL(file);
-    });
+    return fileToDataUrl(file);
   }
 }
 

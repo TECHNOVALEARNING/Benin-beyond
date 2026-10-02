@@ -50,11 +50,13 @@ import {
   faLock,
   faUserShield,
   faEyeSlash,
-  faKey
+  faKey,
+  faSpinner,
+  faCircleInfo
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { getListings, deleteListing, updateListingStatus, addListing, getCustomListings, activateOwnerListings } from '../services/listingService';
+import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings } from '../services/listingService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
 import { getReviews, deleteReview } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
@@ -177,6 +179,11 @@ export function AdminDashboardPage() {
   const [selectedBookingModal, setSelectedBookingModal] = useState(null);
   const [selectedKycModal, setSelectedKycModal] = useState(null);
   const [mediaAuditModal, setMediaAuditModal] = useState(null);
+  const [auditVideoInput, setAuditVideoInput] = useState('');
+  const [isSavingAuditVideo, setIsSavingAuditVideo] = useState(false);
+  const [auditVideoSuccess, setAuditVideoSuccess] = useState('');
+  const [auditVideoError, setAuditVideoError] = useState('');
+  const [isUploadingAuditVideo, setIsUploadingAuditVideo] = useState(false);
   const [rejectionModalListing, setRejectionModalListing] = useState(null);
   const [rejectionPresetReason, setRejectionPresetReason] = useState('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
   const [rejectionCustomNote, setRejectionCustomNote] = useState('');
@@ -656,7 +663,7 @@ export function AdminDashboardPage() {
             category: 'photos'
           });
 
-          if (uploadedUrl) {
+          if (uploadedUrl && (uploadedUrl.startsWith('http') || uploadedUrl.startsWith('data:'))) {
             setUploadedPhotos((prev) => [...prev, uploadedUrl]);
           } else {
             const dataUrl = await compressImage(file, 2048, 1536, 0.90);
@@ -664,15 +671,21 @@ export function AdminDashboardPage() {
           }
         } catch (err) {
           console.warn('Erreur téléversement image admin:', err);
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            setUploadedPhotos((prev) => [...prev, event.target.result]);
-          };
-          reader.readAsDataURL(file);
+          const dataUrl = await compressImage(file, 2048, 1536, 0.90).catch(() => null);
+          if (dataUrl) {
+            setUploadedPhotos((prev) => [...prev, dataUrl]);
+          } else {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              setUploadedPhotos((prev) => [...prev, event.target.result]);
+            };
+            reader.readAsDataURL(file);
+          }
         }
       }
     } finally {
       setCompressingPhotos(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -690,20 +703,20 @@ export function AdminDashboardPage() {
     }
   };
 
-  // Video handlers (short tour video, max 50MB ou lien web)
+  // Video handlers (short tour video, max 50MB ou lien web - Exclusivité Admin)
   const handleVideoUpload = async (e) => {
     setVideoError('');
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('video/')) {
-      setVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4 ou WebM.');
+    if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|webm|mov|mkv)$/i)) {
+      setVideoError('Format vidéo non supporté. Veuillez choisir une vidéo MP4, WebM ou QuickTime (.mov).');
       return;
     }
 
     const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > 50) {
-      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale est de 50 Mo.`);
+      setVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo. Pour préserver la fluidité mobile, la taille maximale conseillée est de 50 Mo.`);
       return;
     }
 
@@ -716,33 +729,41 @@ export function AdminDashboardPage() {
         category: 'videos'
       });
       const objectUrl = URL.createObjectURL(file);
+      const isCloud = Boolean(persistentUrl && (persistentUrl.startsWith('http://') || persistentUrl.startsWith('https://')));
+      
       setUploadedVideo({
-        url: persistentUrl,
+        url: persistentUrl || objectUrl,
         previewUrl: objectUrl,
         name: file.name,
-        sizeMB: sizeMB.toFixed(1)
+        sizeMB: sizeMB.toFixed(1),
+        isCloud
       });
+
+      if (!isCloud) {
+        setVideoError("ℹ️ Note : La vidéo a été chargée localement sur votre navigateur (le stockage cloud Supabase nécessite l'activation de la politique RLS). Pour une diffusion garantie à tous les visiteurs, nous vous recommandons également de coller un lien direct vidéo ci-dessous.");
+      }
     } catch (err) {
       console.warn('Erreur téléversement vidéo admin:', err);
-      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien URL (YouTube, Drive, etc.).');
+      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien URL direct (YouTube, Google Drive, Vimeo, MP4 direct).');
     } finally {
       setIsUploadingVideo(false);
+      if (e.target) e.target.value = '';
     }
   };
 
   const handleAddVideoUrl = () => {
-    const trimmed = videoUrlInput.trim();
+    let trimmed = videoUrlInput.trim();
     if (!trimmed) return;
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      setVideoError('Veuillez entrer une adresse URL valide commençant par https://');
-      return;
+      trimmed = `https://${trimmed}`;
     }
     const embedInfo = parseVideoEmbed(trimmed);
     setUploadedVideo({
       url: trimmed,
       previewUrl: trimmed,
       name: embedInfo?.serviceName ? `Vidéo ${embedInfo.serviceName}` : 'Vidéo en ligne',
-      sizeMB: 'Web'
+      sizeMB: 'Web',
+      isCloud: true
     });
     setVideoUrlInput('');
     setVideoError('');
@@ -950,6 +971,74 @@ export function AdminDashboardPage() {
   }, [bookings]);
 
   // Actions
+  const handleOpenMediaAudit = (item) => {
+    setMediaAuditModal(item);
+    setAuditVideoInput(item?.video_url || '');
+    setAuditVideoSuccess('');
+    setAuditVideoError('');
+  };
+
+  const handleSaveAuditVideo = async (explicitUrl = null) => {
+    if (!mediaAuditModal) return;
+    setIsSavingAuditVideo(true);
+    setAuditVideoError('');
+    setAuditVideoSuccess('');
+    try {
+      const urlToSave = explicitUrl !== null ? explicitUrl : (auditVideoInput.trim() || null);
+      await updateListing(mediaAuditModal.id, { video_url: urlToSave });
+      setMediaAuditModal((prev) => ({ ...prev, video_url: urlToSave }));
+      setListings((prev) =>
+        prev.map((l) => (l.id === mediaAuditModal.id ? { ...l, video_url: urlToSave } : l))
+      );
+      setAuditVideoSuccess(urlToSave ? '✓ Vidéo certifiée enregistrée avec succès sur l’annonce !' : '✓ Vidéo retirée de l’annonce.');
+      showToast(urlToSave ? 'Vidéo mise à jour sur l’annonce !' : 'Vidéo retirée de l’annonce.');
+    } catch (err) {
+      console.error('Erreur mise à jour vidéo:', err);
+      setAuditVideoError('Erreur lors de l’enregistrement de la vidéo.');
+      showToast('Erreur enregistrement vidéo.', 'error');
+    } finally {
+      setIsSavingAuditVideo(false);
+    }
+  };
+
+  const handleAuditVideoUpload = async (e) => {
+    setAuditVideoError('');
+    setAuditVideoSuccess('');
+    const file = e.target.files?.[0];
+    if (!file || !mediaAuditModal) return;
+
+    if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|webm|mov|mkv)$/i)) {
+      setAuditVideoError('Format non supporté. Veuillez choisir un fichier MP4, WebM ou QuickTime (.mov).');
+      return;
+    }
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 50) {
+      setAuditVideoError(`Cette vidéo fait ${sizeMB.toFixed(1)} Mo (taille max recommandée 50 Mo).`);
+      return;
+    }
+
+    setIsUploadingAuditVideo(true);
+    try {
+      const adminOwnerId = user?.id || 'admin';
+      const uploadedUrl = await uploadMediaFile(file, {
+        userId: adminOwnerId,
+        listingId: mediaAuditModal.id,
+        category: 'videos'
+      });
+      const objectUrl = URL.createObjectURL(file);
+      const finalUrl = uploadedUrl || objectUrl;
+      setAuditVideoInput(finalUrl);
+      await handleSaveAuditVideo(finalUrl);
+    } catch (err) {
+      console.warn('Erreur téléversement vidéo audit:', err);
+      setAuditVideoError('Erreur de téléversement. Vous pouvez coller un lien direct YouTube, Google Drive ou MP4.');
+    } finally {
+      setIsUploadingAuditVideo(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleToggleListingStatus = async (id) => {
     const current = listings.find((l) => l.id === id);
     const newStatus = current?.status === 'suspended' ? 'active' : 'suspended';
@@ -2062,8 +2151,8 @@ export function AdminDashboardPage() {
                                   src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=120&q=80'}
                                   alt={item.title}
                                   className="h-11 w-16 object-cover rounded-lg border border-foreground/10 cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={() => setMediaAuditModal(item)}
-                                  title="Cliquer pour inspecter les photos"
+                                  onClick={() => handleOpenMediaAudit(item)}
+                                  title="Cliquer pour inspecter les photos & gérer la vidéo"
                                 />
                                 <div>
                                   <p className="font-bold text-foreground line-clamp-1">
@@ -2079,22 +2168,36 @@ export function AdminDashboardPage() {
                             {/* Médias & Vidéo */}
                             <td className="p-4">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1 bg-muted px-2 py-0.5 rounded text-[10px] font-semibold text-foreground/80">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenMediaAudit(item)}
+                                  className="inline-flex items-center gap-1 bg-muted hover:bg-muted/80 px-2 py-0.5 rounded text-[10px] font-semibold text-foreground/80 transition-colors"
+                                  title="Inspecter la galerie de photos"
+                                >
                                   <FontAwesomeIcon icon={faCamera} className="text-primary text-[9px]" />
                                   <span>{item.gallery?.length || 1} photo(s)</span>
-                                </span>
+                                </button>
 
                                 {item.video_url ? (
                                   <button
-                                    onClick={() => setMediaAuditModal(item)}
+                                    type="button"
+                                    onClick={() => handleOpenMediaAudit(item)}
                                     className="inline-flex items-center gap-1 bg-accent text-black px-2 py-0.5 rounded text-[10px] font-bold shadow-sm hover:bg-accent/80 transition-colors"
-                                    title="Regarder la visite vidéo"
+                                    title="Gérer la visite vidéo certifiée"
                                   >
                                     <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
-                                    <span>Vidéo dispo</span>
+                                    <span>Vidéo active</span>
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] text-foreground/40 italic">Sans vidéo</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenMediaAudit(item)}
+                                    className="inline-flex items-center gap-1 bg-muted hover:bg-accent/20 px-2 py-0.5 rounded text-[10px] text-foreground/60 transition-colors border border-dashed border-foreground/20"
+                                    title="Ajouter une visite vidéo certifiée (Exclusivité Admin)"
+                                  >
+                                    <FontAwesomeIcon icon={faVideo} className="text-[9px] text-accent" />
+                                    <span>+ Vidéo Admin</span>
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -2152,13 +2255,13 @@ export function AdminDashboardPage() {
                             {/* Actions de modération */}
                             <td className="p-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {/* Bouton Inspection Médias */}
+                                {/* Bouton Inspection Médias & Gestion Vidéo */}
                                 <button
-                                  onClick={() => setMediaAuditModal(item)}
+                                  onClick={() => handleOpenMediaAudit(item)}
                                   className="p-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent-foreground hover:bg-accent hover:text-black transition-colors"
-                                  title="Auditer les photos et la vidéo"
+                                  title="Gérer les photos et la vidéo (Exclusivité Super-Admin)"
                                 >
-                                  <FontAwesomeIcon icon={faCamera} className="h-3 w-3" />
+                                  <FontAwesomeIcon icon={faVideo} className="h-3 w-3" />
                                 </button>
 
                                 {/* Bouton Approuver */}
@@ -3850,25 +3953,30 @@ export function AdminDashboardPage() {
                   )}
 
                   {/* Dropzone */}
-                  <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-6 text-center transition-colors bg-muted/20">
+                  <div className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-colors ${
+                    compressingPhotos 
+                      ? 'border-primary bg-primary/5 cursor-wait' 
+                      : 'border-foreground/20 hover:border-primary bg-muted/20'
+                  }`}>
                     <input
                       type="file"
                       id="admin-photo-upload"
                       multiple
+                      disabled={compressingPhotos}
                       accept="image/jpeg,image/png,image/webp"
                       onChange={handlePhotoUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
                       <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-lg">
-                        <FontAwesomeIcon icon={faUpload} />
+                        <FontAwesomeIcon icon={compressingPhotos ? faSpinner : faUpload} className={compressingPhotos ? 'animate-spin' : ''} />
                       </div>
                       <div>
                         <p className="text-xs font-bold text-foreground">
-                          Cliquez pour sélectionner vos photos ou glissez-déposez
+                          {compressingPhotos ? 'Optimisation et chargement des photos en cours…' : 'Cliquez pour sélectionner vos photos ou glissez-déposez'}
                         </p>
                         <p className="text-[10px] text-foreground/50 mt-0.5">
-                          JPG, PNG, WebP — Résolution recommandée : 1920x1080px
+                          {compressingPhotos ? 'Compression haute résolution automatique (2048x1536 HD)' : 'JPG, PNG, WebP — Résolution recommandée : 1920x1080px'}
                         </p>
                       </div>
                     </div>
@@ -3941,20 +4049,30 @@ export function AdminDashboardPage() {
                   )}
                 </div>
 
-                {/* 6. Video Tour Upload */}
+                {/* 6. Video Tour Upload (Super-Admin Exclusive) */}
                 <div className="space-y-3 pt-3 border-t border-foreground/10">
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                      4. Visite Vidéo d'Aperçu (Optionnelle)
-                    </label>
-                    <p className="text-[11px] text-foreground/60">
-                      Téléversez un clip vidéo (MP4/WebM jusqu'à 50 Mo) ou collez un lien vidéo (Google Drive, YouTube, Vimeo, lien direct).
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
+                        4. Visite Vidéo d'Aperçu (Exclusivité Super-Admin)
+                      </label>
+                      <p className="text-[11px] text-foreground/60">
+                        Téléversez un clip vidéo (MP4/WebM jusqu'à 50 Mo) ou collez un lien vidéo direct (Google Drive, YouTube, Vimeo, MP4 public).
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 border border-accent/30 px-3 py-1 text-[10px] font-bold text-accent-foreground self-start sm:self-auto">
+                      <FontAwesomeIcon icon={faShieldHalved} className="text-accent" />
+                      <span>Publication Réservée aux Admins</span>
+                    </span>
                   </div>
 
                   {videoError && (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
-                      <FontAwesomeIcon icon={faTriangleExclamation} />
+                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                      videoError.includes('Note :') || videoError.includes('ℹ️')
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                    }`}>
+                      <FontAwesomeIcon icon={videoError.includes('Note :') || videoError.includes('ℹ️') ? faCircleInfo : faTriangleExclamation} className="mt-0.5 shrink-0" />
                       <span>{videoError}</span>
                     </div>
                   )}
@@ -3965,18 +4083,18 @@ export function AdminDashboardPage() {
                         <input
                           type="file"
                           id="admin-video-upload"
-                          accept="video/mp4,video/webm,video/quicktime"
+                          accept="video/mp4,video/webm,video/quicktime,.mov,.mkv"
                           disabled={isUploadingVideo}
                           onChange={handleVideoUpload}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                         />
                         <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
                           <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
-                            <FontAwesomeIcon icon={isUploadingVideo ? faClock : faVideo} className={isUploadingVideo ? 'animate-spin' : ''} />
+                            <FontAwesomeIcon icon={isUploadingVideo ? faSpinner : faVideo} className={isUploadingVideo ? 'animate-spin' : ''} />
                           </div>
                           <div>
                             <p className="text-xs font-bold text-foreground">
-                              {isUploadingVideo ? 'Téléversement dans Supabase Storage...' : 'Sélectionner une vidéo d\'aperçu (.MP4 ou .WebM)'}
+                              {isUploadingVideo ? 'Traitement et téléversement de la vidéo…' : 'Sélectionner une vidéo d\'aperçu (.MP4, .WebM, .MOV)'}
                             </p>
                             <p className="text-[10px] text-foreground/50">
                               {isUploadingVideo ? 'Veuillez patienter pendant l\'envoi...' : 'Fichier vidéo jusqu\'à 50 Mo max (dossier structuré)'}
@@ -3989,7 +4107,7 @@ export function AdminDashboardPage() {
                       <div className="flex items-center gap-2">
                         <input
                           type="url"
-                          placeholder="Ou collez un lien Google Drive, YouTube, Vimeo..."
+                          placeholder="Ou collez un lien Google Drive, YouTube, Vimeo, MP4 public..."
                           value={videoUrlInput}
                           onChange={(e) => setVideoUrlInput(e.target.value)}
                           className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
@@ -4010,6 +4128,11 @@ export function AdminDashboardPage() {
                           <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
                           <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
                           <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB} Mo)</span>
+                          {uploadedVideo.isCloud && (
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              ✓ En ligne
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -4672,21 +4795,26 @@ export function AdminDashboardPage() {
               )}
             </div>
 
-            {/* Short Tour Video Inspection Player */}
-            <div className="space-y-2 pt-3 border-t border-foreground/10">
+            {/* Short Tour Video Inspection & Admin Video Control */}
+            <div className="space-y-3 pt-3 border-t border-foreground/10">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-foreground flex items-center gap-1.5">
                   <FontAwesomeIcon icon={faVideo} className="text-accent" />
-                  <span>Visite Vidéo d'Aperçu</span>
+                  <span>Visite Vidéo d'Aperçu (Exclusivité Direction Bénin Beyond)</span>
                 </span>
                 {mediaAuditModal.video_url ? (
-                  <span className="text-emerald-700 font-bold text-[11px]">✓ Vidéo chargée</span>
+                  <span className="text-emerald-700 font-bold text-[11px] bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    ✓ Vidéo Active
+                  </span>
                 ) : (
-                  <span className="text-foreground/40 italic text-[11px]">Aucune vidéo transmise</span>
+                  <span className="text-foreground/50 italic text-[11px] bg-muted px-2.5 py-0.5 rounded-full">
+                    Sans vidéo attachée
+                  </span>
                 )}
               </div>
 
-              {mediaAuditModal.video_url ? (
+              {/* Player if video exists */}
+              {mediaAuditModal.video_url && (
                 <div className="rounded-2xl overflow-hidden shadow">
                   <ListingVideoPlayer
                     videoUrl={mediaAuditModal.video_url}
@@ -4694,11 +4822,91 @@ export function AdminDashboardPage() {
                     title={mediaAuditModal.title}
                   />
                 </div>
-              ) : (
-                <div className="p-4 rounded-2xl bg-muted/20 border border-dashed border-foreground/15 text-center text-xs text-foreground/50">
-                  L'hôte n'a pas inclus de courte vidéo d'ambiance pour cette annonce.
-                </div>
               )}
+
+              {/* Admin Video Action Box */}
+              <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/15 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs">
+                  <p className="font-bold text-foreground flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faVideo} className="text-accent text-[11px]" />
+                    <span>{mediaAuditModal.video_url ? 'Modifier ou remplacer la vidéo' : 'Ajouter une visite vidéo certifiée'}</span>
+                  </p>
+                  <span className="text-[10px] text-foreground/50">
+                    Privilège Administrateur exclusif
+                  </span>
+                </div>
+
+                {auditVideoSuccess && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                    <FontAwesomeIcon icon={faCircleCheck} />
+                    <span>{auditVideoSuccess}</span>
+                  </div>
+                )}
+
+                {auditVideoError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                    <FontAwesomeIcon icon={faTriangleExclamation} />
+                    <span>{auditVideoError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="url"
+                      placeholder="Lien vidéo web (YouTube, Google Drive, Vimeo, MP4 public)..."
+                      value={auditVideoInput}
+                      onChange={(e) => setAuditVideoInput(e.target.value)}
+                      className="flex-1 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isSavingAuditVideo}
+                        onClick={() => handleSaveAuditVideo()}
+                        className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isSavingAuditVideo ? (
+                          <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                        ) : (
+                          <FontAwesomeIcon icon={faCheck} />
+                        )}
+                        <span>Enregistrer</span>
+                      </button>
+
+                      {mediaAuditModal.video_url && (
+                        <button
+                          type="button"
+                          disabled={isSavingAuditVideo}
+                          onClick={() => {
+                            setAuditVideoInput('');
+                            handleSaveAuditVideo('');
+                          }}
+                          className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-500/20 transition-all"
+                          title="Supprimer la vidéo de cette annonce"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-foreground/60 pt-1">
+                    <span>Téléversement direct depuis l'appareil :</span>
+                    <label className="cursor-pointer font-bold text-accent hover:underline flex items-center gap-1.5">
+                      <FontAwesomeIcon icon={isUploadingAuditVideo ? faSpinner : faUpload} className={isUploadingAuditVideo ? 'animate-spin' : ''} />
+                      <span>{isUploadingAuditVideo ? 'Téléversement en cours…' : 'Choisir un fichier vidéo'}</span>
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/quicktime,.mov"
+                        disabled={isUploadingAuditVideo}
+                        onChange={handleAuditVideoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Description & Specs preview */}

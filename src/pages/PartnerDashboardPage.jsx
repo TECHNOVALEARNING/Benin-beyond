@@ -51,7 +51,8 @@ import {
   faBan,
   faCheck,
   faPen,
-  faSpinner
+  faSpinner,
+  faCircleInfo
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -2337,6 +2338,17 @@ export function PartnerDashboardPage() {
                       <p className="text-[11px] text-foreground/60">
                         Choisissez vos propres photos de votre logement ou véhicule (min. 1 photo, format paysage recommandé)
                       </p>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent-foreground text-[10px] font-semibold self-start sm:self-auto">
+                      <FontAwesomeIcon icon={faShieldHalved} className="text-accent" />
+                      <span>Visite Vidéo certifiée par la Direction</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[11px] text-foreground/75 flex items-start gap-2.5">
+                    <FontAwesomeIcon icon={faCircleInfo} className="text-primary mt-0.5 text-xs shrink-0" />
+                    <div>
+                      <span className="font-bold text-foreground">Politique d'assurance & Vidéo :</span> Conformément aux standards d'excellence Bénin Beyond, les visites vidéo immersives sont vérifiées et ajoutées exclusivement par les administrateurs lors de la certification de votre annonce pour garantir une authenticité certifiée aux clients.
                     </div>
                   </div>
 
