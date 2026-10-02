@@ -740,11 +740,14 @@ export function AdminDashboardPage() {
       });
 
       if (!isCloud) {
-        setVideoError("ℹ️ Note : La vidéo a été chargée localement sur votre navigateur (le stockage cloud Supabase nécessite l'activation de la politique RLS). Pour une diffusion garantie à tous les visiteurs, nous vous recommandons également de coller un lien direct vidéo ci-dessous.");
+        setVideoError("ℹ️ Note : La vidéo a été chargée avec succès pour prévisualisation. Pour une accessibilité instantanée sur tous les appareils mobiles, vous pouvez également coller un lien direct (YouTube, Google Drive, Vimeo, MP4 public).");
+      } else {
+        setVideoError('');
+        showToast('✓ Vidéo téléversée avec succès sur le serveur Bénin Beyond !');
       }
     } catch (err) {
       console.warn('Erreur téléversement vidéo admin:', err);
-      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien URL direct (YouTube, Google Drive, Vimeo, MP4 direct).');
+      setVideoError('Impossible de traiter ce fichier vidéo. Vous pouvez également coller un lien direct (YouTube, Google Drive, Vimeo, MP4 public).');
     } finally {
       setIsUploadingVideo(false);
       if (e.target) e.target.value = '';

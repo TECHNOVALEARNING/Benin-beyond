@@ -166,7 +166,7 @@ export function PrivacyPolicyPage() {
             <span>Sécurité et hébergement de vos données</span>
           </h2>
           <p>
-            Nos bases de données reposent sur l'infrastructure de classe mondiale <strong>PostgreSQL / Supabase</strong> dotée d'un chiffrement robuste et de politiques strictes de sécurité au niveau des lignes (<em>Row Level Security - RLS</em>).
+            Nos bases de données reposent sur une infrastructure de pointe hautement sécurisée dotée d'un chiffrement robuste et de protocoles stricts de confidentialité et de contrôle d'accès.
           </p>
           <p>
             Seuls les personnels autorisés de Bénin Beyond ont accès aux informations strictement requises pour le traitement de votre dossier. Aucune donnée bancaire n'est stockée en clair sur nos serveurs.
