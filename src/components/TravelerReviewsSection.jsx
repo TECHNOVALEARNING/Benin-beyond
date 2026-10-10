@@ -182,7 +182,7 @@ export function TravelerReviewsSection() {
         </div>
       </ScrollReveal>
 
-      {/* Conteneur Carrousel Défilant */}
+      {/* Conteneur Carrousel Défilant ou Grille Centrée selon le nombre d'avis réels */}
       <div
         className="relative"
         onMouseEnter={() => setIsPaused(true)}
@@ -191,21 +191,35 @@ export function TravelerReviewsSection() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {totalItems <= 3 ? (
-          /* Affichage fixe en grille si 3 avis ou moins */
+        {totalItems === 1 ? (
+          /* Exactement 1 avis réel validé : Centré avec largeur optimale */
+          <div className="flex justify-center max-w-xl mx-auto w-full">
+            <div className="w-full">
+              <ReviewCard review={reviews[0]} delay={0} />
+            </div>
+          </div>
+        ) : totalItems === 2 ? (
+          /* Exactement 2 avis réels validés : Centrés côte à côte */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto justify-center">
+            {reviews.map((rev, idx) => (
+              <ReviewCard key={rev.id || idx} review={rev} delay={idx * 100} />
+            ))}
+          </div>
+        ) : totalItems === 3 ? (
+          /* Exactement 3 avis réels validés : Grille équilibrée sur une ligne */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {reviews.map((rev, idx) => (
               <ReviewCard key={rev.id || idx} review={rev} delay={idx * 100} />
             ))}
           </div>
         ) : (
-          /* Carrousel animé avec défilement fluide */
+          /* Plus de 3 avis (jusqu'à 10) : Carrousel animé avec défilement fluide */
           <div className="overflow-hidden py-1">
             <div
               className="flex transition-transform duration-700 ease-out gap-6"
               style={{
                 // Sur desktop chaque carte occupe 1/3 (moins gap), sur tablette 1/2, sur mobile 100%
-                transform: `translateX(-${currentIndex * (100 / (window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1))}%)`
+                transform: `translateX(-${currentIndex * (100 / (typeof window !== 'undefined' && window.innerWidth >= 1024 ? 3 : typeof window !== 'undefined' && window.innerWidth >= 640 ? 2 : 1))}%)`
               }}
             >
               {reviews.map((rev, idx) => (
@@ -292,8 +306,9 @@ function ReviewCard({ review, delay = 0 }) {
                 alt={review.author_name}
                 className="h-10 w-10 rounded-full object-cover border border-foreground/15 shrink-0"
                 onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.nextElementSibling;
+                  if (fallback) fallback.style.display = 'flex';
                 }}
               />
             ) : null}
@@ -310,7 +325,7 @@ function ReviewCard({ review, delay = 0 }) {
               </h4>
               <p className="text-[10.5px] text-foreground/50 truncate flex items-center gap-1">
                 <FontAwesomeIcon icon={faCompass} className="h-2.5 w-2.5 text-primary shrink-0" />
-                <span className="truncate">{review.listing_title || 'Prestation Bénin Beyond'}</span>
+                <span className="truncate">{review.listing_title || 'Séjour & Expérience Bénin Beyond'}</span>
               </p>
             </div>
           </div>

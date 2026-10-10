@@ -24,132 +24,21 @@ const withTimeout = (promise, ms = 3500) => {
 };
 
 /**
- * Avis initiaux vérifiés de prestige au Bénin (Séjours, Villas et Mobilité VIP).
- * Ils garantissent que la plateforme dispose immédiatement d'une vitrine complète
- * et vivante de 8 à 10 retours certifiés.
+ * Aucun avis fictif ou simulé : la plateforme ne diffuse que les retours 100% authentiques
+ * et réels déposés par les voyageurs et validés par l'administrateur.
  */
-export const INITIAL_CURATED_REVIEWS = [
-  {
-    id: 'rev_curated_1',
-    booking_id: null,
-    listing_id: 'lst_ouidah_ocean',
-    pack_id: null,
-    author_name: 'Amina B.',
-    author_email: 'amina.b@gmail.com',
-    author_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Séjour absolument inoubliable face à l’océan à Ouidah. Le service de conciergerie et la sécurité 24/7 sont irréprochables. On se sent choyé dès la première minute.',
-    status: 'approved',
-    listing_title: 'Villa Océane Privée • Ouidah',
-    is_seed: true,
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_2',
-    booking_id: null,
-    listing_id: 'lst_prado_vip',
-    pack_id: null,
-    author_name: 'Jean-Philippe M.',
-    author_email: 'jp.mendoza@wanadoo.fr',
-    author_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Véhicule climatisé haut de gamme avec chauffeur privé très ponctuel pour notre trajet Cotonou - Grand-Popo. Conduite souple et confort VIP parfait pour les affaires.',
-    status: 'approved',
-    listing_title: 'Land Cruiser Prado VIP avec Chauffeur',
-    is_seed: true,
-    created_at: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_3',
-    booking_id: null,
-    listing_id: 'lst_penthouse_haie_vive',
-    pack_id: null,
-    author_name: 'Sarah & David L.',
-    author_email: 'sarah.david.travel@gmail.com',
-    author_avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Emplacement idéal au cœur de la Haie Vive. La décoration soignée, le calme et la fibre optique ultra-rapide répondaient à toutes nos attentes professionnelles et personnelles.',
-    status: 'approved',
-    listing_title: 'Penthouse Haie Vive • Cotonou',
-    is_seed: true,
-    created_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_4',
-    booking_id: null,
-    listing_id: 'lst_pack_evasion',
-    pack_id: 'pack_1',
-    author_name: 'Koffi A.',
-    author_email: 'koffi.ayodele@groupe-sa.bj',
-    author_avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'La formule combinée Villa + 4x4 nous a fait gagner un temps précieux. Tout était prêt dès notre atterrissage à l’aéroport de Cotonou. Une expérience 5 étoiles au Bénin.',
-    status: 'approved',
-    listing_title: 'Pack Privilège Évasion Littorale',
-    is_seed: true,
-    created_at: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_5',
-    booking_id: null,
-    listing_id: 'lst_lagune_porto',
-    pack_id: null,
-    author_name: 'Chloé D.',
-    author_email: 'chloe.delorme@voyages.fr',
-    author_avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Une retraite paisible d’un standing exceptionnel. La piscine privée est limpide et l’accueil béninois d’une rare authenticité. Nous reviendrons sans la moindre hésitation.',
-    status: 'approved',
-    listing_title: 'Résidence Panoramique Lagune',
-    is_seed: true,
-    created_at: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_6',
-    booking_id: null,
-    listing_id: 'lst_mercedes_vip',
-    pack_id: null,
-    author_name: 'Marc O.',
-    author_email: 'marc.olivier@tech-africa.com',
-    author_avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Organisation sans faute pour notre circuit vers Ouidah et Ganvié. Chauffeur prévenant, véhicule d’une propreté exemplaire. Bénin Beyond place la barre très haut.',
-    status: 'approved',
-    listing_title: 'SUV Berline Mercedes VIP',
-    is_seed: true,
-    created_at: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_7',
-    booking_id: null,
-    listing_id: 'lst_suite_marina',
-    pack_id: null,
-    author_name: 'Fatou S.',
-    author_email: 'fatou.sylla@invest-dakar.sn',
-    author_avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'Prestation digne des plus grands palaces. Propreté chirurgicale, literie haut de gamme et conciergerie disponible même à minuit. Bravo pour ce niveau d’exigence.',
-    status: 'approved',
-    listing_title: 'Suite Royale Marina',
-    is_seed: true,
-    created_at: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'rev_curated_8',
-    booking_id: null,
-    listing_id: 'lst_villa_fidjrosse',
-    pack_id: null,
-    author_name: 'Thomas & Élodie B.',
-    author_email: 'thomas.elodie.b@gmail.com',
-    author_avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=200&q=80',
-    rating: 5,
-    comment: 'À deux pas de la plage de Fidjrossè, villa spacieuse, groupe électrogène automatique et piscine impeccable. Notre meilleure expérience de réservation en Afrique de l’Ouest.',
-    status: 'approved',
-    listing_title: 'Villa Standing Fidjrossè Plage',
-    is_seed: true,
-    created_at: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
+export const INITIAL_CURATED_REVIEWS = [];
+
+/**
+ * Filtre utilitaire garantissant qu'aucun avis fictif ou résiduel des anciennes maquettes
+ * ne subsiste dans le cache local ou dans les flux de données.
+ */
+function sanitizeReviews(reviews) {
+  if (!Array.isArray(reviews)) return [];
+  return reviews.filter(
+    (r) => r && !r.is_seed && !String(r.id || '').startsWith('rev_curated_')
+  );
+}
 
 /**
  * Récupère l'ensemble des IDs d'avis supprimés par l'administrateur
@@ -182,22 +71,14 @@ export function markReviewAsDeleted(reviewId, bookingId = null) {
 
 /**
  * Récupère tous les avis avec déduplication stricte et purge des avis supprimés.
- * Si aucun avis n'est présent, initialise automatiquement avec les avis de prestige.
+ * Uniquement les avis réels créés par les utilisateurs (aucun avis fictif).
  */
 export async function getReviews(listingId = null, options = {}) {
   try {
     const { includeAll = true } = options;
     const deletedIds = getDeletedReviewIds();
     const raw = localStorage.getItem(LOCAL_STORAGE_REVIEWS_KEY);
-    let localReviews = raw ? JSON.parse(raw) : [];
-
-    // Si le cache local est vierge, injecter les avis initiaux certifiés
-    if (!Array.isArray(localReviews) || localReviews.length === 0) {
-      localReviews = [...INITIAL_CURATED_REVIEWS];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_REVIEWS_KEY, JSON.stringify(localReviews));
-      } catch {}
-    }
+    let localReviews = sanitizeReviews(raw ? JSON.parse(raw) : []);
 
     let remoteReviews = [];
     if (isSupabaseConfigured && supabase) {
@@ -213,7 +94,7 @@ export async function getReviews(listingId = null, options = {}) {
 
         const { data, error } = await withTimeout(query, 3500);
         if (!error && Array.isArray(data)) {
-          remoteReviews = data;
+          remoteReviews = sanitizeReviews(data);
         }
       } catch (e) {
         console.warn('Reviews fetch timeout/error, utilisation du cache local:', e?.message || e);
@@ -224,8 +105,8 @@ export async function getReviews(listingId = null, options = {}) {
     const uniqueMap = new Map();
     const seenSignatures = new Set();
 
-    // Priorité aux avis réels distants de Supabase, puis locaux, puis initiaux
-    const candidates = [...remoteReviews, ...localReviews, ...INITIAL_CURATED_REVIEWS];
+    // Priorité aux avis réels distants de Supabase, puis locaux
+    const candidates = [...remoteReviews, ...localReviews];
 
     candidates.forEach((rev) => {
       if (!rev) return;
@@ -271,47 +152,41 @@ export async function getReviews(listingId = null, options = {}) {
     return cleanReviews;
   } catch (err) {
     console.error('Erreur getReviews:', err);
-    return [...INITIAL_CURATED_REVIEWS];
+    return [];
   }
 }
 
 /**
- * Récupère la sélection des 8 à 10 meilleurs avis approuvés pour la page d'accueil.
+ * Récupère la sélection des meilleurs avis approuvés réels pour la page d'accueil (Top 10 max).
  * Règle de remplacement :
  * - Sélectionne en priorité les avis ayant les meilleures notes (5★ puis 4★).
- * - Priorise les vrais retours clients vérifiés sur les avis modèles.
  * - Tri chronologique récent pour les notes égales.
  * - Si le total dépasse la limite (ex: 10), le nouvel avis approuvé remplace l'ancien ayant la note la plus faible.
  */
 export async function getFeaturedHomeReviews(maxCount = 10) {
   try {
     const allReviews = await getReviews(null, { includeAll: true });
-    const approved = allReviews.filter((r) => r.status === 'approved' || !r.status);
+    // Filtrer uniquement les avis réels approuvés
+    const approved = allReviews.filter(
+      (r) => !r.is_seed && !String(r.id || '').startsWith('rev_curated_') && (r.status === 'approved' || !r.status)
+    );
 
-    // Tri d'excellence et de pertinence
+    // Tri d'excellence et chronologique
     const sorted = [...approved].sort((a, b) => {
       const ratingA = Number(a.rating) || 5;
       const ratingB = Number(b.rating) || 5;
       if (ratingB !== ratingA) {
         return ratingB - ratingA; // Meilleure note en premier (5★ puis 4★)
       }
-      // À note égale, prioriser les vrais avis clients (qui ont un booking_id)
-      const aIsReal = Boolean(a.booking_id && !a.is_seed);
-      const bIsReal = Boolean(b.booking_id && !b.is_seed);
-      if (aIsReal !== bIsReal) {
-        return aIsReal ? -1 : 1;
-      }
-      // Enfin, le plus récent en premier
       const timeA = new Date(a.created_at || 0).getTime();
       const timeB = new Date(b.created_at || 0).getTime();
       return timeB - timeA;
     });
 
-    // Limiter au maximum demandé (8 à 10 avis)
-    return sorted.slice(0, Math.max(3, maxCount));
+    return sorted.slice(0, maxCount);
   } catch (err) {
     console.error('Erreur getFeaturedHomeReviews:', err);
-    return INITIAL_CURATED_REVIEWS.slice(0, maxCount);
+    return [];
   }
 }
 
@@ -363,7 +238,7 @@ export async function submitReview(reviewPayload) {
 
     // 2. Enregistrement dans le LocalStorage
     const raw = localStorage.getItem(LOCAL_STORAGE_REVIEWS_KEY);
-    const local = raw ? JSON.parse(raw) : [...INITIAL_CURATED_REVIEWS];
+    const local = sanitizeReviews(raw ? JSON.parse(raw) : []);
     const filteredLocal = local.filter((r) => !newReview.booking_id || String(r.booking_id) !== String(newReview.booking_id));
     filteredLocal.unshift(newReview);
     localStorage.setItem(LOCAL_STORAGE_REVIEWS_KEY, JSON.stringify(filteredLocal));
@@ -388,7 +263,7 @@ export async function updateReviewStatus(reviewId, newStatus, bookingId = null) 
   try {
     // 1. Mise à jour dans le LocalStorage
     const raw = localStorage.getItem(LOCAL_STORAGE_REVIEWS_KEY);
-    let local = raw ? JSON.parse(raw) : [...INITIAL_CURATED_REVIEWS];
+    let local = sanitizeReviews(raw ? JSON.parse(raw) : []);
     let targetReview = null;
 
     local = local.map((r) => {

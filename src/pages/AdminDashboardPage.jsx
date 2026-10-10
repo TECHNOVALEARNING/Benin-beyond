@@ -1565,7 +1565,7 @@ export function AdminDashboardPage() {
   }, [reviewsList, reviewSearch, reviewRatingFilter, reviewStatusFilter]);
 
   const featuredHomepageReviewIds = useMemo(() => {
-    const approved = reviewsList.filter((r) => (r.status || 'approved') === 'approved');
+    const approved = reviewsList.filter((r) => !r.is_seed && !String(r.id || '').startsWith('rev_curated_') && (r.status || 'approved') === 'approved');
     const sorted = [...approved].sort((a, b) => {
       const ratingA = Number(a.rating) || 5;
       const ratingB = Number(b.rating) || 5;
