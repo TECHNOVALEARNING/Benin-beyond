@@ -147,10 +147,12 @@ export function ClientDashboardPage() {
     await submitReview({
       booking_id: reviewModal.booking.id || reviewModal.booking.booking_ref,
       listing_id: reviewModal.booking.listing_id,
+      listing_title: reviewModal.booking.listing_title || 'Séjour Bénin Beyond',
       author_name: user?.name || reviewModal.booking.customer_name || 'Voyageur Bénin Beyond',
       author_email: user?.email || reviewModal.booking.customer_email || '',
       rating: reviewModal.rating,
-      comment: reviewModal.comment.trim()
+      comment: reviewModal.comment.trim(),
+      status: 'pending'
     });
 
     setReviewModal((prev) => ({
@@ -749,7 +751,7 @@ export function ClientDashboardPage() {
                   Merci pour votre retour d'expérience !
                 </h4>
                 <p className="text-xs text-foreground/60 max-w-xs mx-auto">
-                  Votre avis vérifié a été enregistré avec succès et sera partagé avec la communauté Bénin Beyond.
+                  Votre avis vérifié a été transmis avec succès à l'administration et sera mis en avant sur la page d'accueil dès validation.
                 </p>
               </div>
             ) : (

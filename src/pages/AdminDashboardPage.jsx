@@ -58,7 +58,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings, suspendOwnerListings } from '../services/listingService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
-import { getReviews, deleteReview } from '../services/reviewService';
+import { getReviews, deleteReview, updateReviewStatus } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC, resetPartnerKYC, createAssistantAdmin } from '../services/userService';
@@ -123,6 +123,7 @@ export function AdminDashboardPage() {
   const [reviewsList, setReviewsList] = useState([]);
   const [reviewSearch, setReviewSearch] = useState('');
   const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+  const [reviewStatusFilter, setReviewStatusFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [compressingPhotos, setCompressingPhotos] = useState(false);
@@ -271,7 +272,7 @@ export function AdminDashboardPage() {
         getPacks(),
         getEvents(),
         getUsers(),
-        getReviews()
+        getReviews(null, { includeAll: true })
       ]);
       setListings(allListings || []);
       setBookings(allBookings || []);
@@ -1232,6 +1233,45 @@ export function AdminDashboardPage() {
     });
   };
 
+  const handleApproveReview = async (rev) => {
+    try {
+      setReviewsList((prev) =>
+        prev.map((r) => (r.id === rev.id ? { ...r, status: 'approved' } : r))
+      );
+      await updateReviewStatus(rev.id, 'approved', rev.booking_id);
+      showToast(`Avis de ${rev.author_name || 'ce voyageur'} validé avec succès ! Il est publié sur la plateforme.`);
+    } catch (err) {
+      console.error('Erreur approbation avis:', err);
+      showToast("Impossible d'approuver cet avis.", 'error');
+    }
+  };
+
+  const handleRejectReview = async (rev) => {
+    try {
+      setReviewsList((prev) =>
+        prev.map((r) => (r.id === rev.id ? { ...r, status: 'rejected' } : r))
+      );
+      await updateReviewStatus(rev.id, 'rejected', rev.booking_id);
+      showToast(`Avis de ${rev.author_name || 'ce voyageur'} rejeté et masqué de l'affichage public.`);
+    } catch (err) {
+      console.error('Erreur rejet avis:', err);
+      showToast("Impossible de rejeter cet avis.", 'error');
+    }
+  };
+
+  const handleResetReviewPending = async (rev) => {
+    try {
+      setReviewsList((prev) =>
+        prev.map((r) => (r.id === rev.id ? { ...r, status: 'pending' } : r))
+      );
+      await updateReviewStatus(rev.id, 'pending', rev.booking_id);
+      showToast(`Avis de ${rev.author_name || 'ce voyageur'} replacé en attente de modération.`);
+    } catch (err) {
+      console.error('Erreur statut avis:', err);
+      showToast("Erreur lors de la mise à jour.", 'error');
+    }
+  };
+
   const handleApprovePayout = async (payoutId) => {
     setPayouts((prev) =>
       prev.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p))
@@ -1513,12 +1553,32 @@ export function AdminDashboardPage() {
         !reviewSearch ||
         rev.author_name?.toLowerCase().includes(reviewSearch.toLowerCase()) ||
         rev.author_email?.toLowerCase().includes(reviewSearch.toLowerCase()) ||
-        rev.comment?.toLowerCase().includes(reviewSearch.toLowerCase());
+        rev.comment?.toLowerCase().includes(reviewSearch.toLowerCase()) ||
+        (rev.listing_title && rev.listing_title.toLowerCase().includes(reviewSearch.toLowerCase()));
       const matchRating =
         reviewRatingFilter === 'all' || String(rev.rating) === String(reviewRatingFilter);
-      return matchSearch && matchRating;
+      const revStatus = rev.status || 'approved';
+      const matchStatus =
+        reviewStatusFilter === 'all' || revStatus === reviewStatusFilter;
+      return matchSearch && matchRating && matchStatus;
     });
-  }, [reviewsList, reviewSearch, reviewRatingFilter]);
+  }, [reviewsList, reviewSearch, reviewRatingFilter, reviewStatusFilter]);
+
+  const featuredHomepageReviewIds = useMemo(() => {
+    const approved = reviewsList.filter((r) => (r.status || 'approved') === 'approved');
+    const sorted = [...approved].sort((a, b) => {
+      const ratingA = Number(a.rating) || 5;
+      const ratingB = Number(b.rating) || 5;
+      if (ratingB !== ratingA) return ratingB - ratingA;
+      const aIsReal = Boolean(a.booking_id && !a.is_seed);
+      const bIsReal = Boolean(b.booking_id && !b.is_seed);
+      if (aIsReal !== bIsReal) return aIsReal ? -1 : 1;
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return dateB - dateA;
+    });
+    return new Set(sorted.slice(0, 10).map((r) => r.id));
+  }, [reviewsList]);
 
   const navGroups = [
     {
@@ -1570,8 +1630,12 @@ export function AdminDashboardPage() {
           key: 'reviews',
           label: 'Avis & Retours Clients',
           icon: faStar,
-          badge: reviewsList.length > 0 ? `${reviewsList.length} avis` : null,
-          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+          badge: reviewsList.some((r) => r.status === 'pending')
+            ? `${reviewsList.filter((r) => r.status === 'pending').length} en attente`
+            : reviewsList.length > 0 ? `${reviewsList.length} avis` : null,
+          badgeColor: reviewsList.some((r) => r.status === 'pending')
+            ? 'bg-amber-500/30 text-amber-300 border-amber-500/50 animate-pulse font-bold'
+            : 'bg-amber-500/25 text-amber-300 border-amber-500/40'
         }
       ]
     },
@@ -4793,20 +4857,48 @@ export function AdminDashboardPage() {
                 <div>
                   <h2 className="font-heading text-xl font-bold text-foreground flex items-center gap-2">
                     <FontAwesomeIcon icon={faStar} className="text-amber-400" />
-                    <span>Avis & Retours d'Expérience Clients</span>
+                    <span>Avis & Modération des Retours Clients</span>
                   </h2>
                   <p className="text-xs text-foreground/60">
-                    Consultez, modérez et gérez les retours authentiques laissés par les voyageurs après séjour ({reviewsList.length} avis enregistrés)
+                    Modérez les avis voyageurs et contrôlez leur publication. Les 8 à 10 meilleurs avis validés (5★ et 4★) défilent automatiquement en carrousel sur la page d'accueil ({reviewsList.length} avis au total).
                   </p>
                 </div>
               </div>
 
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="rounded-2xl border border-foreground/10 bg-card p-4">
                   <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Total Avis Reçus</span>
                   <div className="mt-1 text-2xl font-bold text-foreground font-heading">{reviewsList.length}</div>
-                  <span className="text-[11px] text-foreground/50">Retours vérifiés après réservation</span>
+                  <span className="text-[11px] text-foreground/50">Base globale des retours</span>
+                </div>
+
+                <div className={`rounded-2xl border p-4 ${
+                  reviewsList.some(r => r.status === 'pending')
+                    ? 'border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/10'
+                    : 'border-foreground/10 bg-card'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">En Attente de Modération</span>
+                    {reviewsList.filter(r => r.status === 'pending').length > 0 && (
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                    )}
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-amber-500 font-heading">
+                    {reviewsList.filter(r => r.status === 'pending').length}
+                  </div>
+                  <span className="text-[11px] text-foreground/50">Nécessite votre validation</span>
+                </div>
+
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-primary uppercase tracking-wider">Carrousel Accueil (Top 10)</span>
+                    <FontAwesomeIcon icon={faStar} className="text-amber-400 text-xs" />
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-primary font-heading">
+                    {featuredHomepageReviewIds.size} <span className="text-sm font-normal text-foreground/50">/ 10 max</span>
+                  </div>
+                  <span className="text-[11px] text-foreground/50">Meilleures notes (5★ & 4★)</span>
                 </div>
 
                 <div className="rounded-2xl border border-foreground/10 bg-card p-4">
@@ -4814,48 +4906,55 @@ export function AdminDashboardPage() {
                   <div className="mt-1 text-2xl font-bold text-amber-500 font-heading flex items-center gap-1.5">
                     {reviewsList.length > 0
                       ? `${(reviewsList.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviewsList.length).toFixed(1)} / 5`
-                      : 'Aucun avis'}
-                    {reviewsList.length > 0 && <FontAwesomeIcon icon={faStar} className="text-amber-400 text-lg" />}
-                  </div>
-                  <span className="text-[11px] text-foreground/50">Moyenne calculée en temps réel</span>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Taux de Satisfaction</span>
-                  <div className="mt-1 text-2xl font-bold text-emerald-500 font-heading">
-                    {reviewsList.length > 0
-                      ? `${Math.round((reviewsList.filter(r => (Number(r.rating) || 0) >= 4).length / reviewsList.length) * 100)}%`
                       : '—'}
+                    {reviewsList.length > 0 && <FontAwesomeIcon icon={faStar} className="text-amber-400 text-base" />}
                   </div>
-                  <span className="text-[11px] text-foreground/50">Notes 4 étoiles et 5 étoiles</span>
+                  <span className="text-[11px] text-emerald-500 font-medium">
+                    {reviewsList.length > 0
+                      ? `${Math.round((reviewsList.filter(r => (Number(r.rating) || 0) >= 4).length / reviewsList.length) * 100)}% de satisfaction`
+                      : 'Calcul en temps réel'}
+                  </span>
                 </div>
               </div>
 
-              {/* Filters & Search */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              {/* Filters & Search Toolbar */}
+              <div className="flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1">
                   <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/40 text-xs" />
                   <input
                     type="text"
-                    placeholder="Rechercher par nom de voyageur, email, contenu du commentaire..."
+                    placeholder="Rechercher par voyageur, email, annonce ou commentaire..."
                     value={reviewSearch}
                     onChange={(e) => setReviewSearch(e.target.value)}
                     className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
 
-                <select
-                  value={reviewRatingFilter}
-                  onChange={(e) => setReviewRatingFilter(e.target.value)}
-                  className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-                >
-                  <option value="all">Toutes les notes</option>
-                  <option value="5">5 Étoiles (Excellent)</option>
-                  <option value="4">4 Étoiles (Très bien)</option>
-                  <option value="3">3 Étoiles (Moyen)</option>
-                  <option value="2">2 Étoiles (Décevant)</option>
-                  <option value="1">1 Étoile (Insatisfaisant)</option>
-                </select>
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                  <select
+                    value={reviewStatusFilter}
+                    onChange={(e) => setReviewStatusFilter(e.target.value)}
+                    className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    <option value="all">Tous les statuts ({reviewsList.length})</option>
+                    <option value="pending">⏳ En attente ({reviewsList.filter(r => r.status === 'pending').length})</option>
+                    <option value="approved">✓ Validés & Publiés ({reviewsList.filter(r => (r.status || 'approved') === 'approved').length})</option>
+                    <option value="rejected">✕ Rejetés ({reviewsList.filter(r => r.status === 'rejected').length})</option>
+                  </select>
+
+                  <select
+                    value={reviewRatingFilter}
+                    onChange={(e) => setReviewRatingFilter(e.target.value)}
+                    className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    <option value="all">Toutes les notes</option>
+                    <option value="5">5 Étoiles (Excellent)</option>
+                    <option value="4">4 Étoiles (Très bien)</option>
+                    <option value="3">3 Étoiles (Moyen)</option>
+                    <option value="2">2 Étoiles (Décevant)</option>
+                    <option value="1">1 Étoile (Insatisfaisant)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Reviews List */}
@@ -4863,92 +4962,214 @@ export function AdminDashboardPage() {
                 <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
                   <FontAwesomeIcon icon={faStar} className="h-10 w-10 text-foreground/20 mb-3" />
                   <h4 className="font-heading text-base font-bold text-foreground">
-                    Aucun avis client pour le moment
+                    Aucun avis ne correspond aux filtres
                   </h4>
                   <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
-                    Dès que les voyageurs auront terminé leur séjour ou confirmé leur réservation, ils pourront laisser leur retour authentique depuis leur espace client.
+                    Ajustez la recherche ou réinitialisez les filtres de statut et de note pour afficher les retours clients.
                   </p>
+                  {(reviewSearch || reviewStatusFilter !== 'all' || reviewRatingFilter !== 'all') && (
+                    <button
+                      onClick={() => {
+                        setReviewSearch('');
+                        setReviewStatusFilter('all');
+                        setReviewRatingFilter('all');
+                      }}
+                      className="mt-4 rounded-xl border border-foreground/20 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-all inline-flex items-center gap-1.5"
+                    >
+                      <span>Réinitialiser les filtres</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredReviews.map((rev) => (
-                    <div
-                      key={rev.id}
-                      className="rounded-2xl border border-foreground/10 bg-card p-4 sm:p-5 shadow-sm hover:border-foreground/20 transition-all flex flex-col md:flex-row md:items-start justify-between gap-4 overflow-hidden"
-                    >
-                      <div className="space-y-2 flex-1 min-w-0">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0">
-                            {rev.author_name ? rev.author_name.charAt(0) : 'V'}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-heading text-sm font-bold text-foreground truncate">
-                                {rev.author_name || 'Voyageur'}
-                              </span>
-                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20 shrink-0">
-                                Client Vérifié
-                              </span>
+                  {filteredReviews.map((rev) => {
+                    const status = rev.status || 'approved';
+                    const isPending = status === 'pending';
+                    const isRejected = status === 'rejected';
+                    const isApproved = status === 'approved';
+                    const isFeaturedOnHome = isApproved && featuredHomepageReviewIds.has(rev.id);
+
+                    return (
+                      <div
+                        key={rev.id}
+                        className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition-all flex flex-col lg:flex-row lg:items-start justify-between gap-4 overflow-hidden ${
+                          isPending
+                            ? 'border-amber-500/40 bg-amber-500/[0.03] dark:bg-amber-500/[0.06]'
+                            : isRejected
+                            ? 'border-rose-500/30 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] opacity-80'
+                            : 'border-foreground/10 bg-card hover:border-foreground/20'
+                        }`}
+                      >
+                        <div className="space-y-2.5 flex-1 min-w-0">
+                          {/* Header row: Author + Status Badges */}
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0 overflow-hidden">
+                                {rev.author_avatar ? (
+                                  <img
+                                    src={rev.author_avatar}
+                                    alt={rev.author_name}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <span>{rev.author_name ? rev.author_name.charAt(0) : 'V'}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-heading text-sm font-bold text-foreground truncate">
+                                    {rev.author_name || 'Voyageur Bénin Beyond'}
+                                  </span>
+                                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                                    Client Vérifié
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-foreground/50 truncate block">
+                                  {rev.author_email || 'Email non renseigné'}
+                                </span>
+                              </div>
                             </div>
-                            <span className="text-[11px] text-foreground/50 truncate block">{rev.author_email || 'Email non renseigné'}</span>
+
+                            {/* Status Badges */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isPending && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2.5 py-0.5 text-[10.5px] font-bold text-amber-500 animate-pulse">
+                                  <FontAwesomeIcon icon={faClock} />
+                                  <span>En attente de modération</span>
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-0.5 text-[10.5px] font-bold text-rose-500">
+                                  <FontAwesomeIcon icon={faBan} />
+                                  <span>Rejeté / Masqué</span>
+                                </span>
+                              )}
+                              {isApproved && isFeaturedOnHome && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-primary/20 border border-amber-500/40 px-3 py-0.5 text-[10.5px] font-bold text-amber-400 shadow-sm">
+                                  <FontAwesomeIcon icon={faStar} className="text-amber-400 text-xs" />
+                                  <span>En vedette Accueil (Top 10)</span>
+                                </span>
+                              )}
+                              {isApproved && !isFeaturedOnHome && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  <FontAwesomeIcon icon={faCheck} />
+                                  <span>Validé (Catalogue)</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Stars Rating */}
+                          <div className="flex items-center gap-1 text-amber-400 text-sm">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <FontAwesomeIcon
+                                key={star}
+                                icon={faStar}
+                                className={star <= (Number(rev.rating) || 5) ? 'text-amber-400' : 'text-foreground/20'}
+                              />
+                            ))}
+                            <span className="ml-2 text-xs font-bold text-foreground">
+                              {rev.rating} / 5
+                            </span>
+                            {Number(rev.rating) >= 5 && (
+                              <span className="text-[10px] text-emerald-500 font-semibold ml-1">
+                                (Excellent)
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Comment Body */}
+                          <div className="text-xs text-foreground/85 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5 break-words italic">
+                            "{rev.comment || 'Aucun commentaire écrit'}"
+                          </div>
+
+                          {/* Metadata row with experience title and dates */}
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10.5px] text-foreground/50 pt-1 max-w-full">
+                            <span className="shrink-0">
+                              Déposé le {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Récemment'}
+                            </span>
+                            {rev.listing_title && (
+                              <span className="inline-flex items-center gap-1 bg-primary/10 border border-primary/25 text-primary px-2.5 py-0.5 rounded-md text-[10.5px] font-semibold truncate max-w-[220px]" title={rev.listing_title}>
+                                ★ {rev.listing_title}
+                              </span>
+                            )}
+                            {rev.listing_id && !rev.listing_title && (
+                              <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[150px]" title={rev.listing_id}>
+                                Bien : {rev.listing_id}
+                              </span>
+                            )}
+                            {rev.booking_id && (
+                              <span className="inline-flex items-center gap-1 bg-muted/60 border border-foreground/10 text-foreground/70 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[160px]" title={rev.booking_id}>
+                                Résa : {rev.booking_id}
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {/* Stars */}
-                        <div className="flex items-center gap-1 text-amber-400 text-sm">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <FontAwesomeIcon
-                              key={star}
-                              icon={faStar}
-                              className={star <= (Number(rev.rating) || 5) ? 'text-amber-400' : 'text-foreground/20'}
-                            />
-                          ))}
-                          <span className="ml-2 text-xs font-bold text-foreground">
-                            {rev.rating} / 5
-                          </span>
-                        </div>
+                        {/* Moderation Actions Column */}
+                        <div className="shrink-0 flex items-center lg:flex-col lg:items-end justify-end gap-2 border-t lg:border-t-0 pt-3 lg:pt-0 border-foreground/10">
+                          {/* If Pending: Approve or Reject */}
+                          {isPending && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                onClick={() => handleApproveReview(rev)}
+                                className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 text-xs transition-all shadow-sm hover:shadow flex items-center gap-1.5"
+                                title="Valider cet avis et le rendre public"
+                              >
+                                <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
+                                <span>Valider & Publier</span>
+                              </button>
+                              <button
+                                onClick={() => handleRejectReview(rev)}
+                                className="rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5"
+                                title="Rejeter et masquer cet avis"
+                              >
+                                <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                                <span>Rejeter</span>
+                              </button>
+                            </div>
+                          )}
 
-                        {/* Comment */}
-                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5 break-words">
-                          "{rev.comment || 'Aucun commentaire écrit'}"
-                        </p>
+                          {/* If Approved: Option to unpublish / reject */}
+                          {isApproved && (
+                            <button
+                              onClick={() => handleRejectReview(rev)}
+                              className="rounded-xl border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5"
+                              title="Masquer cet avis de la plateforme"
+                            >
+                              <FontAwesomeIcon icon={faEyeSlash} className="h-3 w-3" />
+                              <span>Masquer / Rejeter</span>
+                            </button>
+                          )}
 
-                        {/* Metadata row with flex-wrap so reservation ID never overflows */}
-                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10.5px] text-foreground/50 pt-1 max-w-full">
-                          <span className="shrink-0">
-                            Publié le {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Récemment'}
-                          </span>
-                          {rev.listing_id && (
-                            <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[130px] sm:max-w-[180px]" title={rev.listing_id}>
-                              Bien : {rev.listing_id}
-                            </span>
+                          {/* If Rejected: Option to re-approve */}
+                          {isRejected && (
+                            <button
+                              onClick={() => handleApproveReview(rev)}
+                              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 text-xs transition-all shadow-sm flex items-center gap-1.5"
+                              title="Réactiver et valider cet avis"
+                            >
+                              <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
+                              <span>Réactiver & Publier</span>
+                            </button>
                           )}
-                          {rev.pack_id && (
-                            <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[130px] sm:max-w-[180px]" title={rev.pack_id}>
-                              Pack : {rev.pack_id}
-                            </span>
-                          )}
-                          {rev.booking_id && (
-                            <span className="inline-flex items-center gap-1 bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold truncate max-w-[140px] sm:max-w-[200px]" title={rev.booking_id}>
-                              Résa : {rev.booking_id}
-                            </span>
-                          )}
+
+                          {/* Permanent Delete */}
+                          <button
+                            onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
+                            className="rounded-xl border border-rose-500/20 text-rose-500/80 hover:text-rose-600 hover:bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5"
+                            title="Supprimer définitivement cet avis de la base"
+                          >
+                            <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                            <span className="lg:hidden sm:inline">Supprimer</span>
+                          </button>
                         </div>
                       </div>
-
-                      {/* Action: Delete review */}
-                      <div className="shrink-0 flex items-center md:items-end justify-end gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-foreground/10">
-                        <button
-                          onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
-                          className="rounded-xl border border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1.5"
-                          title="Supprimer cet avis client de la base"
-                        >
-                          <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                          <span>Supprimer l'avis</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

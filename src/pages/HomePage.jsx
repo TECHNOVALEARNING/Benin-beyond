@@ -10,6 +10,7 @@ import { getListings } from '../services/listingService';
 import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { TravelerReviewsSection } from '../components/TravelerReviewsSection';
 
 const SECTIONS = [
   {
@@ -178,7 +179,8 @@ export function HomePage() {
         )}
       </section>
 
-      {/* Note: Section 'L'héritage comme expérience' has been completely removed as requested */}
+      {/* 5. Section Stratégique : Avis & Témoignages des Voyageurs Vérifiés */}
+      <TravelerReviewsSection />
     </div>
   );
 }
