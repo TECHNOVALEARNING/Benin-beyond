@@ -80,7 +80,9 @@ export async function getReviews(listingId = null, options = {}) {
     const raw = localStorage.getItem(LOCAL_STORAGE_REVIEWS_KEY);
     let localReviews = sanitizeReviews(raw ? JSON.parse(raw) : []);
 
-    let remoteReviews = [];
+    let remoteReviews = null;
+    let supabaseSuccess = false;
+
     if (isSupabaseConfigured && supabase) {
       try {
         let query = supabase
@@ -95,18 +97,33 @@ export async function getReviews(listingId = null, options = {}) {
         const { data, error } = await withTimeout(query, 3500);
         if (!error && Array.isArray(data)) {
           remoteReviews = sanitizeReviews(data);
+          supabaseSuccess = true;
+        } else if (error) {
+          console.warn('Notice requête Supabase reviews:', error?.message || error);
         }
       } catch (e) {
         console.warn('Reviews fetch timeout/error, utilisation du cache local:', e?.message || e);
       }
     }
 
+    // Détermination de la source de vérité :
+    // 1. Si Supabase est connecté et a répondu (même avec 0 avis), Supabase est la SEULE autorité.
+    //    Si un avis a été supprimé en base de données, il NE DOIT PLUS JAMAIS être ressuscité par le cache local !
+    // 2. Si Supabase est indisponible (offline / erreur réseau), on bascule sur le cache local de secours.
+    let candidates = [];
+    if (supabaseSuccess && Array.isArray(remoteReviews)) {
+      candidates = remoteReviews;
+      // Synchronisation immédiate du cache local pour écraser les avis supprimés
+      try {
+        localStorage.setItem(LOCAL_STORAGE_REVIEWS_KEY, JSON.stringify(remoteReviews));
+      } catch {}
+    } else {
+      candidates = localReviews;
+    }
+
     // Déduplication stricte par ID et empreinte
     const uniqueMap = new Map();
     const seenSignatures = new Set();
-
-    // Priorité aux avis réels distants de Supabase, puis locaux
-    const candidates = [...remoteReviews, ...localReviews];
 
     candidates.forEach((rev) => {
       if (!rev) return;
@@ -309,10 +326,26 @@ export async function updateReviewStatus(reviewId, newStatus, bookingId = null) 
  */
 export async function deleteReview(reviewId, bookingId = null) {
   try {
-    // 1. Inscrire dans la liste noire pour bloquer toute réapparition au rafraîchissement
+    // 1. Inscrire dans la liste noire pour bloquer toute réapparition
     markReviewAsDeleted(reviewId, bookingId);
 
-    // 2. Purge du LocalStorage
+    // 2. Suppression physique dans Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (reviewId && uuidRegex.test(reviewId)) {
+          await supabase.from('reviews').delete().eq('id', reviewId);
+        } else if (bookingId) {
+          await supabase.from('reviews').delete().eq('booking_id', String(bookingId));
+        } else if (reviewId) {
+          await supabase.from('reviews').delete().or(`id.eq.${reviewId},booking_id.eq.${reviewId}`);
+        }
+      } catch (err) {
+        console.warn('Supabase review delete error:', err);
+      }
+    }
+
+    // 3. Purge du LocalStorage
     const raw = localStorage.getItem(LOCAL_STORAGE_REVIEWS_KEY);
     const local = raw ? JSON.parse(raw) : [];
     const filtered = local.filter((r) =>
@@ -321,24 +354,7 @@ export async function deleteReview(reviewId, bookingId = null) {
     );
     localStorage.setItem(LOCAL_STORAGE_REVIEWS_KEY, JSON.stringify(filtered));
 
-    // 3. Suppression physique dans Supabase
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (reviewId && uuidRegex.test(reviewId)) {
-          await supabase.from('reviews').delete().eq('id', reviewId);
-        }
-        if (bookingId) {
-          await supabase.from('reviews').delete().eq('booking_id', String(bookingId));
-        } else if (reviewId && !uuidRegex.test(reviewId)) {
-          await supabase.from('reviews').delete().eq('booking_id', String(reviewId));
-        }
-      } catch (err) {
-        console.warn('Supabase review delete error:', err);
-      }
-    }
-
-    // 4. Notification d'événement global
+    // 4. Notification d'événement global pour mise à jour immédiate de tous les composants
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('benin_beyond_reviews_updated', {
         detail: { reviewId, deleted: true }

@@ -224,9 +224,9 @@ CREATE TABLE IF NOT EXISTS public.payments (
   amount NUMERIC NOT NULL CHECK (amount >= 0),
   currency TEXT NOT NULL DEFAULT 'XOF',
   payment_method TEXT NOT NULL CHECK (
-    payment_method IN ('fedapay', 'mtn_momo', 'moov_money', 'card', 'cash')
+    payment_method IN ('nyole', 'mtn_momo', 'moov_money', 'celtiis', 'card', 'cash')
   ),
-  payment_provider TEXT DEFAULT 'fedapay',
+  payment_provider TEXT DEFAULT 'nyole',
   provider_tx_id TEXT,
   status TEXT NOT NULL DEFAULT 'completed' CHECK (
     status IN ('pending', 'completed', 'failed', 'refunded')
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
 
 -- Migration incrémentale : colonnes payments
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'XOF';
-ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_provider TEXT DEFAULT 'fedapay';
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_provider TEXT DEFAULT 'nyole';
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS provider_tx_id TEXT;
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ DEFAULT NOW();
@@ -293,11 +293,41 @@ ALTER TABLE public.events ADD COLUMN IF NOT EXISTS period TEXT;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS location TEXT;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS image TEXT;
-ALTER TABLE public.events ADD COLUMN IF NOT EXISTS tag TEXT DEFAULT 'Culture';
-ALTER TABLE public.events ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+-- ==============================================================================
+-- 8. TABLE DES AVIS CLIENTS & MODÉRATION (REVIEWS)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_id TEXT,
+  listing_id TEXT,
+  pack_id TEXT,
+  author_name TEXT NOT NULL DEFAULT 'Voyageur Bénin Beyond',
+  author_email TEXT,
+  author_avatar TEXT,
+  rating NUMERIC NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  listing_title TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Migration incrémentale : colonnes reviews
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS booking_id TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS listing_id TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS pack_id TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS author_name TEXT NOT NULL DEFAULT 'Voyageur Bénin Beyond';
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS author_email TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS author_avatar TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS rating NUMERIC NOT NULL DEFAULT 5;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS comment TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS listing_title TEXT;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ==============================================================================
--- 8. INDEX OPTIMISÉS (100% IDEMPOTENTS)
+-- 9. INDEX OPTIMISÉS (100% IDEMPOTENTS)
 -- ==============================================================================
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
@@ -312,9 +342,12 @@ CREATE INDEX IF NOT EXISTS idx_bookings_email ON public.bookings(customer_email)
 CREATE INDEX IF NOT EXISTS idx_bookings_client ON public.bookings(client_id);
 CREATE INDEX IF NOT EXISTS idx_payments_booking ON public.payments(booking_id);
 CREATE INDEX IF NOT EXISTS idx_payments_tx_ref ON public.payments(transaction_ref);
+CREATE INDEX IF NOT EXISTS idx_reviews_status ON public.reviews(status);
+CREATE INDEX IF NOT EXISTS idx_reviews_listing ON public.reviews(listing_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_booking ON public.reviews(booking_id);
 
 -- ==============================================================================
--- 9. FONCTION HELPER ADMIN (SÉCURISÉE & RLS BYPASS)
+-- 10. FONCTION HELPER ADMIN (SÉCURISÉE & RLS BYPASS)
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
@@ -453,8 +486,31 @@ CREATE POLICY "Les administrateurs peuvent gérer les événements"
   ON public.events FOR ALL
   USING (public.is_admin());
 
+-- --- Politiques REVIEWS ---
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Lecture des avis" ON public.reviews;
+CREATE POLICY "Lecture des avis"
+  ON public.reviews FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Dépôt des avis clients" ON public.reviews;
+CREATE POLICY "Dépôt des avis clients"
+  ON public.reviews FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Mise à jour des avis par admin" ON public.reviews;
+CREATE POLICY "Mise à jour des avis par admin"
+  ON public.reviews FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Suppression des avis par admin" ON public.reviews;
+CREATE POLICY "Suppression des avis par admin"
+  ON public.reviews FOR DELETE
+  USING (true);
+
 -- ==============================================================================
--- 11. TRIGGER AUTOMATIQUE À L'INSCRIPTION AUTH.USERS
+-- 12. TRIGGER AUTOMATIQUE À L'INSCRIPTION AUTH.USERS
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$

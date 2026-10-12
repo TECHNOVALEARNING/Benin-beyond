@@ -367,7 +367,9 @@ export async function createBooking(bookingPayload) {
           const methodLower = (record.payment_method || '').toLowerCase();
           const cleanMethod = methodLower.includes('moov')
             ? 'moov_money'
-            : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo');
+            : (methodLower.includes('celtiis')
+              ? 'celtiis'
+              : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo'));
 
           await supabase.from('payments').insert([{
             booking_id: data.id,
@@ -376,9 +378,15 @@ export async function createBooking(bookingPayload) {
             amount: record.total_amount,
             currency: 'XOF',
             payment_method: cleanMethod,
-            payment_provider: 'fedapay',
+            payment_provider: 'nyole',
+            provider_tx_id: record.nyole_session_id || record.nyole_order_id || null,
             status: 'completed',
-            paid_at: record.created_at
+            paid_at: record.created_at,
+            metadata: {
+              nyole_session_id: record.nyole_session_id || null,
+              nyole_order_id: record.nyole_order_id || null,
+              nyole_provider: record.nyole_provider || null
+            }
           }]);
         } catch (payErr) {
           console.warn('Notice insertion transaction payment:', payErr?.message || payErr);
