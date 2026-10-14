@@ -750,6 +750,12 @@ export function PartnerDashboardPage() {
       return;
     }
 
+    const rawEditPrice = parseInt(editFormPrice, 10);
+    if (!editFormPrice || isNaN(rawEditPrice) || rawEditPrice < 1000) {
+      setEditPhotoError("Le tarif minimum autorisé pour les propriétaires est de 1 000 FCFA.");
+      return;
+    }
+
     setEditIsSaving(true);
     try {
       const specsArray = editFormSpecs
@@ -758,7 +764,7 @@ export function PartnerDashboardPage() {
         .filter(Boolean);
 
       const isVeh = editFormType === 'drive' || editFormSubcategory === 'car';
-      const priceNum = parseInt(editFormPrice, 10) || Number(editingListingModal.price) || 50000;
+      const priceNum = rawEditPrice;
       const roomsNum = isVeh ? 0 : (parseInt(editFormRoomsCount, 10) || 1);
       const seatsNum = isVeh ? (parseInt(editFormSeatsCount, 10) || 5) : 0;
 
@@ -843,12 +849,18 @@ export function PartnerDashboardPage() {
       return;
     }
 
+    const rawPublishPrice = parseInt(formPrice, 10);
+    if (!formPrice || isNaN(rawPublishPrice) || rawPublishPrice < 1000) {
+      setPhotoError("Le tarif minimum autorisé pour les propriétaires est de 1 000 FCFA.");
+      return;
+    }
+
     const specsArray = formSpecs
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const priceNum = parseInt(formPrice, 10) || (formType === 'stay' ? 75000 : 45000);
+    const priceNum = rawPublishPrice;
 
     // Reorder photos so featured photo is first
     const finalGallery = [...uploadedPhotos];
@@ -2251,11 +2263,12 @@ export function PartnerDashboardPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                        Tarif brut (FCFA) *
+                        Tarif brut (FCFA) * <span className="text-[10px] text-foreground/50 font-normal">(Min. 1 000 FCFA)</span>
                       </label>
                       <input
                         type="number"
                         required
+                        min="1000"
                         placeholder={formType === 'stay' ? '85000' : '45000'}
                         value={formPrice}
                         onChange={(e) => setFormPrice(e.target.value)}
@@ -3817,7 +3830,7 @@ export function PartnerDashboardPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
-                      Prix affiché (FCFA) *
+                      Prix affiché (FCFA) * <span className="text-[10px] text-foreground/50 font-normal">(Min. 1 000 FCFA)</span>
                     </label>
                     <input
                       type="number"

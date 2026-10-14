@@ -6856,7 +6856,7 @@ export function AdminDashboardPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
-                      Tarif (en FCFA) *
+                      Tarif (en FCFA) * <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">(Exclusivité Admin : tests dès 10 FCFA autorisés)</span>
                     </label>
                     <input
                       type="number"
