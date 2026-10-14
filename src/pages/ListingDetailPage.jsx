@@ -110,7 +110,7 @@ export function ListingDetailPage() {
   const effectiveMultiplier = isDaily ? duration : 1;
   const totalPrice = (listing?.price || 0) * effectiveMultiplier;
 
-  const handleAddToCart = () => {
+  const handleBooking = (directToCheckout = true) => {
     if (!listing) return;
     setIsAdding(true);
 
@@ -142,8 +142,9 @@ export function ListingDetailPage() {
     });
 
     setTimeout(() => {
-      navigate('/panier');
-    }, 350);
+      setIsAdding(false);
+      navigate(directToCheckout ? '/checkout' : '/panier');
+    }, 250);
   };
 
   if (loading) {
@@ -656,14 +657,25 @@ export function ListingDetailPage() {
               </div>
             </div>
 
-            {/* Action button */}
-            <button
-              onClick={handleAddToCart}
-              disabled={isAdding}
-              className="mt-6 w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:bg-primary/90 active:scale-[0.98]"
-            >
-              {isAdding ? 'Ajout en cours…' : 'Réserver maintenant'}
-            </button>
+            {/* Action buttons */}
+            <div className="mt-6 space-y-2.5">
+              <button
+                onClick={() => handleBooking(true)}
+                disabled={isAdding}
+                className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <FontAwesomeIcon icon={faCalendarDays} className="h-4 w-4" />
+                <span>{isAdding ? 'Initialisation…' : 'Réserver & Payer maintenant'}</span>
+              </button>
+
+              <button
+                onClick={() => handleBooking(false)}
+                disabled={isAdding}
+                className="w-full rounded-full border border-foreground/20 py-2.5 text-xs font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>Ajouter au panier</span>
+              </button>
+            </div>
           </ScrollReveal>
         </div>
       </div>

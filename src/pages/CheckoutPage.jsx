@@ -5,8 +5,6 @@ import {
   faCheck,
   faPrint,
   faLocationDot,
-  faMobileScreen,
-  faCreditCard,
   faShieldHalved,
   faArrowRight,
   faLock,
@@ -28,9 +26,10 @@ import {
 } from '../services/nyoleService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { NyolePaymentModal } from '../components/NyolePaymentModal';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
-const STEPS = ['Identité', 'Protection', 'Paiement Nyole'];
+const STEPS = ['Identité', 'Protection'];
 
 const PROTECTION_OPTIONS = [
   {
@@ -97,7 +96,7 @@ export function CheckoutPage() {
 
   const [activeStep, setActiveStep] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState({});
-  const [selectedChannel, setSelectedChannel] = useState('mtn_momo');
+
   const [customer, setCustomer] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -109,11 +108,55 @@ export function CheckoutPage() {
   const [redirectCountdown, setRedirectCountdown] = useState(7);
   const [isCountdownPaused, setIsCountdownPaused] = useState(false);
 
+  // Nyole Modal state
+  const [nyoleModal, setNyoleModal] = useState({
+    isOpen: false,
+    sessionUrl: '',
+    sessionId: '',
+    bookingRef: '',
+    amount: 0,
+    payload: null
+  });
+
   // Nyole verification state
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
   const [paymentCancelNotice, setPaymentCancelNotice] = useState(false);
   const [paymentVerificationError, setPaymentVerificationError] = useState(null);
+
+  const handleNyoleModalSuccess = async ({ sessionId, statusData }) => {
+    try {
+      const pending = getPendingCheckout();
+      const payloadToConfirm = nyoleModal.payload || pending?.payload;
+
+      const providerName = statusData?.provider || 'Mobile Money / Carte';
+      const enrichedPayload = {
+        ...(payloadToConfirm || {}),
+        status: 'confirmed',
+        payment_status: 'paid',
+        payment_method: `Nyole (${providerName})`,
+        nyole_session_id: sessionId,
+        nyole_order_id: statusData?.order_id || null,
+        nyole_provider: providerName
+      };
+
+      const createRes = await createBooking(enrichedPayload);
+      if (createRes.success) {
+        setConfirmedBooking(createRes.booking);
+        clearCart();
+        clearPendingCheckout();
+      }
+    } catch (err) {
+      console.error('[Nyole Modal Success Handling Error]:', err);
+    } finally {
+      setNyoleModal((prev) => ({ ...prev, isOpen: false }));
+    }
+  };
+
+  const handleNyoleModalCancel = () => {
+    setNyoleModal((prev) => ({ ...prev, isOpen: false }));
+    setPaymentCancelNotice(true);
+  };
 
   // Sync customer info when user signs in
   useEffect(() => {
@@ -323,7 +366,7 @@ export function CheckoutPage() {
   };
 
   const handleNextStep = () => {
-    setActiveStep((prev) => Math.min(2, prev + 1));
+    setActiveStep((prev) => Math.min(1, prev + 1));
   };
 
   // Launch Nyole Checkout Session
@@ -368,8 +411,7 @@ export function CheckoutPage() {
 
     const formattedGuests = firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur';
 
-    const channelMeta = NYOLE_CHANNELS.find((c) => c.id === selectedChannel);
-    const channelLabel = channelMeta?.name || 'Mobile Money / Carte';
+    const channelLabel = 'Mobile Money / Carte';
 
     const payload = {
       booking_ref: bookingRef,
@@ -393,7 +435,7 @@ export function CheckoutPage() {
       owner_name: firstItem.owner_name || null,
       owner_email: firstItem.owner_email || null,
       protection_options: selectedOptions,
-      payment_method: `Nyole (${channelLabel})`,
+      payment_method: 'Nyole Pay',
       subtotal: subtotal,
       options_total: optionsTotal,
       total_amount: finalTotal,
@@ -410,7 +452,6 @@ export function CheckoutPage() {
       customerPhone: customer.phone,
       description: `Réservation Bénin Beyond #${bookingRef} — ${firstItem.title || 'Prestations'}`,
       metadata: {
-        preferred_channel: selectedChannel,
         items_count: items.length
       }
     });
@@ -424,8 +465,16 @@ export function CheckoutPage() {
         timestamp: Date.now()
       });
 
-      // Redirection immédiate vers la page officielle de paiement Nyole
-      window.location.href = sessionRes.session.url;
+      // Ouverture du modal intégré de paiement Nyole
+      setNyoleModal({
+        isOpen: true,
+        sessionUrl: sessionRes.session.url,
+        sessionId: sessionRes.session.id,
+        bookingRef: bookingRef,
+        amount: finalTotal,
+        payload: payload
+      });
+      setIsSubmitting(false);
     } else {
       setIsSubmitting(false);
       setAlertModal({
@@ -819,105 +868,6 @@ export function CheckoutPage() {
 
                 <button
                   type="button"
-                  onClick={handleNextStep}
-                  className="mt-6 rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all"
-                >
-                  Continuer vers le paiement
-                </button>
-              </div>
-            )}
-          </ScrollReveal>
-
-          {/* Step 3: Paiement Nyole */}
-          <ScrollReveal delay={200} y={20} className="overflow-hidden rounded-xl border border-foreground/10 bg-card">
-            <button
-              onClick={() => setActiveStep(2)}
-              className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-muted/20 transition-colors"
-            >
-              <span className="flex items-center gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                  3
-                </span>
-                <span className="font-heading font-semibold text-base">
-                  Paiement sécurisé via Nyole
-                </span>
-              </span>
-              <span className="text-xs rounded-full bg-primary/10 px-2.5 py-0.5 text-primary font-semibold">
-                Passerelle Unique
-              </span>
-            </button>
-
-            {activeStep === 2 && (
-              <div className="border-t border-foreground/10 p-6 pt-4">
-                <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-heading text-sm font-bold text-foreground">
-                        Passerelle de paiement officielle Nyole
-                      </h4>
-                      <p className="mt-1 text-xs text-foreground/75 leading-relaxed">
-                        Toutes les transactions Bénin Beyond sont traitées de manière sécurisée par Nyole. Sélectionnez votre moyen de règlement préféré ci-dessous :
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Nyole Payment Channels Selection */}
-                <div className="space-y-3">
-                  {NYOLE_CHANNELS.map((ch) => {
-                    const isSelected = selectedChannel === ch.id;
-                    const Icon = ch.icon;
-                    return (
-                      <label
-                        key={ch.id}
-                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-all ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary'
-                            : 'border-foreground/15 hover:border-foreground/30'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3.5">
-                          <input
-                            type="radio"
-                            name="paymentChannel"
-                            checked={isSelected}
-                            onChange={() => setSelectedChannel(ch.id)}
-                            className="h-4 w-4 text-primary accent-primary"
-                          />
-                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${ch.colorClass}`}>
-                            <FontAwesomeIcon icon={Icon} className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-sm text-foreground flex items-center gap-2">
-                              <span>{ch.name}</span>
-                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-foreground/70 uppercase">
-                                {ch.badge}
-                              </span>
-                            </div>
-                            <div className="text-xs text-foreground/60">{ch.operator}</div>
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {/* Trust Information Box */}
-                <div className="mt-6 rounded-lg bg-muted/40 p-4 text-xs text-foreground/70 space-y-2 border border-foreground/10">
-                  <div className="flex items-center gap-2">
-                    <FontAwesomeIcon icon={faLock} className="h-3.5 w-3.5 text-accent shrink-0" />
-                    <span className="font-semibold text-foreground">Protocole Nyole Checkout Sécurisé</span>
-                  </div>
-                  <p className="leading-relaxed text-foreground/75">
-                    En cliquant sur le bouton ci-dessous, vous serez redirigé vers l’espace de paiement sécurisé Nyole pour confirmer votre transaction (notification USSD sur votre téléphone ou 3D-Secure pour les cartes bancaires). Votre réservation sera validée instantanément dès confirmation.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
                   disabled={isSubmitting}
                   onClick={handleFinalSubmit}
                   className="mt-6 w-full rounded-full bg-primary py-4 text-base font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
@@ -995,6 +945,18 @@ export function CheckoutPage() {
         variant="warning"
         onConfirm={() => setAlertModal({ isOpen: false, title: '', message: '' })}
         onCancel={() => setAlertModal({ isOpen: false, title: '', message: '' })}
+      />
+
+      {/* Modal de Paiement Intégré Nyole */}
+      <NyolePaymentModal
+        isOpen={nyoleModal.isOpen}
+        sessionUrl={nyoleModal.sessionUrl}
+        sessionId={nyoleModal.sessionId}
+        amount={nyoleModal.amount}
+        bookingRef={nyoleModal.bookingRef}
+        onClose={() => setNyoleModal((prev) => ({ ...prev, isOpen: false }))}
+        onSuccess={handleNyoleModalSuccess}
+        onCancel={handleNyoleModalCancel}
       />
     </div>
   );

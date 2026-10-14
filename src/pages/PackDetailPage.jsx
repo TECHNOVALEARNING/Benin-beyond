@@ -71,7 +71,7 @@ export function PackDetailPage() {
   const totalRegular = pack.regularPrice * effectiveDays;
   const totalSavings = pack.savings * effectiveDays;
 
-  const handleAddToCart = () => {
+  const handleBooking = (directToCheckout = true) => {
     addItem({
       id: pack.id,
       type: 'pack',
@@ -90,8 +90,8 @@ export function PackDetailPage() {
 
     setAddedNotice(true);
     setTimeout(() => {
-      navigate('/panier');
-    }, 600);
+      navigate(directToCheckout ? '/checkout' : '/panier');
+    }, 350);
   };
 
   return (
@@ -327,15 +327,25 @@ export function PackDetailPage() {
               </div>
             </div>
 
-            {/* CTA Button */}
-            <button
-              onClick={handleAddToCart}
-              disabled={addedNotice}
-              className="mt-6 w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-            >
-              <FontAwesomeIcon icon={faBagShopping} className="h-4 w-4" />
-              <span>{addedNotice ? 'Ajouté au panier !' : 'Réserver ce Pack'}</span>
-            </button>
+            {/* CTA Buttons */}
+            <div className="mt-6 space-y-2.5">
+              <button
+                onClick={() => handleBooking(true)}
+                disabled={addedNotice}
+                className="w-full rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <FontAwesomeIcon icon={faBagShopping} className="h-4 w-4" />
+                <span>{addedNotice ? 'Redirection…' : 'Réserver & Payer ce Pack'}</span>
+              </button>
+
+              <button
+                onClick={() => handleBooking(false)}
+                disabled={addedNotice}
+                className="w-full rounded-full border border-foreground/20 py-2.5 text-xs font-semibold text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <span>Ajouter au panier</span>
+              </button>
+            </div>
 
             <p className="mt-3 text-center text-[11px] text-foreground/55">
               Aucun débit immédiat. Confirmation en ligne instantanée.

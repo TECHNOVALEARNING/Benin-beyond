@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bénin Beyond — Téléchargement des Logos & Kit Média Officiel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Urbanist:wght@700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #091310;
+      --card: #0F1F1A;
+      --card-border: rgba(242, 186, 88, 0.2);
+      --gold: #F2BA58;
+      --gold-dark: #D78E27;
+      --emerald: #0D3B2E;
+      --text: #F3F4F6;
+      --text-muted: #9CA3AF;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 0%, #122B22 0%, var(--bg) 75%);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+    }
+
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(242, 186, 88, 0.12);
+      border: 1px solid var(--card-border);
+      color: var(--gold);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-family: 'Urbanist', sans-serif;
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+
+    h1 span {
+      background: linear-gradient(135deg, #FFF0C8 0%, #F2BA58 50%, #D78E27 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 28px;
+      margin-bottom: 50px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(242, 186, 88, 0.4);
+    }
+
+    .preview-box {
+      padding: 40px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 220px;
+      background: #081713;
+      position: relative;
+    }
+
+    .preview-box.light {
+      background: #F8FAFC;
+    }
+
+    .preview-box img {
+      max-width: 100%;
+      max-height: 140px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,0.25));
+    }
+
+    .card-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .card-title {
+      font-family: 'Urbanist', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .card-desc {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      flex: 1;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      flex: 1;
+      min-width: 120px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #F2BA58 0%, #D78E27 100%);
+      color: #08221B;
+      box-shadow: 0 4px 14px rgba(215, 142, 39, 0.35);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+      transform: scale(1.02);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #FFF;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .palette-section {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 30px;
+      margin-top: 20px;
+    }
+
+    .palette-title {
+      font-family: 'Urbanist', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .swatch {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: #081713;
+    }
+
+    .swatch-color {
+      height: 70px;
+    }
+
+    .swatch-info {
+      padding: 12px;
+      font-size: 12px;
+    }
+
+    .swatch-name {
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .swatch-code {
+      font-family: monospace;
+      color: var(--text-muted);
+    }
+
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">Charte Graphique Officielle</div>
+      <h1>Kit Média & Logos <span>Bénin Beyond</span></h1>
+      <p class="subtitle">
+        Téléchargez les déclinaisons officielles en format vectoriel SVG (haute définition, redimensionnable à l'infini) ou PNG haute résolution.
+      </p>
+    </header>
+
+    <div class="grid">
+      <!-- 1. Écusson / Monogramme -->
+      <div class="card">
+        <div class="preview-box">
+          <img src="/benin-beyond-emblem.svg" alt="Écusson Bénin Beyond" id="img-emblem">
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">1. Écusson Officiel (Monogramme)</h3>
+          <p class="card-desc">
+            Le monogramme "B" sculptural or impérial, avec arche d'hospitalité, aile d'envol vers l'horizon et étoile d'excellence du Bénin sur fond vert émeraude royal.
+          </p>
+          <div class="actions">
+            <a href="/benin-beyond-emblem.svg" download="benin-beyond-emblem.svg" class="btn btn-primary">
+              ↓ Télécharger SVG
+            </a>
+            <button onclick="downloadAsPng('/benin-beyond-emblem.svg', 'benin-beyond-emblem.png', 1024, 1024)" class="btn btn-secondary">
+              ↓ PNG (1024px)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Logo Complet Horizontal (Fond Sombre) -->
+      <div class="card">
+        <div class="preview-box">
+          <img src="/benin-beyond-logo-white.svg" alt="Logo Bénin Beyond Fond Sombre" id="img-logo-white">
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">2. Logo Complet (Version Dark)</h3>
+          <p class="card-desc">
+            Comprend l'emblème, la typographie officielle "Bénin Beyond" en blanc &amp; or et le sous-titre "HOSPITALITÉ &amp; MOBILITÉ D’EXCEPTION". Optimisé pour les fonds sombres.
+          </p>
+          <div class="actions">
+            <a href="/benin-beyond-logo-white.svg" download="benin-beyond-logo-white.svg" class="btn btn-primary">
+              ↓ Télécharger SVG
+            </a>
+            <button onclick="downloadAsPng('/benin-beyond-logo-white.svg', 'benin-beyond-logo-white.png', 1620, 360)" class="btn btn-secondary">
+              ↓ PNG (HD)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Logo Complet Horizontal (Fond Clair) -->
+      <div class="card">
+        <div class="preview-box light">
+          <img src="/benin-beyond-logo.svg" alt="Logo Bénin Beyond Fond Clair" id="img-logo-light">
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">3. Logo Complet (Version Light)</h3>
+          <p class="card-desc">
+            Comprend l'emblème, la typographie "Bénin Beyond" en vert émeraude profond &amp; or impérial. Recommandé pour papier à en-tête, documents A4 et fonds clairs.
+          </p>
+          <div class="actions">
+            <a href="/benin-beyond-logo.svg" download="benin-beyond-logo.svg" class="btn btn-primary">
+              ↓ Télécharger SVG
+            </a>
+            <button onclick="downloadAsPng('/benin-beyond-logo.svg', 'benin-beyond-logo.png', 1620, 360)" class="btn btn-secondary">
+              ↓ PNG (HD)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Palette de couleurs -->
+    <div class="palette-section">
+      <h3 class="palette-title">Palette de Couleurs de la Marque</h3>
+      <div class="swatches">
+        <div class="swatch">
+          <div class="swatch-color" style="background: linear-gradient(135deg, #08221B, #0D3B2E);"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Vert Émeraude Royal</div>
+            <div class="swatch-code">#08221B / #0D3B2E</div>
+          </div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background: linear-gradient(135deg, #FFF0C8, #F2BA58, #D78E27);"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Or Impérial Béninois</div>
+            <div class="swatch-code">#F2BA58 / #D78E27</div>
+          </div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background: #FFF0C8;"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Or Doux Horizon</div>
+            <div class="swatch-code">#FFF0C8</div>
+          </div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background: #091310;"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Obsidienne Nuit</div>
+            <div class="swatch-code">#091310</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="export-canvas"></canvas>
+
+  <script>
+    function downloadAsPng(svgUrl, filename, width, height) {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.getElementById('export-canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const a = document.createElement('a');
+        a.download = filename;
+        a.href = canvas.toDataURL('image/png');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      img.src = svgUrl;
+    }
+  </script>
+</body>
+</html>
