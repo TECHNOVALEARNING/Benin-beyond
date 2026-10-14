@@ -193,6 +193,32 @@ export function AdminDashboardPage() {
   const [rejectionPresetReason, setRejectionPresetReason] = useState('Photos floues, sombres ou résolution insuffisante (Non conforme 1080p)');
   const [rejectionCustomNote, setRejectionCustomNote] = useState('');
 
+  // Admin Listing Edit Modal State
+  const [editingListingModal, setEditingListingModal] = useState(null);
+  const [editFormTitle, setEditFormTitle] = useState('');
+  const [editFormPrice, setEditFormPrice] = useState('');
+  const [editFormPriceUnit, setEditFormPriceUnit] = useState('nuit');
+  const [editFormLocation, setEditFormLocation] = useState('');
+  const [editFormDescription, setEditFormDescription] = useState('');
+  const [editFormType, setEditFormType] = useState('stay'); // 'stay' | 'drive'
+  const [editFormListingType, setEditFormListingType] = useState('rent'); // 'rent' | 'sale'
+  const [editFormSpecs, setEditFormSpecs] = useState('');
+  const [editFormPhotos, setEditFormPhotos] = useState([]);
+  const [editPhotoUrlInput, setEditPhotoUrlInput] = useState('');
+  const [editFormRooms, setEditFormRooms] = useState(1);
+  const [editFormSeats, setEditFormSeats] = useState(5);
+  const [editFormTransmission, setEditFormTransmission] = useState('automatique');
+  const [editFormFuel, setEditFormFuel] = useState('essence');
+  const [editFormAvailableFrom, setEditFormAvailableFrom] = useState('');
+  const [editFormAvailableTo, setEditFormAvailableTo] = useState('');
+  const [editFormVideoUrl, setEditFormVideoUrl] = useState('');
+  const [editFormBadge, setEditFormBadge] = useState('');
+  const [editFormStatus, setEditFormStatus] = useState('active');
+  const [editIsSaving, setEditIsSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccessAlert, setEditSuccessAlert] = useState('');
+  const [editIsUploadingPhoto, setEditIsUploadingPhoto] = useState(false);
+
   // KYC Rejection Modal states (Admin review)
   const [rejectionKycPartner, setRejectionKycPartner] = useState(null);
   const [rejectionKycPresetReason, setRejectionKycPresetReason] = useState('Numéro IFU invalide ou non conforme DGI Bénin');
@@ -1141,6 +1167,180 @@ export function AdminDashboardPage() {
       setMediaAuditModal((prev) => ({ ...prev, status: 'refused', rejection_reason: finalReason }));
     }
     await updateListingStatus(targetId, 'refused', finalReason);
+  };
+
+  // Open Admin Listing Edit Modal
+  const handleOpenEditListing = (item) => {
+    if (!item) return;
+    setEditingListingModal(item);
+    setEditError('');
+    setEditSuccessAlert('');
+    setEditPhotoUrlInput('');
+    setEditFormTitle(item.title || '');
+    setEditFormPrice(item.price ? String(item.price) : '');
+    setEditFormPriceUnit(item.price_unit || (item.type === 'drive' ? 'jour' : 'nuit'));
+    setEditFormLocation(item.location || '');
+    setEditFormDescription(item.description || item.summary || '');
+    setEditFormType(item.type || (item.rental_type === 'drive' ? 'drive' : 'stay'));
+    setEditFormListingType(
+      item.listing_type ||
+      (item.price_unit === 'vente totale' || item.purpose === 'vente' ? 'sale' : 'rent')
+    );
+    setEditFormSpecs(Array.isArray(item.specs) ? item.specs.join(', ') : (item.specs || ''));
+
+    const photos = Array.isArray(item.gallery) && item.gallery.length > 0
+      ? [...item.gallery]
+      : (item.image ? [item.image] : []);
+    setEditFormPhotos(photos);
+
+    setEditFormRooms(item.rooms_count || item.rooms || 1);
+    setEditFormSeats(item.vehicle_seats || 5);
+    setEditFormTransmission(item.transmission || 'automatique');
+    setEditFormFuel(item.fuel_type || 'essence');
+    setEditFormAvailableFrom(item.available_from || '');
+    setEditFormAvailableTo(item.available_to || '');
+    setEditFormVideoUrl(item.video_url || '');
+    setEditFormBadge(item.badge || '');
+    setEditFormStatus(item.status || 'active');
+  };
+
+  const handleEditPhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setEditIsUploadingPhoto(true);
+    setEditError('');
+    try {
+      const compressedList = [];
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        const compressedBase64 = await compressImage(file, { maxWidth: 1600, quality: 0.82 });
+        compressedList.push(compressedBase64);
+      }
+      if (compressedList.length > 0) {
+        setEditFormPhotos((prev) => [...prev, ...compressedList]);
+        showToast(`✓ ${compressedList.length} photo(s) ajoutée(s) !`);
+      }
+    } catch (err) {
+      console.warn('Erreur compression photo edit admin:', err);
+      setEditError("Impossible de compresser l'image sélectionnée.");
+    } finally {
+      setEditIsUploadingPhoto(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleAddEditPhotoUrl = () => {
+    const trimmed = editPhotoUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setEditError("L'URL de l'image doit commencer par https:// ou http://");
+      return;
+    }
+    setEditFormPhotos((prev) => [...prev, trimmed]);
+    setEditPhotoUrlInput('');
+    setEditError('');
+  };
+
+  const handleRemoveEditPhoto = (idx) => {
+    setEditFormPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSetFeaturedEditPhoto = (idx) => {
+    if (idx === 0) return;
+    setEditFormPhotos((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(idx, 1);
+      copy.unshift(item);
+      return copy;
+    });
+    showToast('Photo principale mise à jour');
+  };
+
+  const handleSaveListingEdit = async (e) => {
+    if (e) e.preventDefault();
+    if (!editingListingModal) return;
+
+    if (!editFormTitle.trim()) {
+      setEditError("Le titre / nom du bien est obligatoire.");
+      return;
+    }
+    if (!editFormPrice || isNaN(Number(editFormPrice)) || Number(editFormPrice) <= 0) {
+      setEditError("Veuillez indiquer un tarif valide supérieur à 0 FCFA.");
+      return;
+    }
+    if (!editFormLocation.trim()) {
+      setEditError("La localisation (ville / quartier) est obligatoire.");
+      return;
+    }
+    if (editFormPhotos.length === 0) {
+      setEditError("Le bien doit posséder au moins une photo principale.");
+      return;
+    }
+
+    setEditIsSaving(true);
+    setEditError('');
+
+    try {
+      const isDrive = editFormType === 'drive';
+      const priceNum = Math.round(Number(editFormPrice));
+      const specsArray = editFormSpecs
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const effectivePriceUnit = editFormListingType === 'sale'
+        ? 'vente totale'
+        : editFormPriceUnit;
+
+      const updates = {
+        title: editFormTitle.trim(),
+        price: priceNum,
+        price_unit: effectivePriceUnit,
+        location: editFormLocation.trim(),
+        description: editFormDescription.trim(),
+        summary: editFormDescription.trim().slice(0, 160),
+        type: editFormType,
+        listing_type: editFormListingType,
+        specs: specsArray.length > 0 ? specsArray : ['Standing Exclusif', 'Vérifié'],
+        gallery: editFormPhotos,
+        image: editFormPhotos[0] || null,
+        video_url: editFormVideoUrl.trim() || null,
+        rooms_count: isDrive ? 0 : Math.max(1, Number(editFormRooms) || 1),
+        vehicle_seats: isDrive ? (Number(editFormSeats) || 5) : 0,
+        transmission: isDrive ? editFormTransmission : null,
+        fuel_type: isDrive ? editFormFuel : null,
+        available_from: isDrive ? null : (editFormAvailableFrom || null),
+        available_to: isDrive ? null : (editFormAvailableTo || null),
+        badge: editFormBadge.trim() || (editFormStatus === 'active' ? 'Vérifié par Bénin Beyond' : null),
+        status: editFormStatus
+      };
+
+      const res = await updateListing(editingListingModal.id, updates);
+
+      // Mettre à jour l'état local dans AdminDashboardPage
+      setListings((prev) =>
+        prev.map((l) => (l.id === editingListingModal.id ? { ...l, ...updates, ...(res || {}) } : l))
+      );
+
+      // Si l'audit média était ouvert sur cette annonce, synchroniser
+      if (mediaAuditModal && mediaAuditModal.id === editingListingModal.id) {
+        setMediaAuditModal((prev) => ({ ...prev, ...updates, ...(res || {}) }));
+      }
+
+      setEditSuccessAlert(`Le bien "${updates.title}" a été modifié avec succès !`);
+      showToast(`✓ Bien "${updates.title}" modifié avec succès !`);
+
+      setTimeout(() => {
+        setEditingListingModal(null);
+        setEditSuccessAlert('');
+        setEditIsSaving(false);
+      }, 1000);
+    } catch (err) {
+      console.error('Erreur enregistrement modification annonce admin:', err);
+      setEditError("Une erreur est survenue lors de l'enregistrement des modifications.");
+      setEditIsSaving(false);
+    }
   };
 
   const handleDeleteListingItem = (id, title) => {
@@ -2483,6 +2683,15 @@ export function AdminDashboardPage() {
                                     <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
                                   </button>
                                 )}
+
+                                {/* Bouton Modifier l'annonce (Nom, Prix, Photos, Infos) */}
+                                <button
+                                  onClick={() => handleOpenEditListing(item)}
+                                  className="p-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors"
+                                  title="Modifier cette annonce (Nom, Prix, Photos, Détails)"
+                                >
+                                  <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
+                                </button>
 
                                 {/* Bouton Voir Public */}
                                 <Link
@@ -4779,13 +4988,24 @@ export function AdminDashboardPage() {
 
                     {/* Actions Row */}
                     <div className="p-4 pt-0 border-t border-foreground/10 mt-3 flex items-center justify-between gap-2">
-                      <Link
-                        to={`/listing/${item.id}`}
-                        className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors flex items-center gap-1.5"
-                      >
-                        <FontAwesomeIcon icon={faEye} className="text-xs" />
-                        <span>Fiche</span>
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          to={`/listing/${item.id}`}
+                          className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors flex items-center gap-1.5"
+                        >
+                          <FontAwesomeIcon icon={faEye} className="text-xs" />
+                          <span>Fiche</span>
+                        </Link>
+
+                        <button
+                          onClick={() => handleOpenEditListing(item)}
+                          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors flex items-center gap-1.5"
+                          title="Modifier le nom, prix, photos et informations du bien"
+                        >
+                          <FontAwesomeIcon icon={faPen} className="text-xs" />
+                          <span>Modifier</span>
+                        </button>
+                      </div>
 
                       <div className="flex items-center gap-1.5">
                         {item.status === 'pending' || item.status === 'suspended' || item.status === 'refused' ? (
@@ -5511,6 +5731,17 @@ export function AdminDashboardPage() {
               </button>
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => {
+                    handleOpenEditListing(mediaAuditModal);
+                  }}
+                  className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors flex items-center gap-1.5"
+                  title="Modifier le nom, tarif, photos et détails du bien"
+                >
+                  <FontAwesomeIcon icon={faPen} />
+                  <span>Modifier l'annonce</span>
+                </button>
+
                 <button
                   onClick={() => handleOpenRejectionModal(mediaAuditModal)}
                   className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-500/20 transition-colors flex items-center gap-1.5"
@@ -6499,6 +6730,422 @@ export function AdminDashboardPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Universelle d'Édition d'Annonce Administrateur */}
+      {editingListingModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
+          <div className="bg-card w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-foreground/15 shadow-2xl flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md px-6 py-4 border-b border-foreground/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 text-base shrink-0 border border-amber-500/20">
+                  <FontAwesomeIcon icon={faPen} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                      Édition Administrateur
+                    </span>
+                    <span className="text-[10px] font-mono text-foreground/50">
+                      #{editingListingModal.id?.slice(0, 12)}
+                    </span>
+                  </div>
+                  <h3 className="font-heading text-base sm:text-lg font-bold text-foreground truncate max-w-xs sm:max-w-md">
+                    {editFormTitle || editingListingModal.title}
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditingListingModal(null)}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-muted/80 transition-colors"
+                title="Fermer"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+
+            {/* Modal Body Form */}
+            <form onSubmit={handleSaveListingEdit} className="p-6 space-y-6 flex-1">
+              {/* Feedback messages */}
+              {editSuccessAlert && (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2.5 animate-fadeIn">
+                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-base shrink-0" />
+                  <span>{editSuccessAlert}</span>
+                </div>
+              )}
+
+              {editError && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-fadeIn">
+                  <FontAwesomeIcon icon={faTriangleExclamation} className="shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* 1. Catégorie & Type */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  1. Catégorie & Type de Bien
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditFormType('stay');
+                      if (editFormPriceUnit === 'jour') setEditFormPriceUnit('nuit');
+                    }}
+                    className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all ${
+                      editFormType === 'stay'
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-primary'
+                        : 'border-foreground/15 bg-background text-foreground/70 hover:border-foreground/30'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faHouse} className="text-primary text-lg shrink-0" />
+                    <div>
+                      <p className="font-bold text-xs text-foreground">Hébergement / Résidence</p>
+                      <p className="text-[10px] text-foreground/60">Villa, Appartement, Suite, Hôtel</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditFormType('drive');
+                      if (editFormPriceUnit === 'nuit') setEditFormPriceUnit('jour');
+                    }}
+                    className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all ${
+                      editFormType === 'drive'
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary/20 text-primary'
+                        : 'border-foreground/15 bg-background text-foreground/70 hover:border-foreground/30'
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faCar} className="text-primary text-lg shrink-0" />
+                    <div>
+                      <p className="font-bold text-xs text-foreground">Véhicule de Prestige</p>
+                      <p className="text-[10px] text-foreground/60">SUV, Berline, Minibus, Luxe</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Nom du bien & Tarification */}
+              <div className="space-y-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  2. Nom du Bien & Tarification
+                </label>
+
+                <div>
+                  <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                    Nom / Titre officiel de l'annonce *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormTitle}
+                    onChange={(e) => setEditFormTitle(e.target.value)}
+                    placeholder="Ex: Villa Privée Azure Palm — Haie Vive"
+                    className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      Tarif (en FCFA) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={editFormPrice}
+                      onChange={(e) => setEditFormPrice(e.target.value)}
+                      placeholder="Ex: 85000"
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      Unité de facturation
+                    </label>
+                    <select
+                      value={editFormPriceUnit}
+                      onChange={(e) => setEditFormPriceUnit(e.target.value)}
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="nuit">Par nuit (Hébergement)</option>
+                      <option value="jour">Par jour (Véhicule / Prestation)</option>
+                      <option value="mois">Par mois</option>
+                      <option value="vente totale">Vente totale (Achat définitif)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Localisation & Statut */}
+              <div className="space-y-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  3. Localisation & Statut de publication
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      Localisation (Ville, Quartier) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormLocation}
+                      onChange={(e) => setEditFormLocation(e.target.value)}
+                      placeholder="Ex: Cotonou, Haie Vive"
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      Statut de modération
+                    </label>
+                    <select
+                      value={editFormStatus}
+                      onChange={(e) => setEditFormStatus(e.target.value)}
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="active">Active (En ligne sur le catalogue public)</option>
+                      <option value="pending">En attente de validation</option>
+                      <option value="suspended">Suspendue (Masquée du catalogue)</option>
+                      <option value="refused">Refusée (Non conforme)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      Badge marketing (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormBadge}
+                      onChange={(e) => setEditFormBadge(e.target.value)}
+                      placeholder="Ex: Coup de Cœur, Exclusivité, Vérifié"
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                      {editFormType === 'drive' ? 'Nombre de places' : 'Nombre de chambres'}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editFormType === 'drive' ? editFormSeats : editFormRooms}
+                      onChange={(e) => {
+                        if (editFormType === 'drive') setEditFormSeats(e.target.value);
+                        else setEditFormRooms(e.target.value);
+                      }}
+                      className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Caractéristiques & Équipements */}
+              <div className="space-y-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  4. Caractéristiques & Équipements (séparés par virgules)
+                </label>
+                <input
+                  type="text"
+                  value={editFormSpecs}
+                  onChange={(e) => setEditFormSpecs(e.target.value)}
+                  placeholder="Ex: Climatisation, Wi-Fi Fibre, Piscine privée, Groupe électrogène, Sécurité 24/7"
+                  className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+
+                {editFormType === 'drive' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                        Boîte de transmission
+                      </label>
+                      <select
+                        value={editFormTransmission}
+                        onChange={(e) => setEditFormTransmission(e.target.value)}
+                        className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="automatique">Automatique</option>
+                        <option value="manuelle">Manuelle</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-foreground/70 mb-1.5 block font-semibold">
+                        Carburant
+                      </label>
+                      <select
+                        value={editFormFuel}
+                        onChange={(e) => setEditFormFuel(e.target.value)}
+                        className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="essence">Essence</option>
+                        <option value="diesel">Diesel</option>
+                        <option value="hybride">Hybride</option>
+                        <option value="électrique">Électrique</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Description */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  5. Description Détaillée
+                </label>
+                <textarea
+                  rows={4}
+                  value={editFormDescription}
+                  onChange={(e) => setEditFormDescription(e.target.value)}
+                  placeholder="Description complète du bien, cadre, services inclus..."
+                  className="w-full rounded-2xl border border-foreground/15 bg-background p-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                />
+              </div>
+
+              {/* 6. Vidéo (Lien direct YouTube / Vimeo / MP4) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                  6. Vidéo Officielle (Optionnelle)
+                </label>
+                <input
+                  type="url"
+                  value={editFormVideoUrl}
+                  onChange={(e) => setEditFormVideoUrl(e.target.value)}
+                  placeholder="Ex: https://www.youtube.com/watch?v=... ou lien MP4 direct"
+                  className="w-full rounded-2xl border border-foreground/15 bg-background px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* 7. Gestion de la Galerie Photos */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block">
+                    7. Galerie Photos ({editFormPhotos.length})
+                  </label>
+                  <label className="cursor-pointer rounded-xl bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 text-xs font-semibold hover:bg-primary hover:text-primary-foreground transition-all flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faUpload} />
+                    <span>{editIsUploadingPhoto ? 'Compression...' : 'Ajouter des photos'}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleEditPhotoUpload}
+                      disabled={editIsUploadingPhoto}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Add Photo by URL */}
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={editPhotoUrlInput}
+                    onChange={(e) => setEditPhotoUrlInput(e.target.value)}
+                    placeholder="Ou coller une URL d'image (https://...)"
+                    className="flex-1 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddEditPhotoUrl}
+                    className="rounded-xl border border-foreground/20 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted"
+                  >
+                    Ajouter URL
+                  </button>
+                </div>
+
+                {/* Photos Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {editFormPhotos.map((photoUrl, idx) => (
+                    <div
+                      key={idx}
+                      className={`relative group rounded-2xl overflow-hidden border aspect-video bg-muted ${
+                        idx === 0 ? 'ring-2 ring-primary border-primary' : 'border-foreground/15'
+                      }`}
+                    >
+                      <img
+                        src={photoUrl}
+                        alt={`Photo ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {idx === 0 && (
+                        <span className="absolute top-1.5 left-1.5 rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[9px] font-bold shadow">
+                          Principale
+                        </span>
+                      )}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        {idx !== 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetFeaturedEditPhoto(idx)}
+                            className="h-7 w-7 rounded-full bg-white/20 text-white hover:bg-primary flex items-center justify-center text-xs transition-colors"
+                            title="Définir comme photo principale"
+                          >
+                            <FontAwesomeIcon icon={faStar} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditPhoto(idx)}
+                          className="h-7 w-7 rounded-full bg-rose-600/80 text-white hover:bg-rose-600 flex items-center justify-center text-xs transition-colors"
+                          title="Supprimer cette photo"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3 sticky bottom-0 bg-card/95 backdrop-blur-md py-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingListingModal(null)}
+                  disabled={editIsSaving}
+                  className="rounded-xl border border-foreground/20 px-5 py-2.5 text-xs font-semibold text-foreground/75 hover:bg-muted transition-colors"
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={editIsSaving}
+                  className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2.5 text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"
+                >
+                  {editIsSaving ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                      <span>Enregistrement...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faCheck} />
+                      <span>Enregistrer les modifications</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

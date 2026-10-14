@@ -419,6 +419,24 @@ export async function updateListing(id, updates = {}) {
 
     custom[index] = updatedListing;
     saveCustomListings(custom);
+  } else {
+    const initial = initialListings.find((item) => item.id === id);
+    if (initial) {
+      updatedListing = {
+        ...initial,
+        ...updates,
+        id,
+        updated_date: new Date().toISOString()
+      };
+      if (updatedListing.gallery && Array.isArray(updatedListing.gallery) && updatedListing.gallery.length > 0) {
+        updatedListing.gallery = updatedListing.gallery.map((img) => sanitizeImage(img, updatedListing.type));
+      }
+      if (updates.description && !updates.summary) {
+        updatedListing.summary = updates.description.slice(0, 160);
+      }
+      custom.push(updatedListing);
+      saveCustomListings(custom);
+    }
   }
 
   // 2. Base Supabase universelle

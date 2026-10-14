@@ -26,7 +26,6 @@ import {
 } from '../services/nyoleService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { NyolePaymentModal } from '../components/NyolePaymentModal';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
 const STEPS = ['Identité', 'Protection'];
@@ -66,55 +65,11 @@ export function CheckoutPage() {
   const [redirectCountdown, setRedirectCountdown] = useState(7);
   const [isCountdownPaused, setIsCountdownPaused] = useState(false);
 
-  // Nyole Modal state
-  const [nyoleModal, setNyoleModal] = useState({
-    isOpen: false,
-    sessionUrl: '',
-    sessionId: '',
-    bookingRef: '',
-    amount: 0,
-    payload: null
-  });
-
   // Nyole verification state
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
   const [paymentCancelNotice, setPaymentCancelNotice] = useState(false);
   const [paymentVerificationError, setPaymentVerificationError] = useState(null);
-
-  const handleNyoleModalSuccess = async ({ sessionId, statusData }) => {
-    try {
-      const pending = getPendingCheckout();
-      const payloadToConfirm = nyoleModal.payload || pending?.payload;
-
-      const providerName = statusData?.provider || 'Mobile Money / Carte';
-      const enrichedPayload = {
-        ...(payloadToConfirm || {}),
-        status: 'confirmed',
-        payment_status: 'paid',
-        payment_method: `Nyole (${providerName})`,
-        nyole_session_id: sessionId,
-        nyole_order_id: statusData?.order_id || null,
-        nyole_provider: providerName
-      };
-
-      const createRes = await createBooking(enrichedPayload);
-      if (createRes.success) {
-        setConfirmedBooking(createRes.booking);
-        clearCart();
-        clearPendingCheckout();
-      }
-    } catch (err) {
-      console.error('[Nyole Modal Success Handling Error]:', err);
-    } finally {
-      setNyoleModal((prev) => ({ ...prev, isOpen: false }));
-    }
-  };
-
-  const handleNyoleModalCancel = () => {
-    setNyoleModal((prev) => ({ ...prev, isOpen: false }));
-    setPaymentCancelNotice(true);
-  };
 
   // Sync customer info when user signs in
   useEffect(() => {
@@ -423,16 +378,8 @@ export function CheckoutPage() {
         timestamp: Date.now()
       });
 
-      // Ouverture du modal intégré de paiement Nyole
-      setNyoleModal({
-        isOpen: true,
-        sessionUrl: sessionRes.session.url,
-        sessionId: sessionRes.session.id,
-        bookingRef: bookingRef,
-        amount: finalTotal,
-        payload: payload
-      });
-      setIsSubmitting(false);
+      // Redirection directe vers la passerelle officielle Nyole (plein écran, sans conteneur bloquant)
+      window.location.href = sessionRes.session.url;
     } else {
       setIsSubmitting(false);
       setAlertModal({
@@ -833,7 +780,7 @@ export function CheckoutPage() {
                   {isSubmitting ? (
                     <>
                       <FontAwesomeIcon icon={faSpinner} className="h-5 w-5 animate-spin" />
-                      <span>Initialisation de la session Nyole…</span>
+                      <span>Redirection vers la passerelle Nyole…</span>
                     </>
                   ) : (
                     <>
@@ -903,18 +850,6 @@ export function CheckoutPage() {
         variant="warning"
         onConfirm={() => setAlertModal({ isOpen: false, title: '', message: '' })}
         onCancel={() => setAlertModal({ isOpen: false, title: '', message: '' })}
-      />
-
-      {/* Modal de Paiement Intégré Nyole */}
-      <NyolePaymentModal
-        isOpen={nyoleModal.isOpen}
-        sessionUrl={nyoleModal.sessionUrl}
-        sessionId={nyoleModal.sessionId}
-        amount={nyoleModal.amount}
-        bookingRef={nyoleModal.bookingRef}
-        onClose={() => setNyoleModal((prev) => ({ ...prev, isOpen: false }))}
-        onSuccess={handleNyoleModalSuccess}
-        onCancel={handleNyoleModalCancel}
       />
     </div>
   );
