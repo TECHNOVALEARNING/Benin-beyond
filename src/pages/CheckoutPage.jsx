@@ -46,48 +46,6 @@ const PROTECTION_OPTIONS = [
   }
 ];
 
-const NYOLE_CHANNELS = [
-  {
-    id: 'mtn_momo',
-    name: 'MTN Mobile Money',
-    operator: 'Bénin, Togo, Côte d’Ivoire, Cameroun',
-    badge: 'MTN MoMo',
-    icon: faMobileScreen,
-    colorClass: 'text-amber-500 bg-amber-500/10 border-amber-500/20'
-  },
-  {
-    id: 'moov_money',
-    name: 'Moov Money (Flooz)',
-    operator: 'Bénin & zone UEMOA',
-    badge: 'Moov Money',
-    icon: faMobileScreen,
-    colorClass: 'text-blue-500 bg-blue-500/10 border-blue-500/20'
-  },
-  {
-    id: 'celtiis',
-    name: 'Celtiis Cash',
-    operator: 'Opérateur national Bénin',
-    badge: 'Celtiis Cash',
-    icon: faMobileScreen,
-    colorClass: 'text-purple-500 bg-purple-500/10 border-purple-500/20'
-  },
-  {
-    id: 'wave',
-    name: 'Wave Mobile Money',
-    operator: 'Côte d’Ivoire, Sénégal, Mali',
-    badge: 'Wave',
-    icon: faMobileScreen,
-    colorClass: 'text-sky-500 bg-sky-500/10 border-sky-500/20'
-  },
-  {
-    id: 'card',
-    name: 'Carte Bancaire Internationale',
-    operator: 'Visa, Mastercard & protocoles 3D-Secure',
-    badge: 'Visa / Mastercard',
-    icon: faCreditCard,
-    colorClass: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
-  }
-];
 
 export function CheckoutPage() {
   const navigate = useNavigate();
