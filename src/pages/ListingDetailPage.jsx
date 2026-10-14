@@ -16,9 +16,13 @@ import {
   faXmark,
   faCar,
   faClock,
-  faSliders
+  faSliders,
+  faLock,
+  faBan,
+  faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
 import { getListingById } from '../services/listingService';
+import { checkDateAvailability, getActiveReservationSummary } from '../services/bookingService';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -46,6 +50,15 @@ export function ListingDetailPage() {
   const [guests, setGuests] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
+  // Availability & conflict management
+  const [availability, setAvailability] = useState({
+    isAvailable: true,
+    conflict: null,
+    allBookedPeriods: []
+  });
+  const [reservationSummary, setReservationSummary] = useState(null);
+  const [hasAutoAdjustedInitialDates, setHasAutoAdjustedInitialDates] = useState(false);
+
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -64,6 +77,45 @@ export function ListingDetailPage() {
       mounted = false;
     };
   }, [id]);
+
+  // Synchronisation continue de la disponibilité selon les dates sélectionnées
+  useEffect(() => {
+    let active = true;
+    if (!id) return;
+
+    checkDateAvailability(id, startDate, endDate)
+      .then((res) => {
+        if (active) setAvailability(res);
+      })
+      .catch((err) => {
+        console.warn('Erreur vérification disponibilité:', err);
+      });
+
+    getActiveReservationSummary(id)
+      .then((summary) => {
+        if (active) {
+          setReservationSummary(summary);
+          // Si le bien est actuellement occupé aujourd'hui et qu'on est sur les dates par défaut,
+          // on pré-remplit les dates à partir de la prochaine date disponible
+          if (summary?.status === 'occupied' && summary.endDate && !hasAutoAdjustedInitialDates) {
+            setHasAutoAdjustedInitialDates(true);
+            const nextFreeStart = summary.endDate;
+            const nextFreeEnd = new Date(new Date(nextFreeStart).getTime() + 86400000)
+              .toISOString()
+              .split('T')[0];
+            setStartDate(nextFreeStart);
+            setEndDate(nextFreeEnd);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Erreur résumé réservation:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, startDate, endDate, hasAutoAdjustedInitialDates]);
 
   const gallery = Array.isArray(listing?.gallery) && listing.gallery.length > 0
     ? listing.gallery
@@ -110,8 +162,20 @@ export function ListingDetailPage() {
   const effectiveMultiplier = isDaily ? duration : 1;
   const totalPrice = (listing?.price || 0) * effectiveMultiplier;
 
+  const handlePickNextAvailableDate = (nextFreeDate) => {
+    if (!nextFreeDate) return;
+    const startStr = nextFreeDate;
+    const endObj = new Date(new Date(startStr).getTime() + (isVehicle ? 1 : 2) * 86400000);
+    const endStr = endObj.toISOString().split('T')[0];
+    setStartDate(startStr);
+    setEndDate(endStr);
+  };
+
   const handleBooking = (directToCheckout = true) => {
     if (!listing) return;
+    if (!availability.isAvailable && availability.conflict) {
+      return;
+    }
     setIsAdding(true);
 
     addItem({
@@ -494,6 +558,20 @@ export function ListingDetailPage() {
               </div>
             </div>
 
+            {/* Si le bien est actuellement occupé aujourd'hui */}
+            {reservationSummary?.status === 'occupied' && (
+              <div className="mt-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs text-foreground flex items-start gap-2.5 animate-fadeIn">
+                <FontAwesomeIcon icon={faLock} className="text-amber-600 dark:text-amber-400 mt-0.5 text-xs shrink-0" />
+                <div className="flex-1">
+                  <p className="font-bold text-amber-700 dark:text-amber-400">Bien actuellement réservé</p>
+                  <p className="text-[11px] text-foreground/75 mt-0.5">
+                    Actuellement occupé par un voyageur jusqu'au{' '}
+                    <strong>{new Date(reservationSummary.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Disponibilité Véhicule ou Disponibilité Chambre d'Hôtel */}
             {isVehicle ? (
               <div className="mt-4 rounded-xl bg-primary/10 border border-primary/20 p-3.5 text-xs text-foreground space-y-2">
@@ -630,6 +708,43 @@ export function ListingDetailPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Alerte Conflit de Dates / Déjà Réservé */}
+              {!availability.isAvailable && availability.conflict && (
+                <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3.5 text-xs text-rose-900 dark:text-rose-200 animate-fadeIn space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-400">
+                    <FontAwesomeIcon icon={faBan} className="shrink-0" />
+                    <span>Période déjà réservée & indisponible</span>
+                  </div>
+                  <p className="text-foreground/80 leading-relaxed text-[11px]">
+                    Ce bien a déjà fait l'objet d'un règlement validé du{' '}
+                    <strong>{new Date(availability.conflict.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</strong> au{' '}
+                    <strong>{new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>.
+                    Aucune réservation concurrente n'est possible avant cette date d'échéance.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handlePickNextAvailableDate(availability.conflict.endDate)}
+                    className="w-full text-center py-2 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <span>Choisir à partir du {new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
+                  </button>
+                </div>
+              )}
+
+              {/* Indicateur de périodes réservées */}
+              {availability.allBookedPeriods && availability.allBookedPeriods.length > 0 && (
+                <div className="rounded-lg bg-muted/30 border border-foreground/10 p-2 text-[11px] text-foreground/70 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <FontAwesomeIcon icon={faCalendarDays} className="text-primary text-[10px]" />
+                    <span>Périodes déjà occupées :</span>
+                  </span>
+                  <span className="font-semibold text-foreground/80">
+                    {availability.allBookedPeriods.length} réservation(s)
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Pricing details */}
@@ -661,19 +776,35 @@ export function ListingDetailPage() {
             <div className="mt-6 space-y-2.5">
               <button
                 onClick={() => handleBooking(true)}
-                disabled={isAdding}
-                className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.98] flex items-center justify-center gap-2"
+                disabled={!availability.isAvailable || isAdding}
+                className={`w-full rounded-full py-3.5 text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                  !availability.isAvailable
+                    ? 'bg-muted text-foreground/40 border border-foreground/15 cursor-not-allowed shadow-none'
+                    : 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98]'
+                }`}
+                title={!availability.isAvailable ? 'Ce bien est déjà réservé sur cette période' : ''}
               >
-                <FontAwesomeIcon icon={faCalendarDays} className="h-4 w-4" />
-                <span>{isAdding ? 'Initialisation…' : 'Réserver & Payer maintenant'}</span>
+                <FontAwesomeIcon icon={!availability.isAvailable ? faLock : faCalendarDays} className="h-4 w-4" />
+                <span>
+                  {!availability.isAvailable
+                    ? `Réservé jusqu'au ${new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+                    : isAdding
+                    ? 'Initialisation…'
+                    : 'Réserver & Payer maintenant'}
+                </span>
               </button>
 
               <button
                 onClick={() => handleBooking(false)}
-                disabled={isAdding}
-                className="w-full rounded-full border border-foreground/20 py-2.5 text-xs font-semibold text-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
+                disabled={!availability.isAvailable || isAdding}
+                className={`w-full rounded-full border py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  !availability.isAvailable
+                    ? 'bg-muted/40 text-foreground/30 border-foreground/10 cursor-not-allowed'
+                    : 'border-foreground/20 text-foreground hover:bg-muted/50'
+                }`}
+                title={!availability.isAvailable ? 'Ce bien est déjà réservé sur cette période' : ''}
               >
-                <span>Ajouter au panier</span>
+                <span>{!availability.isAvailable ? 'Indisponible pour ces dates' : 'Ajouter au panier'}</span>
               </button>
             </div>
           </ScrollReveal>

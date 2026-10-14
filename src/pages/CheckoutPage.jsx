@@ -15,7 +15,7 @@ import {
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
-import { createBooking, getBookings } from '../services/bookingService';
+import { createBooking, getBookings, checkDateAvailability } from '../services/bookingService';
 import {
   createNyoleCheckoutSession,
   checkNyoleSessionStatus,
@@ -324,7 +324,20 @@ export function CheckoutPage() {
 
     const formattedGuests = firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur';
 
-    const channelLabel = 'Mobile Money / Carte';
+    // Vérification stricte anti-doublon : empêcher tout paiement si le bien a déjà été réservé sur ces dates
+    if (firstItem.listing_id || firstItem.listingId || firstItem.id) {
+      const targetListingId = firstItem.listing_id || firstItem.listingId || firstItem.id;
+      const checkRes = await checkDateAvailability(targetListingId, firstItem.startDate, firstItem.endDate);
+      if (!checkRes.isAvailable && checkRes.conflict) {
+        setIsSubmitting(false);
+        setAlertModal({
+          isOpen: true,
+          title: 'Bien déjà réservé sur cette période',
+          message: `Le bien "${firstItem.title}" a déjà été réservé et payé par un autre voyageur du ${checkRes.conflict.startDate} au ${checkRes.conflict.endDate}. Aucun débit n’a été effectué. Veuillez modifier vos dates pour continuer.`
+        });
+        return;
+      }
+    }
 
     const payload = {
       booking_ref: bookingRef,
@@ -343,6 +356,10 @@ export function CheckoutPage() {
         'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
       location: firstItem.location || 'Cotonou, Bénin',
       dates: formattedDates,
+      start_date: firstItem.startDate || null,
+      end_date: firstItem.endDate || null,
+      check_in: firstItem.startDate || null,
+      check_out: firstItem.endDate || null,
       guests: formattedGuests,
       owner_id: firstItem.owner_id || null,
       owner_name: firstItem.owner_name || null,

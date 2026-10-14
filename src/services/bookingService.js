@@ -130,6 +130,9 @@ export async function getBookings() {
           : (firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur')
       );
 
+      const rawStart = b.start_date || b.check_in || firstItem.startDate || null;
+      const rawEnd = b.end_date || b.check_out || firstItem.endDate || null;
+
       return {
         ...b,
         id: b.id || b.booking_ref,
@@ -144,6 +147,10 @@ export async function getBookings() {
         listing_image: b.listing_image || firstItem.image || firstItem.image_url || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
         location: b.location || firstItem.location || 'Cotonou, Bénin',
         dates: dates,
+        start_date: rawStart,
+        end_date: rawEnd,
+        check_in: rawStart,
+        check_out: rawEnd,
         guests: guests,
         owner_id: b.owner_id || firstItem.owner_id || null,
         owner_name: b.owner_name || firstItem.owner_name || null,
@@ -305,6 +312,10 @@ export async function createBooking(bookingPayload) {
     listing_image: listingImage,
     location: location,
     dates: dates,
+    start_date: bookingPayload.start_date || bookingPayload.check_in || firstItem.startDate || null,
+    end_date: bookingPayload.end_date || bookingPayload.check_out || firstItem.endDate || null,
+    check_in: bookingPayload.check_in || bookingPayload.start_date || firstItem.startDate || null,
+    check_out: bookingPayload.check_out || bookingPayload.end_date || firstItem.endDate || null,
     guests: guests,
     owner_id: ownerId,
     owner_name: ownerName,
@@ -409,3 +420,192 @@ export async function createBooking(bookingPayload) {
 
   return { success: true, booking: record };
 }
+
+/**
+ * =========================================================================
+ * GESTION DE LA DISPONIBILITÉ & PRÉVENTION DES DOUBLES RÉSERVATIONS
+ * =========================================================================
+ */
+
+/**
+ * Extrait les dates de début et de fin d'une réservation au format YYYY-MM-DD
+ */
+export function extractBookingDates(booking) {
+  if (!booking) return null;
+
+  let start = booking.start_date || booking.check_in || null;
+  let end = booking.end_date || booking.check_out || null;
+
+  // 1. Depuis items[0]
+  if ((!start || !end) && Array.isArray(booking.items) && booking.items.length > 0) {
+    const it = booking.items[0];
+    if (it.startDate) start = it.startDate;
+    if (it.endDate) end = it.endDate;
+  }
+
+  // 2. Parser la chaîne "Du YYYY-MM-DD au YYYY-MM-DD"
+  if ((!start || !end) && typeof booking.dates === 'string') {
+    const match = booking.dates.match(/(\d{4}-\d{2}-\d{2})\s+au\s+(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      start = match[1];
+      end = match[2];
+    }
+  }
+
+  // 3. Fallback sur created_at + duration_days
+  if (!start && booking.created_at) {
+    start = String(booking.created_at).slice(0, 10);
+  }
+  if (!end && start) {
+    const days = Number(booking.duration_days) || 1;
+    const sDate = new Date(start);
+    const eDate = new Date(sDate.getTime() + days * 86400000);
+    end = eDate.toISOString().slice(0, 10);
+  }
+
+  if (start && end) {
+    return {
+      start: String(start).slice(0, 10),
+      end: String(end).slice(0, 10)
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Récupère toutes les réservations actives/confirmées pour un bien donné
+ */
+export async function getBookingsForListing(listingId) {
+  if (!listingId) return [];
+  const allBookings = await getBookings();
+  const deletedIds = getDeletedBookingIds();
+
+  return allBookings.filter((b) => {
+    const bId = String(b.id || '');
+    const bRef = String(b.booking_ref || '');
+    if (deletedIds.has(bId) || deletedIds.has(bRef)) return false;
+    if (b.status === 'cancelled' || b.status === 'refunded') return false;
+
+    // Correspondance exacte ou partielle de l'identifiant du bien
+    const target = String(listingId);
+    const directMatch = String(b.listing_id || '') === target;
+    const itemsMatch =
+      Array.isArray(b.items) &&
+      b.items.some(
+        (it) =>
+          String(it.listing_id || it.listingId || it.id || '') === target
+      );
+
+    return directMatch || itemsMatch;
+  });
+}
+
+/**
+ * Vérifie si la plage [requestedStart, requestedEnd] entre en conflit avec une réservation existante
+ */
+export async function checkDateAvailability(listingId, requestedStart, requestedEnd) {
+  if (!listingId || !requestedStart || !requestedEnd) {
+    return { isAvailable: true, conflict: null, allBookedPeriods: [] };
+  }
+
+  const reqS = new Date(requestedStart).getTime();
+  const reqE = new Date(requestedEnd).getTime();
+
+  if (isNaN(reqS) || isNaN(reqE)) {
+    return { isAvailable: true, conflict: null, allBookedPeriods: [] };
+  }
+
+  const bookings = await getBookingsForListing(listingId);
+  const allBookedPeriods = [];
+
+  let conflictingBooking = null;
+  let conflictDates = null;
+
+  for (const b of bookings) {
+    const range = extractBookingDates(b);
+    if (!range) continue;
+
+    allBookedPeriods.push({
+      startDate: range.start,
+      endDate: range.end,
+      bookingRef: b.booking_ref
+    });
+
+    const bookS = new Date(range.start).getTime();
+    const bookE = new Date(range.end).getTime();
+
+    // Deux intervalles [reqS, reqE] et [bookS, bookE] se chevauchent si :
+    // reqS < bookE ET reqE > bookS
+    const hasOverlap = reqS < bookE && reqE > bookS;
+
+    if (hasOverlap && !conflictingBooking) {
+      conflictingBooking = b;
+      conflictDates = range;
+    }
+  }
+
+  if (conflictingBooking) {
+    return {
+      isAvailable: false,
+      conflict: {
+        booking: conflictingBooking,
+        startDate: conflictDates.start,
+        endDate: conflictDates.end,
+        customerName: conflictingBooking.customer_name || 'Un voyageur'
+      },
+      allBookedPeriods
+    };
+  }
+
+  return {
+    isAvailable: true,
+    conflict: null,
+    allBookedPeriods
+  };
+}
+
+/**
+ * Résumé de l'état d'occupation actuel ou à venir d'un bien
+ */
+export async function getActiveReservationSummary(listingId) {
+  if (!listingId) return null;
+  const bookings = await getBookingsForListing(listingId);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const ranges = bookings
+    .map((b) => {
+      const dates = extractBookingDates(b);
+      return dates ? { ...dates, booking: b } : null;
+    })
+    .filter(Boolean);
+
+  // 1. Actuellement occupé aujourd'hui
+  const current = ranges.find((r) => r.start <= todayStr && r.end >= todayStr);
+  if (current) {
+    return {
+      status: 'occupied',
+      startDate: current.start,
+      endDate: current.end,
+      booking: current.booking
+    };
+  }
+
+  // 2. Prochaine réservation à venir
+  const upcoming = ranges
+    .filter((r) => r.start > todayStr)
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  if (upcoming.length > 0) {
+    return {
+      status: 'upcoming',
+      startDate: upcoming[0].start,
+      endDate: upcoming[0].end,
+      booking: upcoming[0].booking,
+      allUpcoming: upcoming
+    };
+  }
+
+  return null;
+}
+

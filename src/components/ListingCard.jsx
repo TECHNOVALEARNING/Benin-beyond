@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLocationDot, faArrowUpRightFromSquare, faVideo, faCar } from '@fortawesome/free-solid-svg-icons';
+import { faLocationDot, faArrowUpRightFromSquare, faVideo, faCar, faLock } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
+import { getActiveReservationSummary } from '../services/bookingService';
 
 export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
   if (!listing) return null;
+
+  const [activeReservation, setActiveReservation] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!listing?.id) return;
+    getActiveReservationSummary(listing.id)
+      .then((res) => {
+        if (active) setActiveReservation(res);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [listing?.id]);
 
   const isVehicle = listing.type === 'drive' || listing.subcategory === 'car';
   const displaySpecs = isVehicle
@@ -32,13 +48,22 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
         {/* Gradient shadow for text/buttons */}
         <div className="absolute inset-0 bg-gradient-to-t from-secondary/80 via-transparent to-transparent opacity-60" />
 
-        {/* Badge par défaut (Pillule Dorée) - Masquée au Hover */}
-        {listing.badge && (
-          <div className="absolute left-3 top-3 z-10 transition-opacity duration-300 group-hover:opacity-0">
-            <span className="inline-flex items-center rounded-full bg-[#d99f2b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#221804] shadow-sm">
-              {listing.badge}
+        {/* Badge Réservé si actuellement occupé */}
+        {activeReservation?.status === 'occupied' ? (
+          <div className="absolute left-3 top-3 z-10">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/85 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30 shadow-md">
+              <FontAwesomeIcon icon={faLock} className="text-[9px]" />
+              <span>Réservé</span>
             </span>
           </div>
+        ) : (
+          listing.badge && (
+            <div className="absolute left-3 top-3 z-10 transition-opacity duration-300 group-hover:opacity-0">
+              <span className="inline-flex items-center rounded-full bg-[#d99f2b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#221804] shadow-sm">
+                {listing.badge}
+              </span>
+            </div>
+          )
         )}
 
         {/* Badge Vidéo si disponible */}
