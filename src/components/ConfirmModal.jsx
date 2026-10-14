@@ -104,11 +104,11 @@ export function ConfirmModal({
           <div className="flex-1 min-w-0 pt-0.5">
             <h3
               id="confirm-modal-title"
-              className="font-heading text-lg font-bold text-foreground leading-snug tracking-tight"
+              className="font-heading text-lg sm:text-xl font-bold text-foreground leading-snug tracking-tight"
             >
               {title}
             </h3>
-            <p className="mt-2 text-sm text-foreground/75 leading-relaxed">
+            <p className="mt-2 text-sm sm:text-base font-medium text-foreground leading-relaxed">
               {message}
             </p>
           </div>

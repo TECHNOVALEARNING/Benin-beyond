@@ -294,13 +294,15 @@ export function LoginPage() {
           <div className="rounded-3xl border border-foreground/10 bg-card/90 p-5 sm:p-6 shadow-2xl backdrop-blur-xl">
             {/* Notification de réservation confirmée sécurisée */}
             {fromCheckout && (
-              <div className="mb-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-1.5 animate-fadeIn">
-                <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
-                  <FontAwesomeIcon icon={faShieldHalved} className="text-sm" />
-                  <span>Réservation confirmée avec succès !</span>
+              <div className="mb-6 rounded-2xl bg-emerald-500/15 border-2 border-emerald-500/40 p-5 text-foreground shadow-lg space-y-2 animate-fadeIn">
+                <div className="flex items-center gap-2.5 font-bold text-base sm:text-lg text-emerald-800 dark:text-emerald-300">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <FontAwesomeIcon icon={faShieldHalved} className="text-base text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span>Paiement validé & Réservation confirmée !</span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-foreground/75">
-                  Pour protéger vos données personnelles, veuillez vous connecter avec votre compte <strong>Google</strong> ou vos identifiants pour accéder à votre espace voyageur et consulter vos reçus officiels.
+                <p className="text-sm sm:text-base font-semibold leading-relaxed text-foreground">
+                  Votre règlement a bien été enregistré. Connectez-vous avec votre compte <strong>Google</strong> ou vos identifiants pour accéder immédiatement à votre <strong>Espace Voyageur</strong> et télécharger vos vouchers officiels.
                 </p>
               </div>
             )}

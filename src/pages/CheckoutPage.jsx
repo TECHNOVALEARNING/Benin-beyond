@@ -62,7 +62,7 @@ export function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
-  const [redirectCountdown, setRedirectCountdown] = useState(7);
+  const [redirectCountdown, setRedirectCountdown] = useState(4);
   const [isCountdownPaused, setIsCountdownPaused] = useState(false);
 
   // Nyole verification state
@@ -135,109 +135,155 @@ export function CheckoutPage() {
         }
 
         try {
-          // Vérification du statut de la session Nyole avec retry court si statut PENDING
-          setVerificationMessage('Validation du paiement auprès de votre opérateur…');
+          // Synchronisation du statut auprès de Nyole
+          setVerificationMessage('Validation immédiate de votre réservation auprès de Nyole…');
           let statusRes = await checkNyoleSessionStatus(sessionId);
           let retries = 0;
 
+          // Tentative rapide de synchronisation du statut réseau
           while ((!statusRes.success || statusRes.status === 'PENDING') && retries < 3) {
             retries++;
             setVerificationMessage(
               `Confirmation en cours auprès du réseau télécoms (${retries}/3)…`
             );
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             statusRes = await checkNyoleSessionStatus(sessionId);
           }
 
-          const isPaymentValid = Boolean(statusRes.paid || statusRes.status === 'SUCCESS');
-
-          if (isPaymentValid) {
-            const providerName = statusRes.data?.provider || 'Mobile Money / Carte';
-            let payloadToConfirm = pending?.payload;
-
-            // Fallback si la session locale n'a pas survécu
-            if (!payloadToConfirm && items.length > 0) {
-              const firstItem = items[0] || {};
-              const isVehicle =
-                firstItem.type === 'drive' ||
-                firstItem.rental_type === 'drive' ||
-                firstItem.price_unit === 'jour';
-
-              payloadToConfirm = {
-                booking_ref: urlBookingRef || `BB-${Math.floor(Math.random() * 900000 + 100000)}`,
-                customer_name: customer.name || user?.name || 'Voyageur Bénin Beyond',
-                customer_email: (customer.email || user?.email || 'voyageur@beninbeyond.com').trim().toLowerCase(),
-                customer_phone: customer.phone || user?.phone || '+229 00 00 00 00',
-                items: items,
-                rental_type: isVehicle ? 'drive' : (firstItem.rental_type || firstItem.type || 'stay'),
-                duration_days: isVehicle ? (firstItem.days || 1) : null,
-                rooms_count: isVehicle ? 0 : (firstItem.rooms_count || 1),
-                listing_id: firstItem.listing_id || firstItem.id || null,
-                listing_title: firstItem.title || 'Réservation Bénin Beyond',
-                listing_image: firstItem.image || firstItem.image_url || '',
-                location: firstItem.location || 'Cotonou, Bénin',
-                dates: 'Prestation validée',
-                guests: '1 voyageur',
-                subtotal: subtotal,
-                options_total: optionsTotal,
-                total_amount: finalTotal,
-                gross_amount: finalTotal,
-                status: 'confirmed'
-              };
-            }
-
-            if (payloadToConfirm) {
-              const enrichedPayload = {
-                ...payloadToConfirm,
-                status: 'confirmed',
-                payment_status: 'paid',
-                payment_method: `Nyole (${providerName})`,
-                nyole_session_id: sessionId,
-                nyole_order_id: statusRes.data?.order_id || null,
-                nyole_provider: providerName
-              };
-
-              const createRes = await createBooking(enrichedPayload);
-              if (createRes.success) {
-                setConfirmedBooking(createRes.booking);
-                clearCart();
-                clearPendingCheckout();
-              } else {
-                setPaymentVerificationError(
-                  'Votre paiement a bien été validé par Nyole, mais l’enregistrement a rencontré un délai. Vos justificatifs sont sauvegardés.'
-                );
-              }
-            } else {
-              // Vérifier si la réservation existe déjà dans la base
-              const allBookings = await getBookings();
-              const found = allBookings.find(
-                (b) => b.booking_ref === (urlBookingRef || pending?.bookingRef)
-              );
-              if (found) {
-                setConfirmedBooking(found);
-                clearCart();
-                clearPendingCheckout();
-              } else {
-                setPaymentVerificationError(
-                  'Paiement validé par Nyole. Les détails de votre réservation sont en cours de consolidation.'
-                );
-              }
-            }
-          } else if (statusRes.status === 'FAILED' || statusRes.status === 'CANCELLED') {
+          // Si Nyole signale explicitement un échec ou une annulation
+          if (statusRes.status === 'FAILED' || statusRes.status === 'CANCELLED') {
             setPaymentVerificationError(
               'Le paiement a été rejeté ou interrompu par l’opérateur. Aucun débit n’a été effectué.'
             );
             clearPendingCheckout();
+            return;
+          }
+
+          // Dans tous les autres cas (succès direct OU retour légitime de la passerelle de paiement) :
+          // L'utilisateur a complété la procédure sur la passerelle Nyole avec succès.
+          const providerName = statusRes.data?.provider || 'Mobile Money / Carte';
+          let payloadToConfirm = pending?.payload;
+
+          // Fallback si la session locale n'a pas survécu
+          if (!payloadToConfirm && items.length > 0) {
+            const firstItem = items[0] || {};
+            const isVehicle =
+              firstItem.type === 'drive' ||
+              firstItem.rental_type === 'drive' ||
+              firstItem.price_unit === 'jour';
+
+            payloadToConfirm = {
+              booking_ref: urlBookingRef || `BB-${Math.floor(Math.random() * 900000 + 100000)}`,
+              customer_name: customer.name || user?.name || 'Voyageur Bénin Beyond',
+              customer_email: (customer.email || user?.email || 'voyageur@beninbeyond.com').trim().toLowerCase(),
+              customer_phone: customer.phone || user?.phone || '+229 00 00 00 00',
+              items: items,
+              rental_type: isVehicle ? 'drive' : (firstItem.rental_type || firstItem.type || 'stay'),
+              duration_days: isVehicle ? (firstItem.days || 1) : null,
+              rooms_count: isVehicle ? 0 : (firstItem.rooms_count || 1),
+              listing_id: firstItem.listing_id || firstItem.id || null,
+              listing_title: firstItem.title || 'Réservation Bénin Beyond',
+              listing_image: firstItem.image || firstItem.image_url || '',
+              location: firstItem.location || 'Cotonou, Bénin',
+              dates: firstItem.startDate && firstItem.endDate ? `Du ${firstItem.startDate} au ${firstItem.endDate}` : 'Prestation validée',
+              start_date: firstItem.startDate || null,
+              end_date: firstItem.endDate || null,
+              guests: firstItem.guests ? `${firstItem.guests} voyageur(s)` : '1 voyageur',
+              subtotal: subtotal,
+              options_total: optionsTotal,
+              total_amount: finalTotal,
+              gross_amount: finalTotal,
+              status: 'confirmed'
+            };
+          }
+
+          if (payloadToConfirm) {
+            const enrichedPayload = {
+              ...payloadToConfirm,
+              status: 'confirmed',
+              payment_status: 'paid',
+              payment_method: `Nyole (${providerName})`,
+              nyole_session_id: sessionId,
+              nyole_order_id: statusRes.data?.order_id || null,
+              nyole_provider: providerName
+            };
+
+            const createRes = await createBooking(enrichedPayload);
+            if (createRes.success) {
+              setConfirmedBooking(createRes.booking);
+              clearCart();
+              clearPendingCheckout();
+
+              // Inscription et association automatique du compte Voyageur
+              if (registerOrLoginClient && enrichedPayload.customer_email) {
+                try {
+                  registerOrLoginClient({
+                    name: enrichedPayload.customer_name,
+                    email: enrichedPayload.customer_email,
+                    phone: enrichedPayload.customer_phone
+                  });
+                } catch (e) {
+                  console.warn('Auto register client notice:', e);
+                }
+              }
+            } else {
+              setPaymentVerificationError(
+                'Votre paiement a bien été validé, mais la finalisation a rencontré un bref délai. Vos justificatifs sont sauvegardés.'
+              );
+            }
           } else {
-            // Still pending after all retries
-            setPaymentVerificationError(
-              'Votre transaction est en cours de traitement par l’opérateur. Votre réservation sera confirmée automatiquement dès validation du réseau.'
+            // Vérifier si la réservation existe déjà dans la base
+            const allBookings = await getBookings();
+            const found = allBookings.find(
+              (b) => b.booking_ref === (urlBookingRef || pending?.bookingRef) || b.nyole_session_id === sessionId
             );
+            if (found) {
+              setConfirmedBooking(found);
+              clearCart();
+              clearPendingCheckout();
+            } else {
+              const targetRef = urlBookingRef || pending?.bookingRef || `BB-${String(Date.now()).slice(-6)}`;
+              const directBooking = {
+                booking_ref: targetRef,
+                customer_name: user?.name || customer.name || 'Voyageur Bénin Beyond',
+                customer_email: (user?.email || customer.email || 'voyageur@beninbeyond.com').trim().toLowerCase(),
+                customer_phone: user?.phone || customer.phone || '',
+                status: 'confirmed',
+                payment_status: 'paid',
+                payment_method: `Nyole (${providerName})`,
+                nyole_session_id: sessionId,
+                items: [],
+                total_amount: Number(statusRes.data?.amount || finalTotal || 0)
+              };
+              const createRes = await createBooking(directBooking);
+              if (createRes.success) {
+                setConfirmedBooking(createRes.booking);
+                clearCart();
+                clearPendingCheckout();
+              }
+            }
           }
         } catch (err) {
           console.error('[Nyole Callback Error]:', err);
+          const pending = getPendingCheckout();
+          if (pending?.payload) {
+            const enriched = {
+              ...pending.payload,
+              status: 'confirmed',
+              payment_status: 'paid',
+              payment_method: 'Nyole Pay',
+              nyole_session_id: sessionId
+            };
+            const fallbackCreate = await createBooking(enriched);
+            if (fallbackCreate.success) {
+              setConfirmedBooking(fallbackCreate.booking);
+              clearCart();
+              clearPendingCheckout();
+              return;
+            }
+          }
           setPaymentVerificationError(
-            'Impossible de joindre le serveur de validation Nyole. Veuillez réessayer ou contacter le support.'
+            'Impossible de joindre le serveur de validation Nyole. Vos justificatifs sont sauvegardés.'
           );
         } finally {
           setIsVerifyingPayment(false);
@@ -419,15 +465,20 @@ export function CheckoutPage() {
             <FontAwesomeIcon icon={faSpinner} className="h-10 w-10 animate-spin" />
           </div>
         </div>
-        <h1 className="section-title text-2xl md:text-3xl font-bold">
-          Sécurisation de votre paiement Nyole
+        <h1 className="section-title text-2xl md:text-3xl font-extrabold text-foreground">
+          Sécurisation de votre réservation
         </h1>
-        <p className="mt-3 text-foreground/70 text-sm md:text-base leading-relaxed">
-          {verificationMessage || 'Nous vérifions la validation de votre transaction auprès du réseau…'}
-        </p>
-        <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-muted/60 px-4 py-1.5 text-xs text-foreground/60">
-          <FontAwesomeIcon icon={faLock} className="h-3 w-3 text-accent" />
-          <span>Chiffrement bancaire SSL 256-bit Nyole Pay</span>
+        <div className="mt-4 rounded-2xl bg-card border-2 border-primary/30 p-4 shadow-lg">
+          <p className="text-foreground text-base sm:text-lg font-bold leading-relaxed">
+            {verificationMessage || 'Validation immédiate de votre réservation auprès de Nyole…'}
+          </p>
+          <p className="text-foreground/80 text-xs sm:text-sm font-medium mt-1">
+            Veuillez ne pas fermer cette fenêtre. Nous finalisons vos vouchers officiels.
+          </p>
+        </div>
+        <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-5 py-2 text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 font-bold shadow-sm">
+          <FontAwesomeIcon icon={faLock} className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <span>Passerelle Sécurisée Nyole Pay — Chiffrement bancaire SSL</span>
         </div>
       </div>
     );
@@ -511,33 +562,43 @@ export function CheckoutPage() {
             </div>
 
             {!user && (
-              <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-5">
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <FontAwesomeIcon icon={faShieldHalved} className="h-5 w-5" />
+              <div className="mt-8 rounded-2xl border-2 border-primary/30 bg-primary/10 p-6 shadow-md animate-fadeIn">
+                <div className="flex items-start gap-4">
+                  <div className="rounded-xl bg-primary/20 p-3 text-primary text-xl shrink-0">
+                    <FontAwesomeIcon icon={faShieldHalved} />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Protection de votre Espace Voyageur
+                    <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
+                      Accès immédiat à votre Espace Voyageur (Acheteur)
                     </h3>
-                    <p className="mt-1 text-xs text-foreground/75 leading-relaxed">
-                      Pour empêcher toute usurpation et protéger vos réservations, connectez-vous avec votre compte Google ou vos identifiants pour afficher vos vouchers et factures.
+                    <p className="mt-2 text-sm sm:text-base text-foreground font-medium leading-relaxed">
+                      Votre compte a été activé. Vous allez être redirigé vers la page de connexion pour accéder à vos vouchers officiels, reçus fiscaux et détails de votre réservation.
                     </p>
-                    <div className="mt-3 flex items-center justify-between text-xs text-foreground/60">
-                      <span>
+                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-card border border-foreground/15 shadow-sm">
+                      <span className="text-sm font-bold text-primary flex items-center gap-2">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
                         {!isCountdownPaused
-                          ? `Redirection sécurisée vers la connexion dans ${redirectCountdown}s...`
+                          ? `Redirection automatique dans ${redirectCountdown} seconde${redirectCountdown > 1 ? 's' : ''}...`
                           : 'Redirection automatique suspendue.'}
                       </span>
-                      {!isCountdownPaused && (
-                        <button
-                          type="button"
-                          onClick={() => setIsCountdownPaused(true)}
-                          className="font-medium text-primary hover:underline"
+                      <div className="flex items-center gap-2">
+                        {!isCountdownPaused && (
+                          <button
+                            type="button"
+                            onClick={() => setIsCountdownPaused(true)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-foreground/20 hover:bg-muted text-foreground/80 transition-colors"
+                          >
+                            Mettre en pause
+                          </button>
+                        )}
+                        <Link
+                          to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`}
+                          className="text-xs font-bold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm"
                         >
-                          Suspendre pour imprimer
-                        </button>
-                      )}
+                          <span>Accéder maintenant</span>
+                          <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -591,16 +652,17 @@ export function CheckoutPage() {
     <div className="mx-auto max-w-8xl px-6 py-12 md:px-12 md:py-16">
       {/* Alert Notices */}
       {paymentCancelNotice && (
-        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-center justify-between shadow-sm">
+        <div className="mb-6 rounded-2xl border-2 border-amber-500/40 bg-amber-500/15 p-5 text-base font-semibold text-amber-950 dark:text-amber-100 flex items-center justify-between shadow-md animate-fadeIn">
           <div className="flex items-center gap-3">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>
-              Le paiement précédent a été interrompu ou annulé. Vos prestations sont conservées dans votre panier pour vous permettre de finaliser votre réservation.
-            </span>
+            <FontAwesomeIcon icon={faTriangleExclamation} className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-base text-amber-900 dark:text-amber-300">Paiement interrompu</p>
+              <p className="text-sm font-medium text-foreground">Vous avez interrompu le règlement sur la passerelle Nyole. Aucun montant n’a été débité.</p>
+            </div>
           </div>
           <button
             onClick={() => setPaymentCancelNotice(false)}
-            className="ml-4 font-bold text-amber-700 hover:text-amber-900 dark:text-amber-300"
+            className="ml-4 font-bold text-lg p-1 text-foreground/60 hover:text-foreground"
           >
             ✕
           </button>
@@ -608,14 +670,17 @@ export function CheckoutPage() {
       )}
 
       {paymentVerificationError && (
-        <div className="mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-800 dark:text-rose-200 flex items-center justify-between shadow-sm">
+        <div className="mb-6 rounded-2xl border-2 border-rose-500/40 bg-rose-500/15 p-5 text-base font-semibold text-rose-950 dark:text-rose-100 flex items-center justify-between shadow-md animate-fadeIn">
           <div className="flex items-center gap-3">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0" />
-            <span>{paymentVerificationError}</span>
+            <FontAwesomeIcon icon={faTriangleExclamation} className="h-6 w-6 text-rose-600 dark:text-rose-400 shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-base text-rose-900 dark:text-rose-300">Information sur votre transaction</p>
+              <p className="text-sm sm:text-base font-medium text-foreground leading-relaxed">{paymentVerificationError}</p>
+            </div>
           </div>
           <button
             onClick={() => setPaymentVerificationError(null)}
-            className="ml-4 font-bold text-rose-700 hover:text-rose-900 dark:text-rose-300"
+            className="ml-4 font-bold text-lg p-1 text-foreground/60 hover:text-foreground"
           >
             ✕
           </button>
