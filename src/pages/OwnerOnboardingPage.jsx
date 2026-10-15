@@ -28,7 +28,8 @@ import {
   faIdCard,
   faArrowUpRightFromSquare,
   faLock,
-  faSpinner
+  faSpinner,
+  faRightFromBracket
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -45,7 +46,27 @@ import { ScrollReveal } from '../components/ScrollReveal';
 export function OwnerOnboardingPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isPartnerCertified } = useAuth();
+  const { user, isPartnerCertified, logout, loadingAuth } = useAuth();
+
+  const hasAuthTokenInUrl = typeof window !== 'undefined' && (
+    window.location.hash.includes('access_token') ||
+    window.location.hash.includes('id_token') ||
+    window.location.search.includes('code=')
+  );
+  const isResolvingAuth = Boolean(loadingAuth || (!user && hasAuthTokenInUrl));
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Erreur déconnexion:', e);
+    }
+    try {
+      localStorage.removeItem('benin_beyond_user');
+      localStorage.removeItem('benin_beyond_partner_section');
+    } catch {}
+    window.location.href = '/login';
+  };
 
   // Étape courante (1 à 7)
   const [currentStep, setCurrentStep] = useState(1);
@@ -114,6 +135,8 @@ export function OwnerOnboardingPage() {
     let mounted = true;
 
     async function loadData() {
+      if (isResolvingAuth) return;
+
       if (!user) {
         setLoadingInitial(false);
         return;
@@ -189,7 +212,7 @@ export function OwnerOnboardingPage() {
 
     loadData();
     return () => { mounted = false; };
-  }, [user]);
+  }, [user, isResolvingAuth]);
 
   // Sauvegarde automatique du brouillon (Autosave décorrélé)
   const handleSaveDraft = async (showNotification = true) => {
@@ -457,8 +480,22 @@ export function OwnerOnboardingPage() {
     }
   };
 
+  // Si l'authentification OAuth est en cours de résolution ou initialisation
+  if (loadingInitial || isResolvingAuth) {
+    return (
+      <div className="flex min-h-[60vh] w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
+          <p className="text-xs font-medium text-foreground/60">
+            {isResolvingAuth ? "Authentification sécurisée en cours..." : "Chargement de votre dossier d'onboarding..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Si l'utilisateur n'est pas connecté
-  if (!user && !loadingInitial) {
+  if (!user && !loadingInitial && !isResolvingAuth) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-20 text-center">
         <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-3xl bg-primary/10 text-primary mb-4">
@@ -490,19 +527,6 @@ export function OwnerOnboardingPage() {
     );
   }
 
-  if (loadingInitial) {
-    return (
-      <div className="flex min-h-[60vh] w-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-          <p className="text-xs font-medium text-foreground/60">
-            Chargement de votre dossier de vérification...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   // Définition des libellés des étapes
   const stepsList = [
     { num: 1, label: 'Présentation' },
@@ -515,8 +539,42 @@ export function OwnerOnboardingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Top Header Navigation */}
+      <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 lg:px-8 flex items-center justify-between shrink-0">
+        <Link to="/" className="flex items-center gap-2 group">
+          <span className="font-heading font-black text-base sm:text-lg tracking-tight text-foreground group-hover:text-primary transition-colors">
+            Bénin <span className="text-primary font-serif italic font-normal">Beyond</span>
+          </span>
+          <span className="hidden sm:inline-block text-[11px] font-semibold text-foreground/50 border-l border-foreground/15 pl-2">
+            Espace Certification Partenaire
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-foreground/15 text-xs font-semibold text-foreground/80 hover:text-foreground hover:bg-muted transition-all"
+            title="Quitter et revenir au site public"
+          >
+            <FontAwesomeIcon icon={faHouse} className="h-3 w-3 text-primary" />
+            <span>Quitter</span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-500/25 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-all active:scale-95"
+            title="Se déconnecter"
+          >
+            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            <span>Déconnexion</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
         {/* 1. Header & Reassurance Banner */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-foreground/10 pb-6">
@@ -1541,6 +1599,7 @@ export function OwnerOnboardingPage() {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

@@ -15,12 +15,12 @@ import { TravelerReviewsSection } from '../components/TravelerReviewsSection';
 const SECTIONS = [
   {
     type: 'stay',
-    title: 'Villas & appartements curatés',
+    title: 'Villas & appartements',
     link: '/explore?type=stay'
   },
   {
     type: 'drive',
-    title: 'Véhicules pour la route et la côte',
+    title: 'Véhicules',
     link: '/explore?type=drive'
   }
 ];
@@ -102,7 +102,7 @@ export function HomePage() {
                     to="/register"
                     className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 px-4 py-1.5 text-xs font-semibold transition-all"
                   >
-                    <span>Devenir partenaire certifié</span>
+                    <span>Devenir hôte certifié</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                   </Link>
                 </div>

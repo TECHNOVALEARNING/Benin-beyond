@@ -2,12 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faCompass,
-  faLandmark,
-  faMountain,
   faUtensils,
   faLocationDot,
-  faCircleInfo,
   faBed,
   faCar,
   faArrowRight
@@ -131,23 +127,56 @@ const TOURISM_SITES = [
     highlights: ['Embouchure naturelle de la Bouche du Roy', 'Navigation douce dans les mangroves', 'Villages de pêcheurs et plages sauvages'],
     tips: 'Excursion en barque motorisée avec les écoguides locaux le long du fleuve Mono. Halte idéale pour se détendre.',
     image: 'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=1200&q=80'
+  },
+  {
+    id: 'etoile-rouge-resto',
+    category: 'restaurants',
+    title: 'L\'Atelier Gourmand de la Marina — Haute Cuisine Béninoise',
+    badge: 'Table d\'Exception',
+    location: 'Cotonou · Boulevard de la Marina',
+    tagline: 'Gastronomie Béninoise & Inspirations Contemporaines',
+    description:
+      'Surplombant la marina de Cotonou, cette table gastronomique propose des créations d\'exception : carpaccio de mérou aux agrumes du terroir, agouti confit aux épices béninoises, et fondants au chocolat local. Une ambiance feutrée et une carte des vins raffinée.',
+    highlights: ['Vue panoramique sur la côte et la marina', 'Poissons nobles et arrivages côtiers', 'Terrasse lounge climatisée'],
+    tips: 'Idéal pour vos dîners de prestige et rendez-vous d’affaires. Réservation conseillée.',
+    image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80'
+  },
+  {
+    id: 'cabane-pecheur',
+    category: 'restaurants',
+    title: 'La Cabane du Pêcheur — Fruits de Mer & Paillote Littorale',
+    badge: 'Arrivages Côtiers',
+    location: 'Grand-Popo · Bord de Mer',
+    tagline: 'L\'Esprit des Plages & Grillades Braisées',
+    description:
+      'Face aux déferlantes de l\'océan à Grand-Popo, dégustez des langoustes grillées au feu de bois, des dorades royales et des brochettes de gambas fraîches accompagnées d\'aloco doré. Une atmosphère dépaysante au rythme des vagues atlantiques.',
+    highlights: ['Langoustes braisées à la minute', 'Cadre en bois flotté les pieds dans le sable', 'Cocktails de fruits frais tropicaux'],
+    tips: 'Parfait pour un déjeuner convivial après une excursion à la Bouche du Roy.',
+    image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80'
+  },
+  {
+    id: 'saveurs-lacustres',
+    category: 'restaurants',
+    title: 'L\'Oasis du Lac — Saveurs Fluviales sur Pilotis',
+    badge: 'Expérience Lacustre',
+    location: 'Ganvié · Lac Nokoué',
+    tagline: 'Poissons Frais & Spécialités Tofinu',
+    description:
+      'Accessible en barque sur les eaux calmes du lac Nokoué, ce restaurant panoramique sur pilotis vous invite à savourer des tilapias braisés, des carpes du lac en sauce graine et des spécialités lacustres traditionnelles dans un cadre magique.',
+    highlights: ['Déjeuner panoramique au fil de l’eau', 'Recettes traditionnelles du peuple du lac', 'Transfert en pirogue assuré'],
+    tips: 'Idéal pour combiner repas gastronomique et visite de la cité lacustre de Ganvié.',
+    image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
   }
 ];
 
 const CATEGORIES = [
-  { key: 'all', label: 'Toutes les découvertes', icon: faCompass },
-  { key: 'monuments', label: 'Monuments & Histoire', icon: faLandmark },
-  { key: 'nature', label: 'Paysages & Réserves', icon: faMountain },
   { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: faUtensils }
 ];
 
 export function TourismPage() {
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('restaurants');
 
-  const filteredSites =
-    selectedCategory === 'all'
-      ? TOURISM_SITES
-      : TOURISM_SITES.filter((s) => s.category === selectedCategory);
+  const filteredSites = TOURISM_SITES.filter((s) => s.category === 'restaurants');
 
   return (
     <div className="min-h-screen">
@@ -162,7 +191,7 @@ export function TourismPage() {
             </span>
             
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight max-w-4xl leading-tight">
-              Découvertes du Bénin — Trésors, Gastronomie & Culture
+              Découvertes du Bénin
             </h1>
 
             <p className="mt-6 max-w-3xl text-base sm:text-lg text-secondary-foreground/80 leading-relaxed">
@@ -170,9 +199,8 @@ export function TourismPage() {
               Explorez les monuments incontournables, les parcs nationaux et les meilleures tables gastronomiques recommandées.
             </p>
 
-            {/* Note informative */}
+            {/* Note informative sans icône i */}
             <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs sm:text-sm text-secondary-foreground/90 backdrop-blur-sm">
-              <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 text-accent shrink-0" />
               <span>
                 Monuments d'histoire, réserves naturelles et restaurants locaux partenaires certifiés par Bénin Beyond.
               </span>

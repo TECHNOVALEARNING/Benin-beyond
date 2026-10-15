@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBuilding,
@@ -15,50 +15,22 @@ import { useCart } from '../context/CartContext';
 export function PublicHeader() {
   const { user, role, logout } = useAuth();
   const { count } = useCart();
-  const location = useLocation();
-
-  const searchParams = new URLSearchParams(location.search);
-  const currentType = searchParams.get('type');
-
-  const navLinks = [
-    { to: '/explore?type=stay', label: 'Séjourner', active: location.pathname === '/explore' && currentType === 'stay' },
-    { to: '/explore?type=drive', label: 'Véhicules', active: location.pathname === '/explore' && currentType === 'drive' },
-    { to: '/decouvertes', label: 'Découvertes', active: location.pathname === '/decouvertes' || location.pathname === '/tourisme' },
-    { to: '/packs', label: 'Packs', active: location.pathname === '/packs' || location.pathname.startsWith('/pack/') }
-  ];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-foreground/10 bg-background/85 backdrop-blur-xl transform-gpu">
       <div className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5 md:px-12 gap-3">
         {/* Brand Logo */}
         <Link to="/" className="hover:opacity-95 transition-opacity group flex items-center shrink-0">
-          <BrandLogo size="md" textColor="text-foreground" subtext="Hospitalité & Mobilité" />
+          <BrandLogo size="md" textColor="text-foreground" />
         </Link>
-
-        {/* Desktop Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-1 rounded-full border border-foreground/10 bg-muted/40 p-1 text-xs font-semibold">
-          {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`rounded-full px-4 py-1.5 transition-colors ${
-                link.active
-                  ? 'bg-card text-primary shadow-sm'
-                  : 'text-foreground/75 hover:text-foreground hover:bg-muted/60'
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
 
         {/* Right CTA & Account */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
             <Link
-              to="/register?type=owner"
-              className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-foreground/20 hover:border-accent/50 px-3 py-1.5 text-xs font-semibold text-foreground/80 hover:text-accent transition-all active:scale-95 group"
-              title="Devenir Hôte ou Partenaire Hébergement/Mobilité"
+              to="/register"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-foreground/20 hover:border-accent/50 px-3 py-1.5 text-xs font-semibold text-foreground/80 hover:text-accent transition-all active:scale-95 group"
+              title="Devenir Hôte Bénin Beyond"
               aria-label="Devenir Hôte"
             >
               <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent transition-transform group-hover:scale-110" />
@@ -95,7 +67,7 @@ export function PublicHeader() {
                   role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
                     ? 'Cockpit Admin'
                     : role === 'partner' || user?.role === 'partner'
-                    ? 'Dashboard Partenaire'
+                    ? 'Dashboard Hôte'
                     : 'Mon Espace'
                 }
                 aria-label="Accéder à votre espace"
@@ -105,7 +77,7 @@ export function PublicHeader() {
                   {role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
                     ? 'Cockpit Admin'
                     : role === 'partner' || user?.role === 'partner'
-                    ? 'Dashboard Partenaire'
+                    ? 'Dashboard Hôte'
                     : 'Mon Espace'}
                 </span>
               </Link>

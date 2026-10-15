@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, useLocation, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass, faSliders } from '@fortawesome/free-solid-svg-icons';
 import { SectionHeader } from '../components/SectionHeader';
@@ -15,8 +15,21 @@ const FILTER_TABS = [
 
 export function ExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get('type');
+  const location = useLocation();
+  const rawTab = searchParams.get('type') ||
+    (location.pathname === '/residences' || location.pathname === '/hebergements' ? 'stay' :
+     location.pathname === '/vehicules' ? 'drive' : null);
   const currentTab = rawTab === 'stay' || rawTab === 'drive' ? rawTab : 'all';
+
+  const visibleTabs = useMemo(() => {
+    if (currentTab === 'stay') {
+      return [{ key: 'stay', label: 'Séjourner' }];
+    }
+    if (currentTab === 'drive') {
+      return [{ key: 'drive', label: 'Véhicules' }];
+    }
+    return FILTER_TABS;
+  }, [currentTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('featured');
@@ -95,14 +108,17 @@ export function ExplorePage() {
   return (
     <div className="mx-auto max-w-8xl px-6 py-12 md:px-12 md:py-16">
       <ScrollReveal delay={0} y={20}>
-        <SectionHeader label="Catalogue" title="Explorer le Bénin" />
+        <SectionHeader
+          label={currentTab === 'stay' ? 'Hébergements' : currentTab === 'drive' ? 'Mobilité' : 'Catalogue'}
+          title={currentTab === 'stay' ? 'Séjourner au Bénin' : currentTab === 'drive' ? 'Véhicules & Déplacements' : 'Explorer le Bénin'}
+        />
       </ScrollReveal>
 
       {/* Barre de filtres et recherche */}
       <ScrollReveal delay={60} y={20} className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         {/* Onglets d'univers */}
         <div className="flex flex-wrap gap-2">
-          {FILTER_TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const isActive = currentTab === tab.key;
             return (
               <button
@@ -184,7 +200,7 @@ export function ExplorePage() {
                 to="/register"
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
               >
-                <span>Devenir partenaire certifié</span>
+                <span>Devenir hôte certifié</span>
               </Link>
             </div>
           </div>

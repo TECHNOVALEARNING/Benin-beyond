@@ -247,6 +247,9 @@ export function LoginPage() {
     }
   };
 
+  const pendingRedirectTarget = typeof window !== 'undefined' ? localStorage.getItem('benin_beyond_oauth_redirect_path') : null;
+  const isOnboardingRedirect = pendingRedirectTarget && pendingRedirectTarget.includes('onboarding');
+
   // Écran de transition propre uniquement lors d'un retour OAuth en cours
   if ((isOAuthCallback || loadingGoogle) && !oauthTimeoutExpired) {
     return (
@@ -264,10 +267,12 @@ export function LoginPage() {
               Bénin Beyond Authentification
             </span>
             <h2 className="font-heading text-lg font-bold text-foreground">
-              Connexion sécurisée en cours...
+              {isOnboardingRedirect ? 'Préparation de votre dossier...' : 'Connexion sécurisée en cours...'}
             </h2>
             <p className="text-xs text-foreground/60 leading-relaxed">
-              Validation de vos accès et redirection directe vers votre tableau de bord.
+              {isOnboardingRedirect
+                ? "Validation de votre compte Partenaire et redirection directe vers l'espace d'onboarding officiel."
+                : 'Validation de vos accès et redirection directe vers votre tableau de bord.'}
             </p>
           </div>
         </div>
@@ -291,9 +296,6 @@ export function LoginPage() {
                 Bénin Beyond
               </span>
             </Link>
-            <p className="caption text-[10px] uppercase tracking-widest text-accent font-semibold">
-              Portail Authentification & Sécurité
-            </p>
             <h1 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-0.5">
               Connexion à votre espace
             </h1>
@@ -339,7 +341,7 @@ export function LoginPage() {
                         className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
                       >
                         <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
-                        <span>Créer un compte Partenaire</span>
+                        <span>Créer un compte Hôte</span>
                       </Link>
                       <Link
                         to="/explore"
@@ -580,7 +582,7 @@ export function LoginPage() {
                   to="/register"
                   className="font-bold text-accent hover:underline"
                 >
-                  Devenir Partenaire / Hôte
+                  Devenir Hôte
                 </Link>
               </div>
             </div>

@@ -31,14 +31,14 @@ export function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-8xl px-6 py-12 md:px-12 md:py-16">
+    <div className="mx-auto max-w-8xl px-4 py-8 sm:px-6 sm:py-12 md:px-12 md:py-16">
       <ScrollReveal delay={0} y={20}>
-        <h1 className="section-title border-t border-foreground/15 pt-6 text-3xl md:text-4xl">
+        <h1 className="section-title border-t border-foreground/15 pt-6 text-2xl sm:text-3xl md:text-4xl">
           Mon panier
         </h1>
       </ScrollReveal>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_360px]">
+      <div className="mt-8 sm:mt-10 grid gap-8 sm:gap-10 lg:grid-cols-[1fr_360px]">
         {/* Items List */}
         <div className="divide-y divide-foreground/10 border-t border-foreground/10">
           {items.map((item, index) => {
@@ -53,11 +53,11 @@ export function CartPage() {
                 key={index}
                 delay={index * 90}
                 y={18}
-                className="py-6"
+                className="py-5 sm:py-6"
               >
-                <div className="flex gap-4">
+                <div className="flex gap-3 sm:gap-4">
                   {/* Thumbnail */}
-                  <div className="h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-muted border border-foreground/10 relative">
+                  <div className="h-20 w-20 sm:h-28 sm:w-28 shrink-0 overflow-hidden rounded-xl bg-muted border border-foreground/10 relative">
                     {item.image ? (
                       <img
                         src={item.image}
@@ -77,31 +77,31 @@ export function CartPage() {
                   </div>
 
                   {/* Details */}
-                  <div className="flex flex-1 flex-col">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-heading text-lg font-semibold leading-snug">
+                  <div className="flex flex-1 flex-col min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 pr-1">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                          <h3 className="font-heading text-base sm:text-lg font-semibold leading-snug break-words">
                             {item.title}
                           </h3>
                           {isVehicle ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold shrink-0">
                               <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5" /> Véhicule (24h/j)
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent-foreground px-2 py-0.5 text-[10px] font-bold">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent-foreground px-2 py-0.5 text-[10px] font-bold shrink-0">
                               Hébergement
                             </span>
                           )}
                         </div>
                         {item.location && (
-                          <p className="text-sm text-foreground/60 mt-0.5">
+                          <p className="text-xs sm:text-sm text-foreground/60 mt-0.5 truncate">
                             {item.location}
                           </p>
                         )}
                         {/* Vehicle Specs summary if available */}
                         {isVehicle && (item.vehicle_seats > 0 || item.transmission || item.with_driver) && (
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-foreground/70">
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] text-foreground/70">
                             {item.vehicle_seats > 0 && (
                               <span className="flex items-center gap-1">
                                 <FontAwesomeIcon icon={faUsers} className="h-2.5 w-2.5 text-primary" />
@@ -119,19 +119,20 @@ export function CartPage() {
                       </div>
                       <button
                         onClick={() => removeItem(index)}
-                        className="text-foreground/40 hover:text-destructive transition-colors p-1"
+                        className="text-foreground/40 hover:text-destructive transition-colors p-1.5 shrink-0 -mr-1"
                         title="Supprimer du panier"
+                        aria-label="Supprimer du panier"
                       >
                         <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
                     {/* Duration / Quantity Adjuster */}
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
                       {(item.price_unit === 'nuit' || item.price_unit === 'jour' || isVehicle) ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-foreground/60 font-medium">
-                            {isVehicle ? 'Durée de location :' : 'Durée du séjour :'}
+                            {isVehicle ? 'Durée :' : 'Séjour :'}
                           </span>
                           <div className="inline-flex items-center rounded-lg border border-foreground/15 bg-background overflow-hidden shadow-sm">
                             <button
@@ -150,7 +151,7 @@ export function CartPage() {
                             >
                               -
                             </button>
-                            <span className="px-3 py-1 text-xs font-bold text-foreground min-w-[3.5rem] text-center font-mono bg-muted/30">
+                            <span className="px-2.5 sm:px-3 py-1 text-xs font-bold text-foreground min-w-[3rem] sm:min-w-[3.5rem] text-center font-mono bg-muted/30">
                               {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
                             </span>
                             <button
@@ -181,11 +182,11 @@ export function CartPage() {
                       )}
                     </div>
 
-                    <div className="mt-auto flex items-center justify-between pt-3 border-t border-foreground/5">
+                    <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-foreground/5">
                       <span className="text-xs text-foreground/60">
                         {formatPrice(item.price)} × {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
                       </span>
-                      <span className="font-heading text-lg font-bold text-primary">
+                      <span className="font-heading text-base sm:text-lg font-bold text-primary">
                         {formatPrice(itemTotal)}
                       </span>
                     </div>

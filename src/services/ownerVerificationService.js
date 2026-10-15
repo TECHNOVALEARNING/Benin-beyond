@@ -229,7 +229,12 @@ export function getRequiredDocuments(ownerType = 'individual', assetCategories =
 function getLocalApplications() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    const cleanList = list.filter((a) => a && a.id !== 'app_owner_patrice_demo' && a.owner_email !== 'proprietaire@beninbeyond.com');
+    if (cleanList.length !== list.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
+    }
+    return cleanList;
   } catch {
     return [];
   }
@@ -497,103 +502,9 @@ export async function getAllVerificationApplications(filters = {}) {
     }
   });
 
-  // Si la liste est vide, intégrer les comptes propriétaires de base pour permettre l'audit immédiat
-  if (map.size === 0) {
-    const defaultOwnerApp = {
-      id: 'app_owner_patrice_demo',
-      user_id: 'usr_owner_01',
-      owner_email: 'proprietaire@beninbeyond.com',
-      owner_name: 'Patrice H. (Hôte & Loueur Pro)',
-      phone: '+229 97 45 67 89',
-      owner_type: 'registered_business',
-      asset_categories: ['villa_house', 'apartment', 'vehicle'],
-      profile_data: {
-        fullName: 'Patrice HOUESSOU',
-        nationality: 'Béninoise',
-        birthDate: '1982-05-14',
-        phone: '+229 97 45 67 89',
-        email: 'proprietaire@beninbeyond.com',
-        address: 'Boulevard de la Marina, Haie Vive',
-        city: 'Cotonou',
-        country: 'Bénin',
-        idType: 'CIP',
-        idNumber: 'CIP-229-84729104',
-        idExpiry: '2029-12-31',
-        businessName: 'Littoral Prestige Assets SARL',
-        rccmNumber: 'RB/COT/21-B-12948',
-        ifuNumber: '3202111849201',
-        legalRepTitle: 'Gérant Associé Unique'
-      },
-      documents: {
-        identity_proof: {
-          id: 'doc_id_01',
-          ruleId: 'identity_proof',
-          name: 'CIP_Patrice_Houessou_RectoVerso.pdf',
-          fileUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=800&q=80',
-          fileType: 'image/jpeg',
-          fileSize: 1420000,
-          status: 'approved',
-          uploadedAt: '2025-02-10T09:00:00.000Z'
-        },
-        business_rccm: {
-          id: 'doc_rccm_01',
-          ruleId: 'business_rccm',
-          name: 'Extrait_RCCM_Littoral_Prestige_2024.pdf',
-          fileUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80',
-          fileType: 'image/jpeg',
-          fileSize: 2150000,
-          status: 'approved',
-          uploadedAt: '2025-02-10T09:05:00.000Z'
-        },
-        business_tax_ifu: {
-          id: 'doc_ifu_01',
-          ruleId: 'business_tax_ifu',
-          name: 'Attestation_Fiscale_IFU_DGI_Benin.pdf',
-          fileUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=800&q=80',
-          fileType: 'image/jpeg',
-          fileSize: 980000,
-          status: 'approved',
-          uploadedAt: '2025-02-10T09:07:00.000Z'
-        },
-        real_estate_title: {
-          id: 'doc_tf_01',
-          ruleId: 'real_estate_title',
-          name: 'Titre_Foncier_Haie_Vive_ANDF.pdf',
-          fileUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80',
-          fileType: 'image/jpeg',
-          fileSize: 3400000,
-          status: 'approved',
-          uploadedAt: '2025-02-10T09:10:00.000Z'
-        },
-        vehicle_registration_card: {
-          id: 'doc_cg_01',
-          ruleId: 'vehicle_registration_card',
-          name: 'Carte_Grise_Toyota_Prado_ANaTT.pdf',
-          fileUrl: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80',
-          fileType: 'image/jpeg',
-          fileSize: 1850000,
-          status: 'approved',
-          uploadedAt: '2025-02-10T09:12:00.000Z'
-        }
-      },
-      declarations: {
-        truthfulness: true,
-        regulatoryCompliance: true,
-        termsAccepted: true,
-        signedAt: '2025-02-10T09:15:00.000Z'
-      },
-      status: 'approved',
-      current_step: 7,
-      created_at: '2025-02-10T08:30:00.000Z',
-      updated_at: '2025-02-10T11:00:00.000Z',
-      submitted_at: '2025-02-10T09:15:00.000Z',
-      reviewed_at: '2025-02-10T11:00:00.000Z'
-    };
-    map.set(defaultOwnerApp.id, defaultOwnerApp);
-    saveLocalApplications([defaultOwnerApp]);
-  }
-
-  let results = Array.from(map.values());
+  let results = Array.from(map.values()).filter(
+    (a) => a && a.id !== 'app_owner_patrice_demo' && a.owner_email !== 'proprietaire@beninbeyond.com'
+  );
 
   // Filtrage
   if (filters.status && filters.status !== 'all') {

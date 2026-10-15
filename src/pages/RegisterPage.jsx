@@ -127,7 +127,7 @@ export function RegisterPage() {
             </div>
           )}
 
-          {/* Header Partenaire */}
+          {/* Header Hôte */}
           <div className="text-center mb-8 flex flex-col items-center">
             <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
               <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
@@ -135,12 +135,8 @@ export function RegisterPage() {
                 Bénin Beyond
               </span>
             </Link>
-            <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-accent/20 border border-accent/40 text-accent text-[11px] font-bold uppercase tracking-wider">
-              <FontAwesomeIcon icon={faBuilding} className="h-3 w-3" />
-              <span>Espace Propriétaire & Partenaire</span>
-            </div>
-            <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
-              Créer votre compte Partenaire
+            <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-2">
+              Créer votre compte Hôte
             </h1>
             <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
               Rejoignez le réseau officiel de prestige au Bénin. Créez vos identifiants pour démarrer votre dossier d'onboarding.
@@ -257,7 +253,7 @@ export function RegisterPage() {
                     </>
                   ) : (
                     <>
-                      <span>Créer mon compte Partenaire</span>
+                      <span>Créer mon compte Hôte</span>
                       <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
                     </>
                   )}

@@ -34,6 +34,18 @@ export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
   const navigate = useNavigate();
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Erreur déconnexion client:', e);
+    }
+    try {
+      localStorage.removeItem('benin_beyond_user');
+    } catch {}
+    window.location.href = '/login';
+  };
+
   const [activeTab, setActiveTab] = useState('bookings'); // 'bookings' | 'profile' | 'discoveries'
   const [userBookings, setUserBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,10 +120,6 @@ export function ClientDashboardPage() {
     };
   }, [user]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
@@ -192,18 +200,28 @@ export function ClientDashboardPage() {
     <div className="min-h-screen bg-muted/20 text-foreground pb-24">
       {/* 1. Header Bar */}
       <header className="sticky top-0 z-30 border-b border-foreground/10 bg-card/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-2.5 font-heading text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
-              <BrandIcon size={28} />
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-3.5 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <Link to="/" className="flex items-center gap-2 font-heading text-lg sm:text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
+              <BrandIcon size={26} />
               <span>Bénin Beyond</span>
             </Link>
-            <span className="hidden sm:inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary border border-primary/20">
+            <span className="hidden md:inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary border border-primary/20">
               Espace Voyageur
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Bouton Retour Accueil visible sans déconnexion */}
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-xs"
+              title="Retourner à l'accueil du site sans vous déconnecter"
+            >
+              <FontAwesomeIcon icon={faHouse} className="h-3.5 w-3.5" />
+              <span>Accueil</span>
+            </Link>
+
             <Link
               to="/explore"
               className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-4 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25 transition-all"
@@ -212,14 +230,14 @@ export function ClientDashboardPage() {
               <span>Explorer le catalogue</span>
             </Link>
 
-            <div className="flex items-center gap-2 border-l border-foreground/10 pl-3">
+            <div className="flex items-center gap-2 border-l border-foreground/10 pl-2 sm:pl-3">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shadow-md">
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs shadow-md shrink-0">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
-                <div className="hidden sm:block text-left">
+                <div className="hidden lg:block text-left">
                   <p className="text-xs font-semibold leading-none">{displayName}</p>
-                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[140px]">{displayEmail}</p>
+                  <p className="text-[11px] text-foreground/50 leading-tight truncate max-w-[120px]">{displayEmail}</p>
                 </div>
               </div>
 
@@ -227,7 +245,7 @@ export function ClientDashboardPage() {
                 type="button"
                 onClick={handleLogout}
                 title="Se déconnecter"
-                className="ml-2 px-3 py-1.5 rounded-xl border border-destructive/20 text-destructive hover:bg-destructive/10 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-destructive/20 text-destructive hover:bg-destructive/10 text-xs font-semibold transition-colors flex items-center gap-1.5"
               >
                 <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Déconnexion</span>
@@ -238,37 +256,37 @@ export function ClientDashboardPage() {
       </header>
 
       {/* 2. Banner & Metrics Overview */}
-      <div className="mx-auto max-w-7xl px-6 pt-8">
+      <div className="mx-auto max-w-7xl px-3.5 sm:px-6 pt-5 sm:pt-8">
         <ScrollReveal delay={0} y={15}>
-          <div className="relative overflow-hidden rounded-3xl bg-secondary text-secondary-foreground p-6 sm:p-10 shadow-xl">
+          <div className="relative overflow-hidden rounded-3xl bg-secondary text-secondary-foreground p-5 sm:p-8 md:p-10 shadow-xl">
             <div className="absolute right-0 top-0 -mt-12 -mr-12 h-64 w-64 rounded-full bg-accent/20 blur-3xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-5 sm:gap-6">
               <div>
                 <span className="caption text-accent font-semibold tracking-widest text-xs uppercase mb-2 inline-block">
                   Tableau de bord personnel
                 </span>
-                <h1 className="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">
+                <h1 className="font-heading text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight">
                   {getTimeBasedGreeting()}, {displayName}
                 </h1>
-                <p className="mt-1 text-sm text-secondary-foreground/75 max-w-xl">
+                <p className="mt-1 text-xs sm:text-sm text-secondary-foreground/75 max-w-xl">
                   Retrouvez l’ensemble de vos réservations, téléchargez vos reçus officiels et préparez vos déplacements au Bénin en toute sérénité.
                 </p>
               </div>
 
               {/* Stats Counters */}
-              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-                <div className="rounded-2xl bg-white/10 backdrop-blur-md px-5 py-3 border border-white/10 text-center">
-                  <span className="block font-heading text-2xl font-black text-white">
+              <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-center sm:gap-4 shrink-0">
+                <div className="rounded-2xl bg-white/10 backdrop-blur-md px-4 sm:px-5 py-2.5 sm:py-3 border border-white/10 text-center">
+                  <span className="block font-heading text-xl sm:text-2xl font-black text-white">
                     {userBookings.length}
                   </span>
-                  <span className="text-[11px] uppercase tracking-wider text-white/70">Réservation(s)</span>
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/70">Réservation(s)</span>
                 </div>
 
-                <div className="rounded-2xl bg-white/10 backdrop-blur-md px-5 py-3 border border-white/10 text-center">
-                  <span className="block font-heading text-xl sm:text-2xl font-black text-accent">
+                <div className="rounded-2xl bg-white/10 backdrop-blur-md px-4 sm:px-5 py-2.5 sm:py-3 border border-white/10 text-center">
+                  <span className="block font-heading text-base sm:text-xl md:text-2xl font-black text-accent truncate">
                     {formatPrice(totalSpent)}
                   </span>
-                  <span className="text-[11px] uppercase tracking-wider text-white/70">Total investi</span>
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/70">Total investi</span>
                 </div>
               </div>
             </div>
@@ -276,11 +294,11 @@ export function ClientDashboardPage() {
         </ScrollReveal>
 
         {/* 3. Navigation Tabs */}
-        <div className="mt-8 flex border-b border-foreground/10 pb-2">
-          <div className="flex gap-2">
+        <div className="mt-6 sm:mt-8 border-b border-foreground/10 pb-2">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-1 -mx-2 px-2 sm:mx-0 sm:px-0">
             <button
               onClick={() => setActiveTab('bookings')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
+              className={`flex shrink-0 whitespace-nowrap items-center gap-2 rounded-xl px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === 'bookings'
                   ? 'bg-primary text-white shadow-md'
                   : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'
@@ -292,7 +310,7 @@ export function ClientDashboardPage() {
 
             <button
               onClick={() => setActiveTab('profile')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
+              className={`flex shrink-0 whitespace-nowrap items-center gap-2 rounded-xl px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === 'profile'
                   ? 'bg-primary text-white shadow-md'
                   : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'
@@ -304,7 +322,7 @@ export function ClientDashboardPage() {
 
             <button
               onClick={() => setActiveTab('discoveries')}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
+              className={`flex shrink-0 whitespace-nowrap items-center gap-2 rounded-xl px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === 'discoveries'
                   ? 'bg-primary text-white shadow-md'
                   : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'

@@ -157,16 +157,16 @@ export function HeroPinterestCarousel() {
       <div className="absolute inset-x-0 top-0 z-30 px-4 pt-4 sm:px-6 sm:pt-6 md:px-12">
         <div className="mx-auto flex max-w-8xl items-center justify-between gap-3">
           <Link to="/" className="hover:opacity-95 transition-opacity group shrink-0">
-            <BrandLogo size="md" textColor="text-white" subtext="Voyage & Standing" />
+            <BrandLogo size="md" textColor="text-white" />
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Espace Propriétaire : toujours accessible pour devenir hôte / partenaire */}
+            {/* Espace Propriétaire / Hôte */}
             {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
               <Link
-                to="/register?type=owner"
-                className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
-                title="Devenir Hôte ou Partenaire Hébergement/Mobilité"
+                to="/register"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
+                title="Devenir Hôte Bénin Beyond"
                 aria-label="Devenir Hôte"
               >
                 <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent transition-transform group-hover:scale-110" />
@@ -236,25 +236,19 @@ export function HeroPinterestCarousel() {
         
         <div className="w-full max-w-2xl text-white">
           <div className="overflow-visible">
-            <h1
-              key={`title-${currentIndex}`}
-              className="font-heading text-4xl sm:text-5xl md:text-6xl font-extrabold uppercase tracking-normal text-white animate-slideUp leading-tight drop-shadow-lg"
-            >
-              {activeDest.name}
+            <h1 className="font-heading text-4xl sm:text-5xl md:text-6xl font-extrabold uppercase tracking-normal text-white leading-tight drop-shadow-lg">
+              L'Hospitalité & la Mobilité d'Exception
             </h1>
           </div>
 
-          <p
-            key={`desc-${currentIndex}`}
-            className="mt-4 text-sm sm:text-base md:text-lg leading-relaxed text-white/90 max-w-xl animate-fadeIn drop-shadow"
-          >
-            {activeDest.description}
+          <p className="mt-4 text-sm sm:text-base md:text-lg leading-relaxed text-white/90 max-w-xl drop-shadow">
+            Villas de prestige, résidences de standing et véhicules haut de gamme pour vivre un séjour inoubliable à travers le Bénin.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link to={activeDest.exploreLink}>
+            <Link to="/explore">
               <button className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white shadow-2xl hover:bg-primary/90 transition-all active:scale-95 border border-white/10">
-                <span>Explorer {activeDest.name}</span>
+                <span>Explorer nos offres</span>
                 <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </button>
             </Link>
@@ -264,23 +258,23 @@ export function HeroPinterestCarousel() {
               <button
                 onClick={prevSlide}
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md hover:bg-white/20 transition-all active:scale-90 shadow-lg"
-                title="Précédent"
-                aria-label="Destination précédente"
+                title="Photo précédente"
+                aria-label="Photo précédente"
               >
                 <FontAwesomeIcon icon={faChevronLeft} className="h-4 w-4" />
               </button>
               <button
                 onClick={nextSlide}
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md hover:bg-white/20 transition-all active:scale-90 shadow-lg"
-                title="Suivant"
-                aria-label="Destination suivante"
+                title="Photo suivante"
+                aria-label="Photo suivante"
               >
                 <FontAwesomeIcon icon={faChevronRight} className="h-4 w-4" />
               </button>
             </div>
           </div>
 
-          {/* Progress Timeline, Index Indicator & Destination Quick Tabs */}
+          {/* Progress Timeline & Index Indicator */}
           <div className="mt-8 flex flex-wrap items-center gap-5 text-xs text-white/75">
             <div className="flex items-center gap-3 font-mono">
               <span className="font-bold text-accent text-sm">0{currentIndex + 1}</span>
@@ -294,22 +288,21 @@ export function HeroPinterestCarousel() {
               <span className="text-white/60">0{DESTINATIONS.length}</span>
             </div>
 
-            {/* Subtle destination pills for direct switching without bulky cards */}
-            <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-white/20">
-              {DESTINATIONS.map((dest, idx) => {
+            {/* Subtle slide pills without city names */}
+            <div className="hidden sm:flex items-center gap-1.5 pl-2 border-l border-white/20">
+              {DESTINATIONS.map((_, idx) => {
                 const isActive = idx === currentIndex;
                 return (
                   <button
-                    key={dest.id}
+                    key={idx}
                     onClick={() => changeSlide(idx, idx > currentIndex ? 'next' : 'prev')}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    className={`h-2 rounded-full transition-all ${
                       isActive
-                        ? 'bg-white text-black font-semibold shadow'
-                        : 'bg-black/30 text-white/80 hover:bg-white/20 hover:text-white backdrop-blur-sm'
+                        ? 'w-6 bg-accent shadow'
+                        : 'w-2 bg-white/40 hover:bg-white/70'
                     }`}
-                  >
-                    {dest.name}
-                  </button>
+                    aria-label={`Aller au slide ${idx + 1}`}
+                  />
                 );
               })}
             </div>

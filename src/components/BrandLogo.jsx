@@ -125,7 +125,6 @@ export function BrandLogo({
   size = 'md',
   showText = true,
   textColor = 'text-foreground',
-  subtext = null,
   className = '',
   iconClassName = '',
   textClassName = ''
@@ -138,11 +137,6 @@ export function BrandLogo({
           <span className={`font-heading font-bold tracking-tight whitespace-nowrap ${size === 'lg' ? 'text-2xl md:text-3xl' : size === 'sm' ? 'text-sm sm:text-base' : 'text-lg sm:text-xl'} ${textColor} ${textClassName}`}>
             Bénin Beyond
           </span>
-          {subtext && (
-            <span className="text-[9px] sm:text-[10px] tracking-wider uppercase text-accent font-semibold -mt-0.5 whitespace-nowrap">
-              {subtext}
-            </span>
-          )}
         </div>
       )}
     </div>

@@ -2322,17 +2322,6 @@ export function AdminDashboardPage() {
                 <span>{platformMetrics.pendingBookingsCount} résa(s)</span>
               </span>
             )}
-            
-            {/* Bouton Quitter l'administration et revenir sur le site public */}
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors shadow-sm"
-              title="Quitter l'administration et revenir sur le site public"
-            >
-              <FontAwesomeIcon icon={faHouse} className="h-3 w-3 text-primary" />
-              <span>Quitter</span>
-            </Link>
-
             {isSuperAdmin && (
               <button
                 type="button"
@@ -2349,18 +2338,6 @@ export function AdminDashboardPage() {
                 <span>Mon mot de passe</span>
               </button>
             )}
-
-            {/* Déconnexion Universelle (Mobile & Desktop) */}
-            <button
-              type="button"
-              onClick={handleAdminLogout}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all shadow-sm active:scale-95"
-              title="Se déconnecter de l'interface d'administration"
-              aria-label="Se déconnecter"
-            >
-              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
-              <span>Déconnexion</span>
-            </button>
           </div>
         </header>
 

@@ -19,16 +19,6 @@ export const DEMO_USERS = {
     verified: true,
     kyc_status: 'verified'
   },
-  owner: {
-    id: 'usr_owner_01',
-    name: 'Patrice H. (Hôte & Loueur Pro)',
-    email: 'proprietaire@beninbeyond.com',
-    role: 'owner',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    company: 'Littoral Prestige Assets',
-    verified: true,
-    kyc_status: 'verified'
-  },
   client: {
     id: 'usr_client_01',
     name: 'Amina Koffi',
@@ -157,6 +147,27 @@ export function AuthProvider({ children }) {
     return Boolean(user && user.email?.includes('beninbeyond.bj'));
   });
 
+  const [loadingAuth, setLoadingAuth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      return (
+        hash.includes('access_token') ||
+        hash.includes('id_token') ||
+        search.includes('code=') ||
+        Boolean(localStorage.getItem('benin_beyond_oauth_in_progress'))
+      );
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (loadingAuth) {
+      const timer = setTimeout(() => setLoadingAuth(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [loadingAuth]);
+
   // Synchronisation du stockage local à chaque mise à jour utilisateur
   useEffect(() => {
     if (user) {
@@ -177,13 +188,19 @@ export function AuthProvider({ children }) {
 
   // Synchronisation avec Supabase Auth & écoute des redirections OAuth (Google)
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      setLoadingAuth(false);
+      return;
+    }
 
     // Vérifier la session active Supabase au montage (et synchroniser le profil en tâche de fond)
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         await syncSupabaseSession(session.user);
       }
+      setLoadingAuth(false);
+    }).catch(() => {
+      setLoadingAuth(false);
     });
 
     // Écouteur d'évènements Auth Supabase (ex: retour de Google OAuth)
@@ -193,6 +210,7 @@ export function AuthProvider({ children }) {
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
+      setLoadingAuth(false);
     });
 
     // Rafraîchissement en direct lorsque l'utilisateur revient sur l'onglet
@@ -244,6 +262,7 @@ export function AuthProvider({ children }) {
     const intendedRole = localStorage.getItem('benin_beyond_oauth_intended_role');
     const intendedCompany = localStorage.getItem('benin_beyond_oauth_intended_company');
     const registrationRole = localStorage.getItem('benin_beyond_registration_role');
+    const redirectPath = localStorage.getItem('benin_beyond_oauth_redirect_path');
     localStorage.removeItem('benin_beyond_oauth_intended_role');
     localStorage.removeItem('benin_beyond_oauth_intended_company');
 
@@ -342,6 +361,16 @@ export function AuthProvider({ children }) {
 
     saveRegisteredUser(finalUser);
     setUser(finalUser);
+
+    if (redirectPath) {
+      try {
+        localStorage.removeItem('benin_beyond_oauth_redirect_path');
+        if (typeof window !== 'undefined' && window.location.pathname !== redirectPath) {
+          window.location.replace(redirectPath);
+        }
+      } catch {}
+    }
+
     return finalUser;
   };
 
@@ -951,6 +980,8 @@ export function AuthProvider({ children }) {
         isSubAdmin: Boolean(user && (user.role === 'subadmin' || (user.role === 'admin' && user.email?.toLowerCase().trim() !== SUPER_ADMIN_EMAIL))),
         isAuthenticated: Boolean(user),
         isDemoMode,
+        loadingAuth,
+        isAuthLoading: loadingAuth,
         login,
         loginWithGoogle,
         loginAsDemo,

@@ -18,19 +18,6 @@ const DEFAULT_INITIAL_USERS = [
     verified: true,
     is_active: true,
     created_at: '2025-01-01T00:00:00.000Z'
-  },
-  {
-    id: 'usr_owner_01',
-    name: 'Patrice H. (Hôte & Loueur Pro)',
-    email: 'proprietaire@beninbeyond.com',
-    phone: '+229 97 45 67 89',
-    role: 'owner',
-    company: 'Littoral Prestige Assets SARL',
-    partner_type: 'stay',
-    kyc_status: 'verified',
-    verified: true,
-    is_active: true,
-    created_at: '2025-02-10T08:30:00.000Z'
   }
 ];
 
@@ -92,19 +79,25 @@ function getLocalUsers() {
     const overrides = getAdminOverrides();
     const deleted = getDeletedUserIds();
 
-    return list
-      .filter((u) => {
-        const email = (u.email || '').trim().toLowerCase();
-        const id = (u.id || '').toString().toLowerCase();
-        // Filtrer les comptes supprimés et les anciens comptes démo factices
-        return !deleted.has(email) && !deleted.has(id) && email !== 'assistant@beninbeyond.com' && email !== 'voyageur@beninbeyond.com';
-      })
-      .map((u) => {
-        const email = (u.email || '').trim().toLowerCase();
-        const id = (u.id || '').toString().toLowerCase();
-        const isAdmin = email === SUPER_ADMIN_EMAIL || u.role === 'admin';
-        const override = overrides[email] || overrides[id] || {};
-        const isSubAdmin = !isAdmin && (override.role === 'subadmin' || u.role === 'subadmin');
+    const cleanList = list.filter((u) => {
+      const email = (u.email || '').trim().toLowerCase();
+      const id = (u.id || '').toString().toLowerCase();
+      // Filtrer les comptes supprimés et les anciens comptes démo factices
+      return !deleted.has(email) && !deleted.has(id) && email !== 'proprietaire@beninbeyond.com' && id !== 'usr_owner_01' && email !== 'assistant@beninbeyond.com' && email !== 'voyageur@beninbeyond.com';
+    });
+
+    if (cleanList.length !== list.length) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
+      } catch {}
+    }
+
+    return cleanList.map((u) => {
+      const email = (u.email || '').trim().toLowerCase();
+      const id = (u.id || '').toString().toLowerCase();
+      const isAdmin = email === SUPER_ADMIN_EMAIL || u.role === 'admin';
+      const override = overrides[email] || overrides[id] || {};
+      const isSubAdmin = !isAdmin && (override.role === 'subadmin' || u.role === 'subadmin');
 
         return {
           id: u.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,

@@ -76,6 +76,19 @@ export function PartnerDashboardPage() {
   const { user, role, logout } = useAuth();
   const [verificationApp, setVerificationApp] = useState(null);
 
+  const handlePartnerLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Erreur déconnexion partenaire:', e);
+    }
+    try {
+      localStorage.removeItem('benin_beyond_user');
+      localStorage.removeItem('benin_beyond_partner_section');
+    } catch {}
+    window.location.href = '/login';
+  };
+
   useEffect(() => {
     if (user) {
       getVerificationApplication(user.id, user.email).then((app) => {
