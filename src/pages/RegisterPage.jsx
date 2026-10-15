@@ -164,9 +164,9 @@ export function RegisterPage() {
       });
 
       if (res.success) {
-        setSuccessMsg('Dossier propriétaire initialisé avec succès ! Redirection vers votre espace...');
+        setSuccessMsg('Compte propriétaire créé avec succès ! Redirection vers votre vérification officielle...');
         setTimeout(() => {
-          navigate('/dashboard/partner', { replace: true });
+          navigate('/onboarding/partner', { replace: true });
         }, 600);
       } else {
         setError(res.error || "Impossible d'enregistrer votre dossier.");

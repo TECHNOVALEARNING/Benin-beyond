@@ -68,11 +68,23 @@ import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
+import { getVerificationApplication } from '../services/ownerVerificationService';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
-  const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified');
+  const [verificationApp, setVerificationApp] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      getVerificationApplication(user.id, user.email).then((app) => {
+        if (app) setVerificationApp(app);
+      });
+    }
+  }, [user]);
+
+  const verifStatus = verificationApp?.status || (user?.kyc_status === 'verified' ? 'approved' : (user?.kyc_status || 'draft'));
+  const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified' || verifStatus === 'approved');
 
   // Sidebar navigation state
   const [currentSection, setCurrentSection] = useState(() => {
@@ -947,7 +959,14 @@ export function PartnerDashboardPage() {
     { key: 'listings', label: 'Mes annonces & biens', icon: faHouse, count: listings.length },
     { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus, highlight: true },
     { key: 'finances', label: 'Solde & Revenus', icon: faWallet },
-    { key: 'stats', label: 'Statistiques & Vues', icon: faChartLine }
+    { key: 'stats', label: 'Statistiques & Vues', icon: faChartLine },
+    {
+      key: 'verification',
+      label: 'Vérification & Dossier KYC',
+      icon: faShieldHalved,
+      badge: isPartnerCertified ? 'Certifié' : (verifStatus === 'additional_info_required' ? 'Action requise' : 'En attente'),
+      action: () => navigate('/onboarding/partner')
+    }
   ];
 
   return (
@@ -1028,7 +1047,11 @@ export function PartnerDashboardPage() {
                 <button
                   key={item.key}
                   onClick={() => {
-                    handleSetSection(item.key);
+                    if (item.action) {
+                      item.action();
+                    } else {
+                      handleSetSection(item.key);
+                    }
                     setSidebarOpen(false);
                   }}
                   className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all btn-press ${
@@ -1185,29 +1208,125 @@ export function PartnerDashboardPage() {
                 </div>
               </div>
               
-              {/* KYC Status Notice Banner */}
-              {!user?.verified && (
+              {/* Dual Indicators: Subscription Status vs Verification Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Statut Abonnement */}
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center justify-between shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                      <FontAwesomeIcon icon={faCircleCheck} className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                        Abonnement Propriétaire Partenaire
+                      </p>
+                      <p className="font-heading text-sm font-bold text-foreground">
+                        Formule Sérénité & Visibilité Pro — Actif
+                      </p>
+                      <p className="text-[11px] text-foreground/50">Renouvellement annuel jusqu'au 31/12/2026</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+                    En règle
+                  </span>
+                </div>
+
+                {/* 2. Statut Vérification (KYC / KYB / Actifs) */}
+                <div className={`rounded-2xl border p-4 flex items-center justify-between shadow-xs ${
+                  isPartnerCertified
+                    ? 'border-emerald-500/20 bg-emerald-500/5'
+                    : verifStatus === 'additional_info_required'
+                    ? 'border-amber-500/40 bg-amber-500/10'
+                    : verifStatus === 'rejected'
+                    ? 'border-rose-500/30 bg-rose-500/10'
+                    : 'border-primary/20 bg-primary/5'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
+                      isPartnerCertified
+                        ? 'bg-emerald-500/20 text-emerald-600'
+                        : verifStatus === 'additional_info_required'
+                        ? 'bg-amber-500/20 text-amber-700'
+                        : verifStatus === 'rejected'
+                        ? 'bg-rose-500/20 text-rose-700'
+                        : 'bg-primary/20 text-primary'
+                    }`}>
+                      <FontAwesomeIcon icon={isPartnerCertified ? faShieldHalved : verifStatus === 'additional_info_required' ? faTriangleExclamation : faClock} className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/60">
+                        Vérification & Conformité (KYC / Actifs)
+                      </p>
+                      <p className="font-heading text-sm font-bold text-foreground">
+                        {isPartnerCertified
+                          ? 'Identité & Actifs Certifiés Conformes'
+                          : verifStatus === 'additional_info_required'
+                          ? 'Complément d’information requis'
+                          : verifStatus === 'rejected'
+                          ? 'Dossier de vérification refusé'
+                          : verifStatus === 'submitted' || verifStatus === 'under_review'
+                          ? 'Dossier en cours d’examen'
+                          : 'Dossier non finalisé (Brouillon)'}
+                      </p>
+                      <p className="text-[11px] text-foreground/50">
+                        {isPartnerCertified
+                          ? 'Publications directes en ligne actives'
+                          : 'Publication bloquée jusqu’à validation'}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/onboarding/partner"
+                    className="rounded-xl bg-primary text-white text-xs font-bold px-3 py-1.5 hover:bg-primary-dark transition-all shrink-0 inline-flex items-center gap-1.5 shadow-xs"
+                  >
+                    <span>{isPartnerCertified ? 'Consulter' : 'Gérer'}</span>
+                    <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Action Banner if NOT certified */}
+              {!isPartnerCertified && (
                 <div className={`rounded-2xl border p-4 flex items-start gap-3.5 shadow-sm ${
-                  user?.kyc_status === 'rejected'
+                  verifStatus === 'additional_info_required'
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                    : verifStatus === 'rejected'
                     ? 'border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-200'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                    : 'border-primary/20 bg-primary/5 text-foreground'
                 }`}>
                   <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                    user?.kyc_status === 'rejected'
+                    verifStatus === 'additional_info_required'
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                      : verifStatus === 'rejected'
                       ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                      : 'bg-primary/20 text-primary'
                   }`}>
-                    <FontAwesomeIcon icon={user?.kyc_status === 'rejected' ? faTriangleExclamation : faClock} className="h-4 w-4" />
+                    <FontAwesomeIcon icon={verifStatus === 'additional_info_required' ? faTriangleExclamation : faClock} className="h-4 w-4" />
                   </div>
                   <div className="text-xs flex-1">
                     <p className="font-bold text-sm text-foreground">
-                      {user?.kyc_status === 'rejected' ? 'Dossier KYC Non Conforme — Action requise' : "Compte Propriétaire en cours d'audit KYC"}
+                      {verifStatus === 'additional_info_required'
+                        ? 'Action requise : Des pièces justificatives nécessitent une correction'
+                        : verifStatus === 'rejected'
+                        ? 'Dossier de vérification rejeté par l’équipe de modération'
+                        : 'Finalisez votre vérification pour débloquer la visibilité publique de vos annonces'}
                     </p>
                     <p className="mt-1 text-foreground/70 leading-relaxed">
-                      {user?.kyc_status === 'rejected'
-                        ? `Votre dossier a été refusé par l'administration avec le motif suivant : "${user.rejection_reason || 'Pièce justificative non conforme ou IFU invalide'}". Veuillez contacter le support ou mettre à jour vos pièces justificatives.`
-                        : "Bienvenue sur Bénin Beyond ! Vous pouvez dès à présent créer et enregistrer vos annonces d'hébergement ou de véhicule. Vos annonces seront automatiquement transmises à l'administration et deviendront visibles publiquement sur la plateforme dès que votre profil sera certifié par la direction."}
+                      {verifStatus === 'additional_info_required'
+                        ? `L’équipe de conformité a demandé le remplacement de certains documents : "${verificationApp?.admin_feedback || 'Veuillez vérifier les pièces signalées'}". Vos annonces restent en attente tant que ces pièces ne sont pas régularisées.`
+                        : verifStatus === 'rejected'
+                        ? `Motif du refus : "${user?.rejection_reason || verificationApp?.rejection_reason || 'Dossier non conforme'}". Cliquez sur "Gérer" pour corriger votre demande.`
+                        : 'Bienvenue sur Bénin Beyond ! Vous pouvez créer et enregistrer vos annonces dès maintenant. Pour des raisons de sécurité juridique des voyageurs, vos biens seront automatiquement mis en ligne dès validation officielle de votre dossier.'}
                     </p>
+                    <div className="pt-2">
+                      <Link
+                        to="/onboarding/partner"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                      >
+                        <span>Accéder à mon espace de vérification</span>
+                        <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )}

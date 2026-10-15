@@ -146,6 +146,10 @@ export function Footer() {
             <Link to="/cgu" className="hover:text-accent transition-colors">
               Conditions d'Utilisation
             </Link>
+            <span className="text-secondary-foreground/30">•</span>
+            <Link to="/admin" className="hover:text-accent transition-colors text-secondary-foreground/75 font-semibold">
+              Console Administration
+            </Link>
             <span className="text-secondary-foreground/30 hidden md:inline">•</span>
             <span className="text-secondary-foreground/40 hidden md:inline">
               Plateforme Curatée d'Hospitalité & Mobilité

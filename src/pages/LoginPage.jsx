@@ -235,8 +235,8 @@ export function LoginPage() {
     }
   };
 
-  // Écran de transition propre et instantané pour éviter tout clignotement de formulaire lors d'un retour OAuth
-  if (user || ((isOAuthCallback || loadingGoogle) && !oauthTimeoutExpired)) {
+  // Écran de transition propre uniquement lors d'un retour OAuth en cours
+  if ((isOAuthCallback || loadingGoogle) && !oauthTimeoutExpired) {
     return (
       <div className="min-h-[85vh] w-full flex flex-col items-center justify-center px-4">
         <div className="relative flex flex-col items-center max-w-sm w-full p-8 rounded-3xl bg-card border border-foreground/10 shadow-2xl text-center space-y-6 animate-fadeIn">

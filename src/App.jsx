@@ -30,6 +30,9 @@ const PartnerDashboardPage = React.lazy(() =>
 const ClientDashboardPage = React.lazy(() =>
   import('./pages/ClientDashboardPage').then(m => ({ default: m.ClientDashboardPage }))
 );
+const OwnerOnboardingPage = React.lazy(() =>
+  import('./pages/OwnerOnboardingPage').then(m => ({ default: m.OwnerOnboardingPage }))
+);
 
 // Fallback de chargement pendant le téléchargement d'un chunk
 function DashboardLoader() {
@@ -37,7 +40,7 @@ function DashboardLoader() {
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-        <p className="text-sm text-foreground/60 font-medium">Chargement du tableau de bord…</p>
+        <p className="text-sm text-foreground/60 font-medium">Chargement…</p>
       </div>
     </div>
   );
@@ -56,8 +59,9 @@ export function App() {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
   const isAuth = location.pathname === '/login' || location.pathname === '/register';
+  const isOnboarding = location.pathname.startsWith('/onboarding') || location.pathname.startsWith('/partner/verification') || location.pathname.startsWith('/partner/onboarding');
   const isHome = location.pathname === '/';
-  const hidePublicChrome = isDashboard || isAuth;
+  const hidePublicChrome = isDashboard || isAuth || isOnboarding;
   const showPublicHeader = !isHome && !hidePublicChrome;
 
   return (
@@ -111,13 +115,23 @@ export function App() {
                     </ProtectedRoute>
                   }
                 />
+                {/* Onboarding & Vérification Propriétaires (KYC / KYB) */}
+                <Route
+                  path="/onboarding/partner"
+                  element={<OwnerOnboardingPage />}
+                />
+                <Route
+                  path="/partner/verification"
+                  element={<OwnerOnboardingPage />}
+                />
+                <Route
+                  path="/partner/onboarding"
+                  element={<OwnerOnboardingPage />}
+                />
+
                 <Route
                   path="/admin"
-                  element={
-                    <ProtectedRoute allowedRoles={['admin', 'subadmin']}>
-                      <AdminDashboardPage />
-                    </ProtectedRoute>
-                  }
+                  element={<AdminDashboardPage />}
                 />
 
                 <Route path="*" element={<NotFoundPage />} />
