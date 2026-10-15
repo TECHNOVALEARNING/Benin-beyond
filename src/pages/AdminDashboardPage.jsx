@@ -993,7 +993,7 @@ export function AdminDashboardPage() {
       price: priceNum,
       price_unit: formPurpose === 'vente' ? 'vente totale' : formPriceUnit,
       description: formDescription || 'Hébergement ou véhicule haut de gamme certifié par la direction Bénin Beyond.',
-      badge: adminInstantPublish ? 'Vérifié par Bénin Beyond' : 'En attente de modération',
+      badge: adminInstantPublish ? 'Certifié' : 'En attente de modération',
       specs: specsArray.length > 0 ? specsArray : ['Climatisation', 'Sécurité 24/7', 'Standing Exclusif'],
       gallery: finalGallery,
       video_url: uploadedVideo?.url || null,
@@ -1412,7 +1412,7 @@ export function AdminDashboardPage() {
         fuel_type: isDrive ? editFormFuel : null,
         available_from: isDrive ? null : (editFormAvailableFrom || null),
         available_to: isDrive ? null : (editFormAvailableTo || null),
-        badge: editFormBadge.trim() || (editFormStatus === 'active' ? 'Vérifié par Bénin Beyond' : null),
+        badge: editFormBadge.trim() || (editFormStatus === 'active' ? 'Certifié' : null),
         status: editFormStatus
       };
 

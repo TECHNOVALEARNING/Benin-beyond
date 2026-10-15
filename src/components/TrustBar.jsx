@@ -2,7 +2,7 @@ import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faShieldHalved,
-  faCircleCheck,
+  faCrown,
   faLocationDot,
   faHeadset
 } from '@fortawesome/free-solid-svg-icons';
@@ -15,9 +15,9 @@ const TRUST_PILLARS = [
     text: 'Mobile Money, carte & wallets — transactions cryptées bout-en-bout.'
   },
   {
-    icon: faCircleCheck,
-    title: 'Vérifié par Bénin Beyond',
-    text: 'Chaque annonce est inspectée sur place par notre équipe locale.'
+    icon: faCrown,
+    title: 'Excellence & Standing',
+    text: 'Une sélection haut de gamme répondant aux standards les plus exigeants.'
   },
   {
     icon: faLocationDot,

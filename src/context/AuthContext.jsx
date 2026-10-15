@@ -568,12 +568,15 @@ export function AuthProvider({ children }) {
   /**
    * Connexion OAuth avec Google (avec préservation stricte du rôle et du compte)
    */
-  const loginWithGoogle = async (intendedRole = null, company = '') => {
+  const loginWithGoogle = async (intendedRole = null, company = '', redirectPath = null) => {
     if (intendedRole) {
       try {
         localStorage.setItem('benin_beyond_oauth_intended_role', intendedRole);
         if (company) {
           localStorage.setItem('benin_beyond_oauth_intended_company', company);
+        }
+        if (redirectPath) {
+          localStorage.setItem('benin_beyond_oauth_redirect_path', redirectPath);
         }
       } catch (e) {
         console.warn('Erreur stockage intention rôle OAuth:', e);
@@ -585,7 +588,8 @@ export function AuthProvider({ children }) {
         const currentOrigin = typeof window !== 'undefined' && window.location.origin
           ? window.location.origin.replace(/\/+$/, '')
           : '';
-        const redirectTarget = currentOrigin ? `${currentOrigin}/login` : undefined;
+        const targetPath = redirectPath || '/login';
+        const redirectTarget = currentOrigin ? `${currentOrigin}${targetPath}` : undefined;
 
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',

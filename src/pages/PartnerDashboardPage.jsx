@@ -52,7 +52,8 @@ import {
   faCheck,
   faPen,
   faSpinner,
-  faCircleInfo
+  faCircleInfo,
+  faHotel
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
@@ -797,8 +798,8 @@ export function PartnerDashboardPage() {
         : (editingListingModal.status || 'active');
 
       const nextBadge = editingListingModal.status === 'refused'
-        ? (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente')
-        : (editingListingModal.badge || 'Vérifié par Bénin Beyond');
+        ? (isPartnerCertified ? 'Certifié' : 'En attente')
+        : (editingListingModal.badge || 'Certifié');
 
       const updates = {
         title: editFormTitle.trim(),
@@ -908,12 +909,12 @@ export function PartnerDashboardPage() {
       transmission: isVeh ? transmission : null,
       fuel_type: isVeh ? fuelType : null,
       with_driver: isVeh ? withDriver : false,
-      description: formDescription || (isVeh ? 'Véhicule haut de gamme vérifié par Bénin Beyond.' : 'Hébergement haut de gamme vérifié par Bénin Beyond.'),
+      description: formDescription || (isVeh ? 'Véhicule haut de gamme de prestige.' : 'Hébergement haut de gamme de prestige.'),
       badge: isVeh
         ? `${seatsNum} places · ${transmission === 'automatique' ? 'Auto' : 'Manuelle'}`
         : (formSubcategory === 'hotel'
           ? `${roomsNum} chambre(s) dispo`
-          : (isPartnerCertified ? 'Vérifié par Bénin Beyond' : 'En attente de certification KYC')),
+          : (isPartnerCertified ? 'Certifié' : 'En attente de certification KYC')),
       specs: specsArray.length > 0 ? specsArray : (isVeh ? ['Climatisation', `${seatsNum} places`, transmission === 'automatique' ? 'Boîte Automatique' : 'Boîte Manuelle'] : ['Climatisation', 'Sécurité 24/7', 'Standing']),
       gallery: finalGallery,
       video_url: null,

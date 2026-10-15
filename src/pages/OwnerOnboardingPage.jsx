@@ -156,11 +156,28 @@ export function OwnerOnboardingPage() {
             setDeclarations((prev) => ({ ...prev, ...app.declarations }));
           }
 
-          // Si le dossier est en attente ou validé, on reste sur l'étape de confirmation/état
-          if (['submitted', 'under_review', 'approved'].includes(app.status)) {
+          // Si nouvel enregistrement, démarrer impérativement à l'étape 1
+          const isFreshRegistration =
+            location.search.includes('new=1') ||
+            Boolean(localStorage.getItem('benin_beyond_just_registered'));
+
+          if (isFreshRegistration) {
+            try {
+              localStorage.removeItem('benin_beyond_just_registered');
+            } catch {}
+            setCurrentStep(1);
+          } else if (['submitted', 'under_review', 'approved'].includes(app.status)) {
             setCurrentStep(7);
           } else if (app.current_step && app.status === 'draft') {
-            setCurrentStep(Math.min(app.current_step, 6));
+            const hasProfile = Boolean(app.profile_data?.fullName && app.profile_data?.phone && app.profile_data?.idNumber);
+            const hasDocs = Object.keys(app.documents || {}).length > 0;
+            if (!hasProfile) {
+              setCurrentStep(1);
+            } else if (!hasDocs && app.current_step > 5) {
+              setCurrentStep(5);
+            } else {
+              setCurrentStep(Math.min(Math.max(1, app.current_step), 6));
+            }
           }
         }
       } catch (err) {
@@ -506,7 +523,7 @@ export function OwnerOnboardingPage() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
                 <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-                Vérification Officielle Bénin Beyond
+                Certification Partenaire Officielle
               </div>
               <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground">
                 Finalisez la vérification de votre compte propriétaire
@@ -699,7 +716,7 @@ export function OwnerOnboardingPage() {
                     Confiance Voyageurs
                   </h4>
                   <p className="text-xs text-foreground/60 leading-relaxed">
-                    Les annonces certifiées reçoivent le badge officiel "Vérifié par Bénin Beyond" et bénéficient de 3x plus de réservations.
+                    Les annonces certifiées bénéficient d'une visibilité maximale et de réservations directes.
                   </p>
                 </div>
 

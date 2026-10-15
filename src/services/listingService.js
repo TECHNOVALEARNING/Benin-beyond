@@ -215,8 +215,15 @@ export async function getListings(options = {}) {
   // Tri par date de création (les plus récentes en premier)
   all.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
 
-  // Filtrer les types de biens gérés (stay & drive)
-  const valid = all.filter((item) => item.type === 'stay' || item.type === 'drive');
+  // Filtrer les types de biens gérés (stay & drive) et assainir les badges
+  const valid = all
+    .filter((item) => item.type === 'stay' || item.type === 'drive')
+    .map((item) => {
+      if (item.badge && item.badge.toLowerCase().includes('bénin beyond')) {
+        return { ...item, badge: 'Certifié' };
+      }
+      return item;
+    });
 
   // Si appel public (includePending: false), masquer impérativement les annonces en attente, suspendues ou rejetées
   if (!includePending) {
@@ -302,7 +309,7 @@ export async function addListing(listingData) {
     available_to: listingData.available_to || null,
     description: listingData.description || '',
     summary: listingData.summary || listingData.description?.slice(0, 160) || '',
-    badge: listingData.badge || (listingData.status === 'active' ? 'Vérifié par Bénin Beyond' : 'En attente'),
+    badge: listingData.badge || (listingData.status === 'active' ? 'Certifié' : 'En attente'),
     specs: Array.isArray(listingData.specs) ? listingData.specs : [],
     amenities: Array.isArray(listingData.amenities) ? listingData.amenities : [],
     gallery: (Array.isArray(listingData.gallery) && listingData.gallery.length > 0)
@@ -607,9 +614,9 @@ export async function activateOwnerListings(ownerId, ownerEmail = '') {
       return {
         ...item,
         status: 'active',
-        badge: item.badge && !item.badge.toLowerCase().includes('attente') && !item.badge.toLowerCase().includes('modération')
+        badge: item.badge && !item.badge.toLowerCase().includes('attente') && !item.badge.toLowerCase().includes('modération') && !item.badge.toLowerCase().includes('bénin beyond')
           ? item.badge
-          : 'Vérifié par Bénin Beyond',
+          : 'Certifié',
         rejection_reason: ''
       };
     }
@@ -640,7 +647,7 @@ export async function activateOwnerListings(ownerId, ownerEmail = '') {
           .from('listings')
           .update({
             status: 'active',
-            badge: 'Vérifié par Bénin Beyond',
+            badge: 'Certifié',
             rejection_reason: null,
             updated_date: new Date().toISOString()
           })

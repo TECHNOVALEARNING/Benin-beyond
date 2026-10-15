@@ -59,10 +59,22 @@ export function LoginPage() {
   useEffect(() => {
     if (user) {
       localStorage.removeItem('benin_beyond_oauth_in_progress');
+      const savedRedirect = localStorage.getItem('benin_beyond_oauth_redirect_path');
+      if (savedRedirect) {
+        localStorage.removeItem('benin_beyond_oauth_redirect_path');
+        navigate(savedRedirect, { replace: true });
+        return;
+      }
+
       if (user.role === 'admin' || user.role === 'subadmin') {
         navigate('/admin', { replace: true });
       } else if (user.role === 'owner' || user.role === 'partner') {
-        navigate('/dashboard/partner', { replace: true });
+        const isCertified = Boolean(user.verified || user.kyc_status === 'verified');
+        if (!isCertified) {
+          navigate('/onboarding/partner', { replace: true });
+        } else {
+          navigate('/dashboard/partner', { replace: true });
+        }
       } else if (user.role === 'client') {
         navigate('/dashboard/client', { replace: true });
       }
