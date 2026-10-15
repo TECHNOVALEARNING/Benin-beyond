@@ -295,11 +295,12 @@ export function CheckoutPage() {
     handleNyoleCallback();
   }, []); // Run once on mount
 
-  // Auto redirect countdown on confirmation screen vers l'Espace Voyageur
+  // Auto redirect countdown on confirmation screen vers la page de connexion
   useEffect(() => {
     if (confirmedBooking && !isCountdownPaused) {
       if (redirectCountdown <= 0) {
-        navigate('/dashboard/client', { replace: true });
+        const loginEmail = confirmedBooking.customer_email || customer.email || '';
+        navigate(`/login?email=${encodeURIComponent(loginEmail)}&fromCheckout=true`, { replace: true });
         return;
       }
       const timer = setInterval(() => {
@@ -567,17 +568,17 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
-                    Espace Voyageur activé & Suivi de votre Réservation
+                    Connectez-vous pour accéder à votre Espace Voyageur
                   </h3>
                   <p className="mt-2 text-sm text-foreground font-medium leading-relaxed">
-                    Votre réservation <strong>{confirmedBooking.booking_ref}</strong> est validée. Vous pouvez accéder directement à votre espace pour consulter vos codes d'accès, le QR code de confirmation et suivre votre prestation en temps réel.
+                    Votre réservation <strong>{confirmedBooking.booking_ref}</strong> est validée. Connectez-vous avec l'adresse <strong>{confirmedBooking.customer_email || customer.email}</strong> pour accéder à vos codes d'accès, le QR code de confirmation et suivre votre prestation en temps réel.
                   </p>
                   <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-card border border-foreground/15 shadow-sm">
                     <span className="text-sm font-bold text-primary flex items-center gap-2">
                       <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
                       {!isCountdownPaused
-                        ? `Accès automatique à votre espace dans ${redirectCountdown} seconde${redirectCountdown > 1 ? 's' : ''}...`
-                        : 'Accès automatique suspendu.'}
+                        ? `Redirection vers la connexion dans ${redirectCountdown} seconde${redirectCountdown > 1 ? 's' : ''}...`
+                        : 'Redirection suspendue.'}
                     </span>
                     <div className="flex items-center gap-2">
                       {!isCountdownPaused && (
@@ -590,10 +591,10 @@ export function CheckoutPage() {
                         </button>
                       )}
                       <Link
-                        to="/dashboard/client"
+                        to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`}
                         className="text-xs font-bold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm"
                       >
-                        <span>Suivre ma réservation</span>
+                        <span>Se connecter pour suivre</span>
                         <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
                       </Link>
                     </div>
@@ -619,9 +620,9 @@ export function CheckoutPage() {
                 <span>Imprimer / Télécharger le voucher & facture</span>
               </button>
 
-              <Link to="/dashboard/client" className="flex-1">
+              <Link to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`} className="flex-1">
                 <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                  <span>Accéder à mon espace voyageur</span>
+                  <span>Se connecter à mon espace voyageur</span>
                   <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                 </button>
               </Link>

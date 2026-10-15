@@ -323,11 +323,17 @@ export function LoginPage() {
                     </div>
                     <div className="pt-2 border-t border-rose-500/20 flex flex-wrap items-center gap-3">
                       <Link
-                        to={`/register?email=${encodeURIComponent(email)}`}
+                        to="/register"
                         className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
                       >
                         <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
-                        <span>Créer un compte maintenant</span>
+                        <span>Créer un compte Partenaire</span>
+                      </Link>
+                      <Link
+                        to="/explore"
+                        className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs font-bold text-foreground shadow-sm hover:bg-muted active:scale-[0.98] transition-all"
+                      >
+                        <span>Réserver un séjour</span>
                       </Link>
                       <button
                         type="button"
@@ -544,22 +550,22 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* Switch to Register */}
+            {/* Switch to Register or Explore */}
             <div className="mt-3.5 space-y-1.5 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-2.5">
               <div>
                 <span>Vous êtes un voyageur ? </span>
                 <Link
-                  to={`/register${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                  to="/explore"
                   className="font-bold text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Créer un compte Voyageur (Acheteur)</span>
+                  <span>Explorer & Réserver directement</span>
                   <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
                 </Link>
               </div>
               <div className="pt-0.5">
-                <span>Vous êtes propriétaire ou loueur pro ? </span>
+                <span>Vous êtes propriétaire ou loueur ? </span>
                 <Link
-                  to="/register?type=owner"
+                  to="/register"
                   className="font-bold text-accent hover:underline"
                 >
                   Devenir Partenaire / Hôte

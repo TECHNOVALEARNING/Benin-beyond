@@ -131,7 +131,11 @@ export function App() {
 
                 <Route
                   path="/admin"
-                  element={<AdminDashboardPage />}
+                  element={
+                    <ProtectedRoute allowedRoles={['admin', 'subadmin', 'superadmin']} redirectTo="/login">
+                      <AdminDashboardPage />
+                    </ProtectedRoute>
+                  }
                 />
 
                 <Route path="*" element={<NotFoundPage />} />

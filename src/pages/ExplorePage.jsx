@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass, faSliders } from '@fortawesome/free-solid-svg-icons';
 import { SectionHeader } from '../components/SectionHeader';
@@ -180,12 +180,12 @@ export function ExplorePage() {
               Aucun bien ou véhicule ne correspond à vos filtres actuels. Vous êtes hôtelier, propriétaire ou loueur au Bénin ? Publiez directement vos disponibilités sur Bénin Beyond.
             </p>
             <div className="mt-5 flex justify-center gap-3">
-              <a
-                href="/register"
+              <Link
+                to="/register"
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
               >
-                <span>Publier une annonce</span>
-              </a>
+                <span>Devenir partenaire certifié</span>
+              </Link>
             </div>
           </div>
         ) : (

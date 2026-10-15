@@ -180,7 +180,7 @@ export async function getUsers() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: dbProfiles, error } = await withTimeout(queryPromise, 3000);
+      const { data: dbProfiles, error } = await withTimeout(queryPromise, 8000);
 
       if (!error && dbProfiles && dbProfiles.length > 0) {
         const emailMap = new Map();
@@ -189,15 +189,19 @@ export async function getUsers() {
         dbProfiles.forEach((p) => {
           const email = (p.email || '').trim().toLowerCase();
           const id = (p.id || '').toString().toLowerCase();
-          if (!email || deleted.has(email) || deleted.has(id)) return;
+          if (!email) return;
+
+          // S'il existe dans Supabase, s'assurer qu'il n'est pas bloqué par une ancienne suppression locale
+          if (deleted.has(email)) deleted.delete(email);
+          if (deleted.has(id)) deleted.delete(id);
 
           const isAdmin = email === SUPER_ADMIN_EMAIL || p.role === 'admin';
           const override = overrides[email] || overrides[id] || {};
-          const isSubAdmin = !isAdmin && (override.role === 'subadmin' || p.role === 'subadmin');
+          const isSubAdmin = !isAdmin && (p.role === 'subadmin' || override.role === 'subadmin');
 
           emailMap.set(email, {
             id: p.id,
-            name: isAdmin ? 'Isidore Toudonou' : (override.name || p.full_name || email.split('@')[0]),
+            name: isAdmin ? (p.full_name || 'Isidore Toudonou') : (override.name || p.full_name || email.split('@')[0]),
             email: email,
             phone: override.phone || p.phone || 'Non renseigné',
             role: isAdmin
@@ -206,8 +210,8 @@ export async function getUsers() {
                   ? 'subadmin'
                   : (override.role
                       ? override.role
-                      : (p.role === 'partner' || p.role === 'owner' ? 'owner' : 'client'))),
-            company: override.company || p.company_name || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : ''),
+                      : (p.role === 'partner' || p.role === 'owner' ? 'owner' : (p.role || 'client')))),
+            company: override.company || p.company_name || (isSubAdmin ? 'Bénin Beyond (Pôle Opérations & Modération)' : (p.role === 'owner' || p.role === 'partner' ? 'Partenaire Hébergeur / Auto' : '')),
             partner_type: override.partner_type || p.partner_type || 'stay',
             tax_id: override.tax_id || p.tax_id || '',
             rccm: override.rccm || p.rccm || '',
@@ -222,17 +226,22 @@ export async function getUsers() {
           });
         });
 
-        // 2. Fusionner avec les comptes enregistrés localement
+        // 2. Fusionner avec les comptes enregistrés localement (en ignorant les faux comptes démo par défaut si Supabase est actif)
         localList.forEach((lu) => {
           const email = (lu.email || '').trim().toLowerCase();
           const id = (lu.id || '').toString().toLowerCase();
-          if (!email || deleted.has(email) || deleted.has(id)) return;
+          if (!email || email === 'proprietaire@beninbeyond.com' || lu.id === 'usr_owner_01' || deleted.has(email) || deleted.has(id)) return;
+
+          const override = overrides[email] || overrides[id] || {};
 
           if (!emailMap.has(email)) {
-            emailMap.set(email, lu);
+            emailMap.set(email, {
+              ...lu,
+              ...override
+            });
           } else {
             const existing = emailMap.get(email);
-            const mergedRole = override.role || (existing.role === 'admin' ? 'admin' : (existing.role === 'owner' || lu.role === 'owner' || lu.role === 'partner' ? 'owner' : existing.role));
+            const mergedRole = override.role || (existing.role === 'admin' ? 'admin' : (existing.role === 'subadmin' ? 'subadmin' : (existing.role === 'owner' || lu.role === 'owner' || lu.role === 'partner' ? 'owner' : existing.role)));
             emailMap.set(email, {
               ...existing,
               ...lu,
@@ -245,6 +254,11 @@ export async function getUsers() {
             });
           }
         });
+
+        // Persister la liste noire nettoyée
+        try {
+          localStorage.setItem(DELETED_USERS_KEY, JSON.stringify(Array.from(deleted)));
+        } catch {}
 
         const merged = Array.from(emailMap.values());
         saveLocalUsers(merged);

@@ -22,7 +22,7 @@ export function ProtectedRoute({ children, allowedRoles = [], redirectTo = '/log
   // 2. Rôle insuffisant → redirection vers le dashboard approprié
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     const fallback =
-      user.role === 'admin' || user.role === 'subadmin'
+      user.role === 'admin' || user.role === 'subadmin' || user.role === 'superadmin'
         ? '/admin'
         : user.role === 'owner' || user.role === 'partner'
         ? '/dashboard/partner'

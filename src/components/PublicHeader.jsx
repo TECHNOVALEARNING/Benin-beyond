@@ -4,7 +4,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBuilding,
   faUser,
-  faUserPlus,
   faGaugeHigh,
   faBagShopping,
   faRightFromBracket
@@ -131,16 +130,6 @@ export function PublicHeader() {
               >
                 <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
                 <span className="hidden sm:inline">Connexion</span>
-              </Link>
-
-              <Link
-                to="/register"
-                className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-primary p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all active:scale-95 group"
-                title="Créer votre compte Acheteur / Voyageur (Gratuit & sans engagement)"
-                aria-label="Créer un compte"
-              >
-                <FontAwesomeIcon icon={faUserPlus} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
-                <span className="hidden sm:inline">Créer un compte</span>
               </Link>
             </div>
           )}

@@ -76,17 +76,98 @@ import { BrandIcon } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
+// ======================================================================
+// Utilitaires KYC — Documents requis et badges de statut vérification
+// ======================================================================
+function getRequiredDocumentsSchema(ownerType, assetCategories = []) {
+  const base = [];
+  if (ownerType === 'registered_business') {
+    base.push(
+      { id: 'ifu', label: 'Numéro IFU (Identifiant Fiscal Unique)' },
+      { id: 'rccm', label: 'Extrait RCCM' },
+      { id: 'id_card', label: 'Pièce d\'identité du représentant (CIP / CNI / Passeport)' }
+    );
+  } else if (ownerType === 'authorized_manager') {
+    base.push(
+      { id: 'mandate', label: 'Mandat / Procuration signée' },
+      { id: 'id_card', label: 'Pièce d\'identité du gestionnaire' },
+      { id: 'owner_id', label: 'Pièce d\'identité du propriétaire mandant' }
+    );
+  } else {
+    // individual
+    base.push(
+      { id: 'id_card', label: 'Pièce d\'identité (CIP / CNI / Passeport)' },
+      { id: 'proof_address', label: 'Justificatif de domicile (facture SBEE / SONEB)' }
+    );
+  }
+  const cats = Array.isArray(assetCategories) ? assetCategories : [];
+  if (cats.includes('hotel') || cats.includes('apartment') || cats.includes('villa_house')) {
+    base.push({ id: 'property_title', label: 'Titre foncier / Attestation de propriété' });
+  }
+  if (cats.includes('vehicle')) {
+    base.push({ id: 'vehicle_registration', label: 'Carte grise / Certificat d\'immatriculation' });
+  }
+  if (cats.includes('land')) {
+    base.push({ id: 'land_title', label: 'Titre foncier / Plan cadastral' });
+  }
+  return base;
+}
+
+function getVerificationStatusBadge(status) {
+  switch (status) {
+    case 'approved':
+      return { label: 'Certifié Conforme', bgClass: 'bg-emerald-500/15 border border-emerald-500/30', textClass: 'text-emerald-700 dark:text-emerald-300' };
+    case 'rejected':
+      return { label: 'Rejeté / Non conforme', bgClass: 'bg-rose-500/15 border border-rose-500/30', textClass: 'text-rose-700 dark:text-rose-300' };
+    case 'additional_info_required':
+      return { label: 'Complément requis', bgClass: 'bg-amber-500/15 border border-amber-500/30', textClass: 'text-amber-700 dark:text-amber-300' };
+    case 'under_review':
+      return { label: 'En cours d\'examen', bgClass: 'bg-blue-500/15 border border-blue-500/30', textClass: 'text-blue-700 dark:text-blue-300' };
+    case 'submitted':
+      return { label: 'Soumis — En attente', bgClass: 'bg-sky-500/15 border border-sky-500/30', textClass: 'text-sky-700 dark:text-sky-300' };
+    default:
+      return { label: 'Brouillon / Non soumis', bgClass: 'bg-muted border border-foreground/10', textClass: 'text-foreground/60' };
+  }
+}
+
 export function AdminDashboardPage() {
   const navigate = useNavigate();
-  const { user, logout, isSuperAdmin: authIsSuperAdmin, updateSuperAdminPassword, loginAsDemo } = useAuth();
+  const { user, logout, isSuperAdmin: authIsSuperAdmin, updateSuperAdminPassword } = useAuth();
   const isSuperAdmin = Boolean(
-    authIsSuperAdmin ||
-    user?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com' ||
-    user?.is_super_admin ||
-    !user ||
-    user?.role === 'admin'
+    user && (
+      authIsSuperAdmin ||
+      user?.email?.toLowerCase().trim() === 'isidoretoudonou@gmail.com' ||
+      user?.is_super_admin ||
+      user?.role === 'superadmin'
+    )
   );
-  const isSubAdmin = !isSuperAdmin;
+  const isSubAdmin = Boolean(user && !isSuperAdmin);
+
+  // Redirection immédiate si non connecté ou rôle non-admin
+  useEffect(() => {
+    if (!user) {
+      navigate('/login', { replace: true });
+    } else if (user.role !== 'admin' && user.role !== 'subadmin' && user.role !== 'superadmin') {
+      const fallback =
+        user.role === 'owner' || user.role === 'partner'
+          ? '/dashboard/partner'
+          : '/dashboard/client';
+      navigate(fallback, { replace: true });
+    }
+  }, [user, navigate]);
+
+  const handleAdminLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Erreur déconnexion admin:', e);
+    }
+    try {
+      localStorage.removeItem('benin_beyond_user');
+      localStorage.removeItem('benin_beyond_admin_section');
+    } catch {}
+    window.location.href = '/login';
+  };
 
   // Navigation State persisté pour conserver la vue sélectionnée après actualisation (F5)
   const [currentSection, setCurrentSection] = useState(() => {
@@ -107,6 +188,18 @@ export function AdminDashboardPage() {
       } catch {}
     }
   }, [isSuperAdmin, currentSection]);
+
+  useEffect(() => {
+    if (currentSection === 'users' && isSuperAdmin) {
+      getUsers()
+        .then((fresh) => {
+          if (fresh && fresh.length > 0) {
+            setUsersList(fresh);
+          }
+        })
+        .catch((e) => console.warn('Erreur synchronisation utilisateurs:', e));
+    }
+  }, [currentSection, isSuperAdmin]);
 
   const handleSetSection = (sec) => {
     setCurrentSection(sec);
@@ -289,16 +382,6 @@ export function AdminDashboardPage() {
   const [videoError, setVideoError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
 
-  // Maintien inconditionnel de l'accès Admin :
-  // Si l'utilisateur n'a pas encore de rôle admin actif, élévation immédiate vers
-  // le Super-Administrateur Isidore Toudonou pour garantir un affichage direct sans redirection indésirable.
-  useEffect(() => {
-    if (!user || (user.role !== 'admin' && user.role !== 'subadmin')) {
-      if (typeof loginAsDemo === 'function') {
-        loginAsDemo('admin');
-      }
-    }
-  }, [user, loginAsDemo]);
 
   useEffect(() => {
     loadAllData();
@@ -2015,6 +2098,10 @@ export function AdminDashboardPage() {
 
   const allNavItems = navGroups.flatMap((g) => g.items);
 
+  if (!user || (!['admin', 'subadmin', 'superadmin'].includes(user.role))) {
+    return null;
+  }
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-muted/20 text-foreground flex flex-col md:flex-row">
       
@@ -2174,10 +2261,8 @@ export function AdminDashboardPage() {
           )}
 
           <button
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
+            type="button"
+            onClick={handleAdminLogout}
             className="w-full flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 transition-all shadow-sm active:scale-95"
             title="Se déconnecter"
           >
@@ -2238,12 +2323,14 @@ export function AdminDashboardPage() {
               </span>
             )}
             
+            {/* Bouton Quitter l'administration et revenir sur le site public */}
             <Link
-              to="/explore"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-semibold text-foreground hover:border-primary transition-colors"
+              to="/"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors shadow-sm"
+              title="Quitter l'administration et revenir sur le site public"
             >
-              <span>Catalogue</span>
-              <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/40" />
+              <FontAwesomeIcon icon={faHouse} className="h-3 w-3 text-primary" />
+              <span>Quitter</span>
             </Link>
 
             {isSuperAdmin && (
@@ -2255,7 +2342,7 @@ export function AdminDashboardPage() {
                   setAdminPasswordConfirm('');
                   setShowAdminPasswordModal(true);
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
+                className="hidden md:inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
                 title="Modifier mon mot de passe Super-Admin"
               >
                 <FontAwesomeIcon icon={faLock} className="h-3 w-3" />
@@ -2263,18 +2350,16 @@ export function AdminDashboardPage() {
               </button>
             )}
 
-            {/* Quick Logout Button directly on mobile */}
+            {/* Déconnexion Universelle (Mobile & Desktop) */}
             <button
               type="button"
-              onClick={() => {
-                logout();
-                navigate('/login');
-              }}
-              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 transition-colors"
-              title="Se déconnecter"
+              onClick={handleAdminLogout}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 transition-all shadow-sm active:scale-95"
+              title="Se déconnecter de l'interface d'administration"
               aria-label="Se déconnecter"
             >
               <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+              <span>Déconnexion</span>
             </button>
           </div>
         </header>
@@ -3730,19 +3815,39 @@ export function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAssistantName('');
-                    setNewAssistantEmail('');
-                    setNewAssistantPhone('');
-                    setShowAddAssistantModal(true);
-                  }}
-                  className="flex items-center gap-2 rounded-2xl bg-accent px-4 py-2.5 text-xs font-black text-black shadow-md hover:bg-white hover:text-black transition-all active:scale-95 shrink-0"
-                >
-                  <FontAwesomeIcon icon={faUserShield} className="h-3.5 w-3.5" />
-                  <span>+ Ajouter un Assistant Admin</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const fresh = await getUsers();
+                        setUsersList(fresh);
+                        showToast(`Synchronisation réussie : ${fresh.length} profils chargés depuis la base de données.`);
+                      } catch {
+                        showToast('Erreur lors de la synchronisation.');
+                      }
+                    }}
+                    className="flex items-center gap-2 rounded-2xl border border-foreground/15 bg-card/80 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition-all active:scale-95 shadow-xs"
+                    title="Synchroniser immédiatement avec la base de données Supabase"
+                  >
+                    <FontAwesomeIcon icon={faRotateRight} className="h-3.5 w-3.5" />
+                    <span>Actualiser</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAssistantName('');
+                      setNewAssistantEmail('');
+                      setNewAssistantPhone('');
+                      setShowAddAssistantModal(true);
+                    }}
+                    className="flex items-center gap-2 rounded-2xl bg-accent px-4 py-2.5 text-xs font-black text-black shadow-md hover:bg-white hover:text-black transition-all active:scale-95"
+                  >
+                    <FontAwesomeIcon icon={faUserShield} className="h-3.5 w-3.5" />
+                    <span>+ Ajouter un Assistant Admin</span>
+                  </button>
+                </div>
               </div>
 
               {/* Stat Cards */}

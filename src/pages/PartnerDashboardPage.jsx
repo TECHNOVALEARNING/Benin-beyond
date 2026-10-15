@@ -83,6 +83,17 @@ export function PartnerDashboardPage() {
     }
   }, [user]);
 
+  // Redirection obligatoire vers l'onboarding si le partenaire n'a pas complété sa vérification KYC
+  useEffect(() => {
+    if (user && user.role !== 'admin' && user.role !== 'subadmin') {
+      const certified = Boolean(user.verified || user.kyc_status === 'verified');
+      const hasCompletedOnboarding = Boolean(verificationApp && (verificationApp.status === 'submitted' || verificationApp.status === 'under_review' || verificationApp.status === 'approved' || verificationApp.status === 'additional_info_required'));
+      if (!certified && !hasCompletedOnboarding) {
+        navigate('/onboarding/partner', { replace: true });
+      }
+    }
+  }, [user, verificationApp, navigate]);
+
   const verifStatus = verificationApp?.status || (user?.kyc_status === 'verified' ? 'approved' : (user?.kyc_status || 'draft'));
   const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified' || verifStatus === 'approved');
 
@@ -959,14 +970,7 @@ export function PartnerDashboardPage() {
     { key: 'listings', label: 'Mes annonces & biens', icon: faHouse, count: listings.length },
     { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus, highlight: true },
     { key: 'finances', label: 'Solde & Revenus', icon: faWallet },
-    { key: 'stats', label: 'Statistiques & Vues', icon: faChartLine },
-    {
-      key: 'verification',
-      label: 'Vérification & Dossier KYC',
-      icon: faShieldHalved,
-      badge: isPartnerCertified ? 'Certifié' : (verifStatus === 'additional_info_required' ? 'Action requise' : 'En attente'),
-      action: () => navigate('/onboarding/partner')
-    }
+    { key: 'stats', label: 'Statistiques & Vues', icon: faChartLine }
   ];
 
   return (
