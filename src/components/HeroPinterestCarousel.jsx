@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faUser,
+  faUserPlus,
   faBuilding,
   faArrowRight,
   faChevronLeft,
@@ -160,17 +161,17 @@ export function HeroPinterestCarousel() {
             <BrandLogo size="md" textColor="text-white" subtext="Voyage & Standing" />
           </Link>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Espace Propriétaire : toujours accessible pour devenir hôte / partenaire */}
             {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
               <Link
                 to="/register?type=owner"
-                className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
-                title="Espace Propriétaire & Partenaire"
-                aria-label="Espace Propriétaire & Partenaire"
+                className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
+                title="Devenir Hôte ou Partenaire Hébergement/Mobilité"
+                aria-label="Devenir Hôte"
               >
                 <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent transition-transform group-hover:scale-110" />
-                <span className="hidden sm:inline">Espace Propriétaire</span>
+                <span>Devenir Hôte</span>
               </Link>
             )}
 
@@ -215,15 +216,27 @@ export function HeroPinterestCarousel() {
                 </button>
               </div>
             ) : (
-              <Link
-                to="/login"
-                className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/95 hover:bg-accent p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-black shadow-md transition-all active:scale-95 group"
-                title="Connexion"
-                aria-label="Connexion"
-              >
-                <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 text-black transition-transform group-hover:scale-110" />
-                <span className="hidden sm:inline">Connexion</span>
-              </Link>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Link
+                  to="/login"
+                  className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
+                  title="Se connecter"
+                  aria-label="Connexion"
+                >
+                  <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 text-white/80 transition-transform group-hover:scale-110" />
+                  <span className="hidden sm:inline">Connexion</span>
+                </Link>
+
+                <Link
+                  to="/register"
+                  className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-accent hover:bg-white p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-black shadow-md transition-all active:scale-95 group"
+                  title="Créer votre compte Acheteur / Voyageur (Gratuit & sans engagement)"
+                  aria-label="Créer un compte"
+                >
+                  <FontAwesomeIcon icon={faUserPlus} className="h-3.5 w-3.5 text-black transition-transform group-hover:scale-110" />
+                  <span className="hidden sm:inline">Créer un compte</span>
+                </Link>
+              </div>
             )}
           </div>
         </div>

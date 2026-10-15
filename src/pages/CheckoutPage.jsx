@@ -295,12 +295,11 @@ export function CheckoutPage() {
     handleNyoleCallback();
   }, []); // Run once on mount
 
-  // Auto redirect countdown on confirmation screen
+  // Auto redirect countdown on confirmation screen vers l'Espace Voyageur
   useEffect(() => {
-    if (confirmedBooking && !user && !isCountdownPaused) {
+    if (confirmedBooking && !isCountdownPaused) {
       if (redirectCountdown <= 0) {
-        const clientEmail = confirmedBooking.customer_email || customer.email || '';
-        navigate(`/login?email=${encodeURIComponent(clientEmail)}&fromCheckout=true`);
+        navigate('/dashboard/client', { replace: true });
         return;
       }
       const timer = setInterval(() => {
@@ -308,7 +307,7 @@ export function CheckoutPage() {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [confirmedBooking, user, redirectCountdown, isCountdownPaused, customer.email, navigate]);
+  }, [confirmedBooking, redirectCountdown, isCountdownPaused, navigate]);
 
   // Calculate options total
   const optionsTotal = PROTECTION_OPTIONS.reduce(
@@ -561,49 +560,47 @@ export function CheckoutPage() {
               </span>
             </div>
 
-            {!user && (
-              <div className="mt-8 rounded-2xl border-2 border-primary/30 bg-primary/10 p-6 shadow-md animate-fadeIn">
-                <div className="flex items-start gap-4">
-                  <div className="rounded-xl bg-primary/20 p-3 text-primary text-xl shrink-0">
-                    <FontAwesomeIcon icon={faShieldHalved} />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
-                      Accès immédiat à votre Espace Voyageur (Acheteur)
-                    </h3>
-                    <p className="mt-2 text-sm sm:text-base text-foreground font-medium leading-relaxed">
-                      Votre compte a été activé. Vous allez être redirigé vers la page de connexion pour accéder à vos vouchers officiels, reçus fiscaux et détails de votre réservation.
-                    </p>
-                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-card border border-foreground/15 shadow-sm">
-                      <span className="text-sm font-bold text-primary flex items-center gap-2">
-                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
-                        {!isCountdownPaused
-                          ? `Redirection automatique dans ${redirectCountdown} seconde${redirectCountdown > 1 ? 's' : ''}...`
-                          : 'Redirection automatique suspendue.'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {!isCountdownPaused && (
-                          <button
-                            type="button"
-                            onClick={() => setIsCountdownPaused(true)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-foreground/20 hover:bg-muted text-foreground/80 transition-colors"
-                          >
-                            Mettre en pause
-                          </button>
-                        )}
-                        <Link
-                          to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`}
-                          className="text-xs font-bold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm"
+            <div className="mt-8 rounded-2xl border-2 border-primary/30 bg-primary/10 p-6 shadow-md animate-fadeIn">
+              <div className="flex items-start gap-4">
+                <div className="rounded-xl bg-primary/20 p-3 text-primary text-xl shrink-0">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
+                    Espace Voyageur activé & Suivi de votre Réservation
+                  </h3>
+                  <p className="mt-2 text-sm text-foreground font-medium leading-relaxed">
+                    Votre réservation <strong>{confirmedBooking.booking_ref}</strong> est validée. Vous pouvez accéder directement à votre espace pour consulter vos codes d'accès, le QR code de confirmation et suivre votre prestation en temps réel.
+                  </p>
+                  <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-card border border-foreground/15 shadow-sm">
+                    <span className="text-sm font-bold text-primary flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
+                      {!isCountdownPaused
+                        ? `Accès automatique à votre espace dans ${redirectCountdown} seconde${redirectCountdown > 1 ? 's' : ''}...`
+                        : 'Accès automatique suspendu.'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {!isCountdownPaused && (
+                        <button
+                          type="button"
+                          onClick={() => setIsCountdownPaused(true)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-foreground/20 hover:bg-muted text-foreground/80 transition-colors"
                         >
-                          <span>Accéder maintenant</span>
-                          <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
-                        </Link>
-                      </div>
+                          Mettre en pause
+                        </button>
+                      )}
+                      <Link
+                        to="/dashboard/client"
+                        className="text-xs font-bold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm"
+                      >
+                        <span>Suivre ma réservation</span>
+                        <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row no-print">
               <button
@@ -622,24 +619,12 @@ export function CheckoutPage() {
                 <span>Imprimer / Télécharger le voucher & facture</span>
               </button>
 
-              {user ? (
-                <Link to="/dashboard/client" className="flex-1">
-                  <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                    <span>Accéder à mon espace voyageur</span>
-                    <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
-                  </button>
-                </Link>
-              ) : (
-                <Link
-                  to={`/login?email=${encodeURIComponent(confirmedBooking.customer_email || customer.email || '')}&fromCheckout=true`}
-                  className="flex-1"
-                >
-                  <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                    <span>Se connecter avec Google</span>
-                    <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
-                  </button>
-                </Link>
-              )}
+              <Link to="/dashboard/client" className="flex-1">
+                <button className="w-full rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
+                  <span>Accéder à mon espace voyageur</span>
+                  <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
+                </button>
+              </Link>
             </div>
           </div>
         </ScrollReveal>

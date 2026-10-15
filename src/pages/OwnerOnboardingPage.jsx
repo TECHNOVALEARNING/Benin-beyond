@@ -453,14 +453,22 @@ export function OwnerOnboardingPage() {
         <p className="text-xs text-foreground/70 mt-2 mb-6">
           Veuillez vous connecter avec votre compte Propriétaire ou Partenaire pour accéder à l'espace de vérification officielle.
         </p>
-        <Link
-          to="/login"
-          state={{ from: { pathname: '/onboarding/partner' } }}
-          className="rounded-2xl bg-primary px-6 py-3 text-xs font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all inline-flex items-center gap-2"
-        >
-          Se connecter à Bénin Beyond
-          <FontAwesomeIcon icon={faArrowRight} />
-        </Link>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link
+            to="/register?type=owner"
+            className="rounded-2xl bg-primary px-6 py-3 text-xs font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all inline-flex items-center gap-2"
+          >
+            Créer un compte Partenaire
+            <FontAwesomeIcon icon={faArrowRight} />
+          </Link>
+          <Link
+            to="/login"
+            state={{ from: { pathname: '/onboarding/partner' } }}
+            className="rounded-2xl border border-foreground/20 px-6 py-3 text-xs font-semibold text-foreground/80 hover:bg-muted/50 transition-all inline-flex items-center gap-2"
+          >
+            Se connecter
+          </Link>
+        </div>
       </div>
     );
   }

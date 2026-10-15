@@ -73,23 +73,14 @@ export function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
 
-  // Redirection automatique si déjà connecté
+  // Synchronisation avec l'URL si le paramètre change
   useEffect(() => {
-    if (user) {
-      if (user.role === 'admin' || user.role === 'subadmin') {
-        navigate('/admin', { replace: true });
-      } else if (user.role === 'owner' || user.role === 'partner') {
-        navigate('/dashboard/partner', { replace: true });
-      } else if (user.role === 'client') {
-        // Si l'utilisateur est sur l'onboarding partenaire, rediriger impérativement vers le dashboard partenaire
-        if (accountType === 'owner') {
-          navigate('/dashboard/partner', { replace: true });
-        } else {
-          navigate('/dashboard/client', { replace: true });
-        }
-      }
+    if (typeParam === 'owner' || typeParam === 'partner') {
+      setAccountType('owner');
+    } else if (typeParam === 'client') {
+      setAccountType('client');
     }
-  }, [user, accountType, navigate]);
+  }, [typeParam]);
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -260,6 +251,22 @@ export function RegisterPage() {
       <div className="relative z-10 w-full max-w-xl">
         <ScrollReveal delay={0} y={20}>
           
+          {/* Session Banner if already connected */}
+          {user && (
+            <div className="mb-4 rounded-2xl bg-card border border-foreground/15 p-3.5 flex items-center justify-between gap-3 text-xs shadow-sm">
+              <div className="flex items-center gap-2 text-foreground/80">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="truncate">Connecté : <strong>{user.name || user.email}</strong> ({user.role === 'admin' ? 'Superviseur Admin' : user.role === 'owner' || user.role === 'partner' ? 'Partenaire' : 'Voyageur'})</span>
+              </div>
+              <Link
+                to={user.role === 'admin' || user.role === 'subadmin' ? '/admin' : user.role === 'owner' || user.role === 'partner' ? '/dashboard/partner' : '/dashboard/client'}
+                className="font-bold text-primary hover:underline shrink-0 text-[11px]"
+              >
+                Accéder à mon espace →
+              </Link>
+            </div>
+          )}
+
           {/* Account Type Selector Tab */}
           <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-card/85 border border-foreground/10 mb-6 backdrop-blur-md shadow-sm">
             <button
@@ -269,14 +276,19 @@ export function RegisterPage() {
                 setError('');
                 setSuccessMsg('');
               }}
-              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl text-center transition-all ${
                 accountType === 'client'
                   ? 'bg-primary text-white shadow-md'
                   : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
               }`}
             >
-              <FontAwesomeIcon icon={faCompass} />
-              <span>Compte Voyageur</span>
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                <FontAwesomeIcon icon={faCompass} />
+                <span>Compte Voyageur (Acheteur)</span>
+              </div>
+              <span className={`text-[10px] ${accountType === 'client' ? 'text-white/80' : 'text-foreground/50'}`}>
+                Gratuit • Réservations & Suivi
+              </span>
             </button>
             <button
               type="button"
@@ -285,14 +297,19 @@ export function RegisterPage() {
                 setError('');
                 setSuccessMsg('');
               }}
-              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl text-center transition-all ${
                 accountType === 'owner'
                   ? 'bg-primary text-white shadow-md'
                   : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
               }`}
             >
-              <FontAwesomeIcon icon={faBuilding} />
-              <span>Compte Partenaire Pro</span>
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                <FontAwesomeIcon icon={faBuilding} />
+                <span>Devenir Partenaire / Hôte</span>
+              </div>
+              <span className={`text-[10px] ${accountType === 'owner' ? 'text-white/80' : 'text-foreground/50'}`}>
+                Propriétaires, Hôtels & Véhicules
+              </span>
             </button>
           </div>
 
@@ -306,15 +323,15 @@ export function RegisterPage() {
                     Bénin Beyond
                   </span>
                 </Link>
-                <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold uppercase tracking-wider">
+                <div className="inline-flex items-center gap-2 mt-1 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
                   <FontAwesomeIcon icon={faCompass} className="h-3 w-3" />
-                  <span>Espace Voyageur Privilège</span>
+                  <span>Compte Voyageur Gratuit & Sans Engagement</span>
                 </div>
                 <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-3">
-                  Créer votre compte Voyageur
+                  Créer votre compte Acheteur / Voyageur
                 </h1>
                 <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
-                  Réservez vos résidences de prestige, véhicules d'exception et packs au Bénin en direct.
+                  Aucun engagement. Créez votre profil en 30 secondes pour réserver vos séjours, véhicules et formules, recevoir vos vouchers et suivre vos codes de réservation.
                 </p>
               </div>
 

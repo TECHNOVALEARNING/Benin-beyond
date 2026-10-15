@@ -545,24 +545,24 @@ export function LoginPage() {
             </form>
 
             {/* Switch to Register */}
-            <div className="mt-3.5 space-y-1 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-2.5">
+            <div className="mt-3.5 space-y-1.5 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-2.5">
               <div>
-                <span>Vous n'avez pas encore de compte ? </span>
+                <span>Vous êtes un voyageur ? </span>
                 <Link
                   to={`/register${email ? `?email=${encodeURIComponent(email)}` : ''}`}
                   className="font-bold text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Créer un compte</span>
+                  <span>Créer un compte Voyageur (Acheteur)</span>
                   <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
                 </Link>
               </div>
               <div className="pt-0.5">
-                <span>Vous êtes hébergeur ou loueur pro ? </span>
+                <span>Vous êtes propriétaire ou loueur pro ? </span>
                 <Link
                   to="/register?type=owner"
-                  className="font-semibold text-accent hover:underline"
+                  className="font-bold text-accent hover:underline"
                 >
-                  Rejoindre le réseau Partenaire
+                  Devenir Partenaire / Hôte
                 </Link>
               </div>
             </div>

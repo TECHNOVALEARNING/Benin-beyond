@@ -860,8 +860,8 @@ export function AuthProvider({ children }) {
         role: sanitizedRole
       };
       saveRegisteredUser(existing);
-      // Sécurité : Ne pas connecter automatiquement un inconnu sans authentification préalable
-      if (user && user.email?.toLowerCase() === cleanEmail) {
+      // Connecter l'acheteur pour qu'il puisse accéder directement à son espace et suivre sa réservation
+      if (!user || user.email?.toLowerCase() === cleanEmail) {
         setUser(existing);
       }
       return existing;
@@ -881,8 +881,8 @@ export function AuthProvider({ children }) {
     };
 
     saveRegisteredUser(newClient);
-    // Sécurité : Ne connecter l'utilisateur que s'il est déjà authentifié avec cet email
-    if (user && user.email?.toLowerCase() === cleanEmail) {
+    // Connecter immédiatement le nouvel acheteur pour le suivi instantané
+    if (!user || user.email?.toLowerCase() === cleanEmail) {
       setUser(newClient);
     }
     return newClient;
