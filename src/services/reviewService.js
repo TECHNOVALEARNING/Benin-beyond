@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 
 const LOCAL_STORAGE_REVIEWS_KEY = 'benin_beyond_reviews';
 const DELETED_REVIEWS_KEY = 'benin_beyond_deleted_reviews';
@@ -298,9 +298,9 @@ export async function updateReviewStatus(reviewId, newStatus, bookingId = null) 
       try {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (reviewId && uuidRegex.test(reviewId)) {
-          await supabase.from('reviews').update({ status: newStatus }).eq('id', reviewId);
+          await runSupabaseQuery('reviews.update', supabase.from('reviews').update({ status: newStatus }).eq('id', reviewId));
         } else if (bookingId) {
-          await supabase.from('reviews').update({ status: newStatus }).eq('booking_id', String(bookingId));
+          await runSupabaseQuery('reviews.update', supabase.from('reviews').update({ status: newStatus }).eq('booking_id', String(bookingId)));
         }
       } catch (err) {
         console.warn('Supabase review status update error:', err);
@@ -334,11 +334,11 @@ export async function deleteReview(reviewId, bookingId = null) {
       try {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (reviewId && uuidRegex.test(reviewId)) {
-          await supabase.from('reviews').delete().eq('id', reviewId);
+          await runSupabaseQuery('reviews.delete', supabase.from('reviews').delete().eq('id', reviewId));
         } else if (bookingId) {
-          await supabase.from('reviews').delete().eq('booking_id', String(bookingId));
+          await runSupabaseQuery('reviews.delete', supabase.from('reviews').delete().eq('booking_id', String(bookingId)));
         } else if (reviewId) {
-          await supabase.from('reviews').delete().or(`id.eq.${reviewId},booking_id.eq.${reviewId}`);
+          await runSupabaseQuery('reviews.delete', supabase.from('reviews').delete().eq('booking_id', String(reviewId)));
         }
       } catch (err) {
         console.warn('Supabase review delete error:', err);

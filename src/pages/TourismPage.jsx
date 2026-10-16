@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -6,334 +6,422 @@ import {
   faLocationDot,
   faBed,
   faCar,
-  faArrowRight
+  faArrowRight,
+  faCircleInfo,
+  faCompass,
+  faScissors,
+  faPhone,
+  faPlus,
+  faShieldHalved,
+  faHouse,
+  faTag,
+  faFilter
 } from '@fortawesome/free-solid-svg-icons';
+import { faWhatsapp } from '@fortawesome/free-brands-svg-icons';
 import { ScrollReveal } from '../components/ScrollReveal';
-
-const TOURISM_SITES = [
-  {
-    id: 'ganvie',
-    category: 'nature',
-    title: 'Ganvié — La Cité Lacustre du Lac Nokoué',
-    badge: 'Merveille Lacustre Unique',
-    location: 'Lac Nokoué · Abomey-Calavi',
-    tagline: 'La Venise de l’Afrique de l’Ouest',
-    description:
-      'Bâtie au XVIIe siècle par le peuple Tofinu cherchant refuge sur les eaux sacrées du lac Nokoué, Ganvié rassemble plus de 30 000 habitants vivant dans de remarquables maisons sur pilotis. Le marché flottant matinal animé par les piroguières, les ruelles aquatiques et les pièges à poissons "acadjas" créent un univers hors du temps.',
-    highlights: ['Marché flottant à l’aube', 'Habitations séculaires sur pilotis', 'Artisanat lagonaire & pêche traditionnelle'],
-    tips: 'Départ en pirogue depuis l’embarcadère d’Abomey-Calavi (à 25 min de Cotonou). Visite matinale recommandée pour la lumière et l’animation du marché.',
-    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'ouidah',
-    category: 'monuments',
-    title: 'Ouidah — La Porte du Non-Retour & La Route des Esclaves',
-    badge: 'Patrimoine Mémoriel Mondial',
-    location: 'Ouidah Plage & Cité Historique',
-    tagline: 'Berceau d’Histoire & de Spiritualité',
-    description:
-      'Dressée face aux déferlantes de l’océan Atlantique, la Porte du Non-Retour est le monument emblématique commémorant les millions d’êtres humains déportés lors de la traite négrière. La célèbre Route des Esclaves s’étire sur 4 kilomètres entre la place Chacha, l’Arbre de l’Oubli et le littoral. Ouidah abrite également le Fort Portugais et le Temple des Pythons.',
-    highlights: ['Mémorial monumental face à l’océan', 'Route des Esclaves historique', 'Temple sacré des Pythons & Forêt sacrée de Kpassè'],
-    tips: 'Site en accès libre face à la plage. Visite conseillée en fin d’après-midi pour assister au coucher de soleil sur l’Atlantique.',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'jardin-canala',
-    category: 'restaurants',
-    title: 'Le Jardin de Canala — Gastronomie & Jardin Tropical',
-    badge: 'Table Recommandée',
-    location: 'Cotonou · Quartier Haie Vive',
-    tagline: 'Saveurs Locales & Fusion Contemporaine',
-    description:
-      'Véritable oasis végétale en plein cœur de Cotonou, Le Jardin de Canala sublime le terroir béninois : mérou grillé au feu de bois, agouti en sauce graine, aloco doré et cocktails aux fruits de la côte. Une ambiance feutrée idéale pour vos dîners d’affaires ou escapades gourmandes.',
-    highlights: ['Poissons frais de l’océan et arrivages du port', 'Jardin ombragé & cocktails signatures', 'Accueil chaleureux et carte raffinée'],
-    tips: 'Réservation recommandée en soirée et le week-end. Établissement situé à 10 minutes de l’aéroport.',
-    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'abomey',
-    category: 'monuments',
-    title: 'Abomey — Les Palais Royaux du Danxomè',
-    badge: 'Patrimoine Mondial de l’UNESCO',
-    location: 'Abomey · Cité Royale du Zou',
-    tagline: 'La Grande Épopée des Rois & des Amazones',
-    description:
-      'Capitale politique du prestigieux royaume du Danxomè fondé au XVIIe siècle, Abomey abrite l’ensemble monumental des palais royaux classés à l’UNESCO. Les cours intérieures des rois Ghézo et Glèlè conservent des bas-reliefs en terre cuite polychrome d’une valeur inestimable, les trônes royaux et célèbrent la mémoire légendaire des Agoodjié, les redoutables guerrières Amazones du Danxomè.',
-    highlights: ['Bas-reliefs en argile polychromes UNESCO', 'Trônes royaux et trésors des souverains', 'Mémoire héroïque des Amazones Agoodjié'],
-    tips: 'À 2h30 de route de Cotonou. Visites guidées proposées par les conservateurs du musée historique d’Abomey.',
-    image: 'https://images.unsplash.com/photo-1578925518470-4def7a0f08bb?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'maman-bene',
-    category: 'restaurants',
-    title: 'Chez Maman Béné — Terroir Authentique Littoral',
-    badge: 'Authenticité & Fraîcheur',
-    location: 'Ouidah · Route des Pêches',
-    tagline: 'Les Trésors Culinaires du Littoral Océanique',
-    description:
-      'Institution incontournable de la côte d’Ouidah, Chez Maman Béné propose une cuisine béninoise généreuse et savoureuse : langoustes grillées, capitaine sauce tomate pimentée, crabes de lagune et pâte noire amèvo cuisinée selon les secrets des grands-mères.',
-    highlights: ['Langoustes et gambas braisées à la minute', 'Cadre paillote les pieds dans le sable', 'Hospitalité béninoise légendaire'],
-    tips: 'Parfait pour un déjeuner convivial après la visite de la Porte du Non-Retour.',
-    image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'pendjari',
-    category: 'nature',
-    title: 'Parc National de la Pendjari & Chaîne de l’Atacora',
-    badge: 'Réserve de Biosphère UNESCO',
-    location: 'Parc de la Pendjari · Atacora',
-    tagline: 'Le Grand Sanctuaire Faunique d’Afrique de l’Ouest',
-    description:
-      'S’étendant sur des centaines de milliers d’hectares au pied des falaises de l’Atacora, la Pendjari est la réserve animalière la plus préservée d’Afrique de l’Ouest. Elle abrite les derniers grands troupeaux d’éléphants, de lions d’Afrique occidentale, de buffles, de cobes de Buffon et d’innombrables rapaces au milieu de paysages de savane arborée grandioses.',
-    highlights: ['Safaris fauniques matinaux et au crépuscule', 'Collines et panoramas de l’Atacora', 'Cascades rafraîchissantes de Tanougou et Kota'],
-    tips: 'Période idéale d’observation : de Décembre à Mai. Accès recommandé en véhicule tout-terrain 4x4 avec guide ranger.',
-    image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'cotonou',
-    category: 'monuments',
-    title: 'Cotonou — Monument Amazone & Boulevard de la Marina',
-    badge: 'Symbole Contemporain',
-    location: 'Cotonou Littoral',
-    tagline: 'La Vigueur et la Fierté de la Nation',
-    description:
-      'Haute de 30 mètres et sculptée dans le bronze, la statue monumentale de l’Amazone domine le boulevard de la Marina face à l’océan. Elle rend un vibrant hommage aux femmes guerrières qui ont forgé la bravoure du pays. Non loin, l’esplanade des Amazones, la Place de l’Étoile Rouge et le mythique marché Dantokpa témoignent du dynamisme urbain et culturel béninois.',
-    highlights: ['Statue colossale de l’Amazone (30m)', 'Boulevard paysager face à l’océan', 'Fresques murales et street-art le long du Port'],
-    tips: 'Accès libre 24h/24. Magnifiquement illuminée en soirée, parfaite pour une balade crépusculaire au bord de l’eau.',
-    image: 'https://images.unsplash.com/photo-1577717903315-1691ae25ab3f?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'porto-novo',
-    category: 'monuments',
-    title: 'Porto-Novo — Capitale Historique & Style Afro-Brésilien',
-    badge: 'Cité aux Trois Noms',
-    location: 'Porto-Novo · Lagune',
-    tagline: 'Architecture Baroque Agouda & Musées Royaux',
-    description:
-      'Porto-Novo dévoile une ambiance paisible et un charme architectural unique hérité des artisans "Agoudas" revenus du Brésil au XIXe siècle. Sa Grande Mosquée au style baroque brésilien inspiré de Salvador de Bahia, le Musée Honmè (ancien palais des rois Toffa) et le Musée ethnographique Alexandre Sènou Adandé offrent une plongée culturelle d’une exceptionnelle richesse.',
-    highlights: ['Grande Mosquée afro-brésilienne', 'Palais royal Musée Honmè', 'Jardin des Plantes et de la Nature (JPN)'],
-    tips: 'À 35 minutes de Cotonou par l’autoroute côtière. Idéal pour une journée de découverte patrimoniale et artisanale.',
-    image: 'https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'grand-popo',
-    category: 'nature',
-    title: 'Grand-Popo & La Bouche du Roy',
-    badge: 'Éco-Tourisme & Estuaire Sauvage',
-    location: 'Grand-Popo · Fleuve Mono',
-    tagline: 'La Rencontre Magique du Fleuve et de l’Océan',
-    description:
-      'À la frontière maritime du Togo, Grand-Popo est un havre de paix naturel entre plages de sable blond et lagunes calmes. La Bouche du Roy marque l’embouchure spectaculaire où le fleuve Mono se jette dans l’Atlantique, créant des mangroves préservées abritant des îles aux oiseaux et un sanctuaire de protection des tortues marines.',
-    highlights: ['Embouchure naturelle de la Bouche du Roy', 'Navigation douce dans les mangroves', 'Villages de pêcheurs et plages sauvages'],
-    tips: 'Excursion en barque motorisée avec les écoguides locaux le long du fleuve Mono. Halte idéale pour se détendre.',
-    image: 'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'etoile-rouge-resto',
-    category: 'restaurants',
-    title: 'L\'Atelier Gourmand de la Marina — Haute Cuisine Béninoise',
-    badge: 'Table d\'Exception',
-    location: 'Cotonou · Boulevard de la Marina',
-    tagline: 'Gastronomie Béninoise & Inspirations Contemporaines',
-    description:
-      'Surplombant la marina de Cotonou, cette table gastronomique propose des créations d\'exception : carpaccio de mérou aux agrumes du terroir, agouti confit aux épices béninoises, et fondants au chocolat local. Une ambiance feutrée et une carte des vins raffinée.',
-    highlights: ['Vue panoramique sur la côte et la marina', 'Poissons nobles et arrivages côtiers', 'Terrasse lounge climatisée'],
-    tips: 'Idéal pour vos dîners de prestige et rendez-vous d’affaires. Réservation conseillée.',
-    image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'cabane-pecheur',
-    category: 'restaurants',
-    title: 'La Cabane du Pêcheur — Fruits de Mer & Paillote Littorale',
-    badge: 'Arrivages Côtiers',
-    location: 'Grand-Popo · Bord de Mer',
-    tagline: 'L\'Esprit des Plages & Grillades Braisées',
-    description:
-      'Face aux déferlantes de l\'océan à Grand-Popo, dégustez des langoustes grillées au feu de bois, des dorades royales et des brochettes de gambas fraîches accompagnées d\'aloco doré. Une atmosphère dépaysante au rythme des vagues atlantiques.',
-    highlights: ['Langoustes braisées à la minute', 'Cadre en bois flotté les pieds dans le sable', 'Cocktails de fruits frais tropicaux'],
-    tips: 'Parfait pour un déjeuner convivial après une excursion à la Bouche du Roy.',
-    image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80'
-  },
-  {
-    id: 'saveurs-lacustres',
-    category: 'restaurants',
-    title: 'L\'Oasis du Lac — Saveurs Fluviales sur Pilotis',
-    badge: 'Expérience Lacustre',
-    location: 'Ganvié · Lac Nokoué',
-    tagline: 'Poissons Frais & Spécialités Tofinu',
-    description:
-      'Accessible en barque sur les eaux calmes du lac Nokoué, ce restaurant panoramique sur pilotis vous invite à savourer des tilapias braisés, des carpes du lac en sauce graine et des spécialités lacustres traditionnelles dans un cadre magique.',
-    highlights: ['Déjeuner panoramique au fil de l’eau', 'Recettes traditionnelles du peuple du lac', 'Transfert en pirogue assuré'],
-    tips: 'Idéal pour combiner repas gastronomique et visite de la cité lacustre de Ganvié.',
-    image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
-  }
-];
+import { getDiscoveries, INITIAL_DISCOVERIES } from '../services/discoveryService';
+import { ProviderRegistrationModal } from '../components/ProviderRegistrationModal';
 
 const CATEGORIES = [
-  { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: faUtensils }
+  { key: 'all', label: 'Toutes les Découvertes', icon: faCompass },
+  { key: 'restaurants', label: 'Gastronomie & Restaurants', icon: faUtensils, badge: 'Gratuit' },
+  { key: 'services', label: 'Autres Services & À Domicile', icon: faScissors, badge: '500 FCFA' }
+];
+
+const SERVICE_SUBCATEGORIES = [
+  { key: 'all', label: 'Toutes prestations' },
+  { key: 'coiffure', label: 'Coiffure & Tresses' },
+  { key: 'onglerie', label: 'Onglerie & Pédicure' },
+  { key: 'soins', label: 'Soins & Massages' },
+  { key: 'chef', label: 'Chef Privé en Villa' },
+  { key: 'pressing', label: 'Blanchisserie Express' }
 ];
 
 export function TourismPage() {
-  const [selectedCategory, setSelectedCategory] = useState('restaurants');
+  const [discoveries, setDiscoveries] = useState(INITIAL_DISCOVERIES);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('all');
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
-  const filteredSites = TOURISM_SITES.filter((s) => s.category === 'restaurants');
+  // Charger les découvertes (Supabase + fallback local)
+  useEffect(() => {
+    let isMounted = true;
+    getDiscoveries().then((data) => {
+      if (isMounted && data && data.length > 0) {
+        setDiscoveries(data);
+      }
+    });
+
+    const handleUpdate = (e) => {
+      if (e.detail) {
+        setDiscoveries(e.detail);
+      } else {
+        getDiscoveries().then((data) => {
+          if (isMounted && data) setDiscoveries(data);
+        });
+      }
+    };
+
+    window.addEventListener('benin_beyond_discoveries_updated', handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('benin_beyond_discoveries_updated', handleUpdate);
+    };
+  }, []);
+
+  // Filtrage selon catégorie principale et sous-catégorie
+  const filteredSites = discoveries.filter((site) => {
+    if (selectedCategory !== 'all' && site.category !== selectedCategory) {
+      return false;
+    }
+    if (selectedCategory === 'services' && selectedSubcategory !== 'all') {
+      return site.subcategory === selectedSubcategory;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen">
-      {/* 1. Monumental Hero Section */}
+      {/* 1. Hero Section Découvertes */}
       <section className="relative overflow-hidden bg-secondary text-secondary-foreground py-20 md:py-28">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/10 via-transparent to-transparent pointer-events-none" />
         
         <div className="relative z-10 mx-auto max-w-8xl px-6 md:px-12">
           <ScrollReveal delay={0} y={20}>
-            <span className="caption text-accent font-semibold tracking-widest text-xs uppercase mb-3 inline-block">
-              Découvertes & Patrimoine
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <span className="caption text-accent font-semibold tracking-widest text-xs uppercase inline-block">
+                Gastronomie & Prestations de Prestige en Villa
+              </span>
+
+              {/* Bouton Pro / Prestataire */}
+              <button
+                type="button"
+                onClick={() => setIsRegisterModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-4 py-2 text-xs font-bold text-accent hover:bg-accent/25 transition-all shadow-sm active:scale-95"
+              >
+                <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                <span>Référencer mon Activité (Resto Gratuit / Service 500F)</span>
+              </button>
+            </div>
             
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight max-w-4xl leading-tight">
-              Découvertes du Bénin
+              Gastronomie & Services à Domicile
             </h1>
 
             <p className="mt-6 max-w-3xl text-base sm:text-lg text-secondary-foreground/80 leading-relaxed">
-              Le Bénin est une terre d'histoire vivante, de sanctuaires naturels préservés, de saveurs culinaires envoûtantes et de cités lacustres millénaires. 
-              Explorez les monuments incontournables, les parcs nationaux et les meilleures tables gastronomiques recommandées.
+              Explorez les meilleures adresses culinaires du Bénin (inscription 100% gratuite pour les restaurateurs) ainsi que notre catalogue exclusif de <strong>prestataires à domicile</strong> (coiffure, onglerie, soins & massages, chefs privés, pressing) intervenant directement dans votre villa ou appartement privé.
             </p>
 
-            {/* Note informative sans icône i */}
-            <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs sm:text-sm text-secondary-foreground/90 backdrop-blur-sm">
-              <span>
-                Monuments d'histoire, réserves naturelles et restaurants locaux partenaires certifiés par Bénin Beyond.
-              </span>
+            {/* Note informative & Conciergerie */}
+            <div className="mt-8 flex flex-wrap items-center gap-4 text-xs sm:text-sm text-secondary-foreground/90">
+              <div className="inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm">
+                <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4 text-accent" />
+                <span>
+                  Établissements gastronomiques et prestataires certifiés par Bénin Beyond.
+                </span>
+              </div>
+
+              <div className="inline-flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm">
+                <FontAwesomeIcon icon={faHouse} className="h-4 w-4 text-primary" />
+                <span>
+                  Intervention possible directement dans votre hébergement de vacances.
+                </span>
+              </div>
             </div>
           </ScrollReveal>
 
-          {/* Filtres par Catégorie */}
+          {/* Filtres par Catégorie Principale */}
           <ScrollReveal delay={100} y={20} className="mt-12 flex flex-wrap gap-2.5">
             {CATEGORIES.map((cat) => {
               const isActive = selectedCategory === cat.key;
               return (
                 <button
                   key={cat.key}
-                  onClick={() => setSelectedCategory(cat.key)}
+                  onClick={() => {
+                    setSelectedCategory(cat.key);
+                    setSelectedSubcategory('all');
+                  }}
                   className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                     isActive
-                      ? 'bg-accent text-accent-foreground shadow-lg shadow-accent/20'
+                      ? 'bg-accent text-accent-foreground shadow-lg shadow-accent/20 font-bold scale-[1.02]'
                       : 'bg-white/10 text-white/80 hover:bg-white/15'
                   }`}
                 >
                   <FontAwesomeIcon icon={cat.icon} className="h-4 w-4" />
                   <span>{cat.label}</span>
+                  {cat.badge && (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      cat.key === 'restaurants'
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'bg-amber-400 text-slate-950 shadow-xs'
+                    }`}>
+                      {cat.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </ScrollReveal>
-        </div>
-      </section>
 
-      {/* 2. Sites & Merveilles Grid */}
-      <section className="mx-auto max-w-8xl px-6 py-16 md:px-12 md:py-24">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-          {filteredSites.map((site, index) => (
-            <ScrollReveal
-              key={site.id}
-              id={site.id}
-              delay={index * 80}
-              y={30}
-              className="group flex flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-card shadow-sm hover:shadow-xl transition-all duration-500"
-            >
-              {/* Image & Badges */}
-              <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted">
-                <img
-                  src={site.image}
-                  alt={site.title}
-                  className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
-                {/* Badge UNESCO / Merveille */}
-                <div className="absolute left-4 top-4">
-                  <span className="rounded-full bg-black/60 px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase text-accent backdrop-blur-md border border-white/15">
-                    {site.badge}
-                  </span>
-                </div>
-
-                {/* Localisation */}
-                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold drop-shadow-md">
-                    <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-accent" />
-                    <span>{site.location}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contenu Curaté */}
-              <div className="flex flex-1 flex-col justify-between p-6 sm:p-8">
-                <div>
-                  <p className="caption text-accent font-semibold tracking-wider text-xs">
-                    {site.tagline}
-                  </p>
-                  <h2 className="font-heading mt-2 text-2xl font-bold tracking-tight text-foreground">
-                    {site.title}
-                  </h2>
-                  <p className="mt-4 text-sm leading-relaxed text-foreground/75">
-                    {site.description}
-                  </p>
-
-                  {/* Points Clés */}
-                  <div className="mt-5 space-y-2 border-t border-foreground/10 pt-4">
-                    <p className="text-xs font-bold uppercase tracking-wider text-foreground/60">
-                      À ne pas manquer sur place :
-                    </p>
-                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-foreground/80">
-                      {site.highlights.map((hl, i) => (
-                        <li key={i} className="flex items-center gap-1.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
-                          <span>{hl}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Conseil Pratique Voyageur */}
-                  <div className="mt-5 rounded-2xl bg-muted/60 p-4 text-xs text-foreground/80 border border-foreground/5">
-                    <p className="font-semibold text-primary mb-1 flex items-center gap-1.5">
-                      <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5" />
-                      <span>Conseil au voyageur</span>
-                    </p>
-                    <p className="leading-relaxed text-foreground/70">{site.tips}</p>
-                  </div>
-                </div>
-
-                {/* Passerelles Logement & Véhicules Bénin Beyond */}
-                <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-foreground/10 pt-5 text-xs">
-                  <span className="text-foreground/60 font-medium">
-                    Préparez votre trajet vers ce lieu :
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to="/explore?type=stay"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3.5 py-1.5 font-semibold text-foreground hover:bg-muted hover:text-primary transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faBed} className="h-3.5 w-3.5 text-primary" />
-                      <span>Trouver un logement</span>
-                    </Link>
-                    <Link
-                      to="/explore?type=drive"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3.5 py-1.5 font-semibold text-foreground hover:bg-muted hover:text-primary transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5 text-accent" />
-                      <span>Louer un véhicule</span>
-                    </Link>
-                  </div>
-                </div>
-              </div>
+          {/* Sous-filtres pour la section "Autres Services & À Domicile" */}
+          {selectedCategory === 'services' && (
+            <ScrollReveal delay={150} y={15} className="mt-4 flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
+              <span className="text-xs text-secondary-foreground/60 flex items-center gap-1.5 mr-2">
+                <FontAwesomeIcon icon={faFilter} className="h-3 w-3 text-accent" />
+                <span>Spécialités :</span>
+              </span>
+              {SERVICE_SUBCATEGORIES.map((sub) => {
+                const isSubActive = selectedSubcategory === sub.key;
+                return (
+                  <button
+                    key={sub.key}
+                    onClick={() => setSelectedSubcategory(sub.key)}
+                    className={`rounded-full px-3.5 py-1 text-xs transition-all ${
+                      isSubActive
+                        ? 'bg-primary text-white font-bold shadow-sm'
+                        : 'bg-white/5 text-white/70 hover:bg-white/10'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                );
+              })}
             </ScrollReveal>
-          ))}
+          )}
         </div>
       </section>
 
-      {/* 3. Call to Action Hébergement & Mobilité */}
+      {/* 2. Bannière d'appel à destination des Restaurateurs et Prestataires de Services */}
+      <section className="bg-gradient-to-r from-primary/10 via-card to-accent/10 border-b border-foreground/10 py-6 px-6 md:px-12">
+        <div className="mx-auto max-w-8xl flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-white shadow-md shadow-primary/20 shrink-0">
+              <FontAwesomeIcon icon={faScissors} className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h3 className="text-sm font-extrabold text-foreground">
+                  Restaurateurs & Professionnels de Services au Bénin
+                </h3>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-black text-[10px]">
+                  <FontAwesomeIcon icon={faUtensils} className="h-2.5 w-2.5" />
+                  Restaurants : 0 FCFA (Gratuit)
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-900 dark:text-amber-200 font-black text-[10px]">
+                  <FontAwesomeIcon icon={faTag} className="h-2.5 w-2.5" />
+                  Services VIP : 500 FCFA
+                </span>
+              </div>
+              <p className="text-xs text-foreground/75 leading-relaxed">
+                Rejoignez le répertoire exclusif recommandé aux résidents et voyageurs hébergés dans les villas de standing Bénin Beyond. Contact direct sans commission.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsRegisterModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-primary via-primary/95 to-accent hover:brightness-110 px-6 py-3.5 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-primary/25 transition-all shrink-0 active:scale-95"
+          >
+            <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+            <span>Référencer mon Établissement / Service</span>
+          </button>
+        </div>
+      </section>
+
+      {/* 3. Sites & Merveilles Grid */}
+      <section className="mx-auto max-w-8xl px-6 py-16 md:px-12 md:py-24">
+        {filteredSites.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card/40">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-foreground/40">
+              <FontAwesomeIcon icon={faCompass} className="h-6 w-6" />
+            </div>
+            <h3 className="font-heading text-base font-bold text-foreground">
+              Aucun résultat dans cette sélection
+            </h3>
+            <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/60">
+              Soyez le premier restaurateur ou prestataire à proposer vos services dans cette catégorie !
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsRegisterModalOpen(true)}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90"
+            >
+              <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+              <span>Inscrire mon activité</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+            {filteredSites.map((site, index) => {
+              const hasPhone = Boolean(site.phone);
+              const hasWhatsapp = Boolean(site.whatsapp);
+
+              return (
+                <ScrollReveal
+                  key={site.id}
+                  id={site.id}
+                  delay={index * 60}
+                  y={30}
+                  className="group flex flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-card shadow-sm hover:shadow-xl transition-all duration-500"
+                >
+                  {/* Image & Badges */}
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted">
+                    <img
+                      src={site.image}
+                      alt={site.title}
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+
+                    {/* Badge UNESCO / Merveille / Prestation en Villa */}
+                    <div className="absolute left-4 top-4 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-black/60 px-3.5 py-1 text-[11px] font-bold tracking-wide uppercase text-accent backdrop-blur-md border border-white/15">
+                        {site.badge}
+                      </span>
+
+                      {site.inHomeService && (
+                        <span className="rounded-full bg-primary/90 px-3 py-1 text-[10px] font-bold tracking-wider uppercase text-white backdrop-blur-md border border-white/20 flex items-center gap-1.5 shadow-sm">
+                          <FontAwesomeIcon icon={faHouse} className="h-3 w-3" />
+                          <span>Déplacement en Villa</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Localisation */}
+                    <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold drop-shadow-md">
+                        <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-accent" />
+                        <span>{site.location}</span>
+                      </div>
+
+                      {site.pricing && (
+                        <span className="rounded-full bg-white/20 backdrop-blur-md px-3 py-0.5 text-xs font-bold text-white border border-white/20">
+                          {site.pricing}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contenu Curaté */}
+                  <div className="flex flex-1 flex-col justify-between p-6 sm:p-8">
+                    <div>
+                      <p className="caption text-accent font-semibold tracking-wider text-xs">
+                        {site.tagline}
+                      </p>
+                      <h2 className="font-heading mt-2 text-2xl font-bold tracking-tight text-foreground">
+                        {site.title}
+                      </h2>
+                      <p className="mt-4 text-sm leading-relaxed text-foreground/75">
+                        {site.description}
+                      </p>
+
+                      {/* Points Clés / Prestations */}
+                      {site.highlights && site.highlights.length > 0 && (
+                        <div className="mt-5 space-y-2 border-t border-foreground/10 pt-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-foreground/60">
+                            {site.category === 'services'
+                              ? 'Prestations & Avantages :'
+                              : 'À ne pas manquer sur place :'}
+                          </p>
+                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-foreground/80">
+                            {site.highlights.map((hl, i) => (
+                              <li key={i} className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                                <span>{hl}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Conseil Pratique Voyageur / Modalités d'intervention */}
+                      {site.tips && (
+                        <div className="mt-5 rounded-2xl bg-muted/60 p-4 text-xs text-foreground/80 border border-foreground/5">
+                          <p className="font-semibold text-primary mb-1 flex items-center gap-1.5">
+                            <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5" />
+                            <span>
+                              {site.category === 'services'
+                                ? "Modalités de déplacement en résidence"
+                                : "Conseil au voyageur"}
+                            </span>
+                          </p>
+                          <p className="leading-relaxed text-foreground/70">{site.tips}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions de Contact Direct (Téléphone & WhatsApp) pour Services et Restaurants */}
+                    {(hasPhone || hasWhatsapp) && (
+                      <div className="mt-6 pt-5 border-t border-foreground/10">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="text-xs text-foreground/60 font-semibold">
+                            Commander / Réserver sans intermédiaire :
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {hasWhatsapp && (
+                              <a
+                                href={`https://wa.me/${site.whatsapp}?text=${encodeURIComponent(
+                                  `Bonjour, je séjourne actuellement dans un hébergement Bénin Beyond et je souhaiterais solliciter vos services pour "${site.title}". Pourriez-vous me donner vos disponibilités ?`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold shadow-sm transition-all active:scale-95"
+                                title="Contacter directement sur WhatsApp"
+                              >
+                                <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5" />
+                                <span>WhatsApp</span>
+                              </a>
+                            )}
+
+                            {hasPhone && (
+                              <a
+                                href={`tel:${site.phone.replace(/\s+/g, '')}`}
+                                className="inline-flex items-center gap-2 rounded-xl border border-foreground/20 bg-background hover:bg-muted text-foreground px-4 py-2 text-xs font-bold transition-all active:scale-95"
+                                title="Appeler directement"
+                              >
+                                <FontAwesomeIcon icon={faPhone} className="h-3.5 w-3.5 text-primary" />
+                                <span>{site.phone}</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Passerelles Logement & Véhicules Bénin Beyond */}
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-foreground/10 pt-4 text-xs">
+                      <span className="text-foreground/50 font-medium">
+                        Préparez votre séjour à proximité :
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to="/explore?type=stay"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3 py-1 font-semibold text-foreground/80 hover:bg-muted hover:text-primary transition-colors text-[11px]"
+                        >
+                          <FontAwesomeIcon icon={faBed} className="h-3 w-3 text-primary" />
+                          <span>Logement</span>
+                        </Link>
+                        <Link
+                          to="/explore?type=drive"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-background px-3 py-1 font-semibold text-foreground/80 hover:bg-muted hover:text-primary transition-colors text-[11px]"
+                        >
+                          <FontAwesomeIcon icon={faCar} className="h-3 w-3 text-accent" />
+                          <span>Véhicule</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollReveal>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* 4. Call to Action Hébergement & Mobilité */}
       <section className="border-t border-foreground/10 bg-muted/30 py-16">
         <div className="mx-auto max-w-4xl px-6 text-center md:px-12">
           <ScrollReveal delay={0} y={20}>
@@ -341,8 +429,7 @@ export function TourismPage() {
               Séjournez et déplacez-vous en toute sérénité à travers le Bénin
             </h3>
             <p className="mt-4 text-sm text-foreground/75 leading-relaxed">
-              Pour profiter pleinement de ces merveilles patrimoniales, Bénin Beyond met à votre disposition 
-              des villas et appartements de standing ainsi qu’une flotte complète de berlines et SUV 4x4.
+              Pour profiter pleinement de ces adresses gastronomiques et recevoir vos prestataires de bien-être et de services à domicile dans un confort absolu, Bénin Beyond met à votre disposition des villas et appartements de standing ainsi qu’une flotte complète de berlines et SUV 4x4.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Link
@@ -363,6 +450,18 @@ export function TourismPage() {
           </ScrollReveal>
         </div>
       </section>
+
+      {/* Modal d'inscription Prestataire (500 FCFA) */}
+      <ProviderRegistrationModal
+        isOpen={isRegisterModalOpen}
+        onClose={() => setIsRegisterModalOpen(false)}
+        onSuccess={() => {
+          getDiscoveries().then((data) => {
+            if (data) setDiscoveries(data);
+          });
+        }}
+      />
     </div>
   );
 }
+export default TourismPage;

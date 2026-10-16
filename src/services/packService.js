@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 import { COMBINED_PACKS } from '../data/packsData';
 
 const CUSTOM_PACKS_KEY = 'benin_beyond_custom_packs';
@@ -54,7 +54,7 @@ export async function addPack(newPack) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('packs').insert([packWithId]);
+      await runSupabaseQuery('packs.insert', supabase.from('packs').insert([packWithId]));
     } catch (err) {
       console.warn('Supabase pack insertion error:', err.message);
     }
@@ -70,7 +70,7 @@ export async function deletePack(packId) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('packs').delete().eq('id', packId);
+      await runSupabaseQuery('packs.delete', supabase.from('packs').delete().eq('id', packId));
     } catch (err) {
       console.warn('Supabase pack deletion error:', err.message);
     }

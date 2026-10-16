@@ -20,7 +20,7 @@ import {
   faGem
 } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
-import { getEvents } from '../services/eventService';
+import { getEvents, INITIAL_CULTURAL_EVENTS } from '../services/eventService';
 
 const BENIN_CITIES = [
   { id: 'cotonou', name: 'Cotonou', region: 'Littoral', lat: 6.3654, lon: 2.4186 },
@@ -72,8 +72,8 @@ function getWeatherInfo(code, isDay) {
   };
 }
 
-export function BeninLiveSection() {
-  const [events, setEvents] = useState([]);
+export function BeninLiveSection({ showWeather = true, showEvents = true, className = '' }) {
+  const [events, setEvents] = useState(INITIAL_CULTURAL_EVENTS || []);
   const [activeEventIndex, setActiveEventIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [timeString, setTimeString] = useState('');
@@ -193,11 +193,15 @@ export function BeninLiveSection() {
 
   const weatherInfo = getWeatherInfo(weatherData.code, weatherData.isDay);
 
+  if (!showWeather && !showEvents) return null;
+  if (!showWeather && events.length === 0) return null;
+
   return (
-    <section className="relative w-full border-y border-foreground/10 bg-card/60 backdrop-blur-md">
+    <section className={`relative w-full border-y border-foreground/10 bg-card/60 backdrop-blur-md ${className}`}>
       {/* 1. Direct Time & Weather Bar */}
-      <ScrollReveal delay={0} y={15} className="border-b border-foreground/10 py-3.5 px-6 md:px-12">
-        <div className="mx-auto max-w-8xl flex flex-wrap items-center justify-between gap-4">
+      {showWeather && (
+        <ScrollReveal delay={0} y={15} className={`py-3.5 px-6 md:px-12 ${showEvents && events.length > 0 ? 'border-b border-foreground/10' : ''}`}>
+          <div className="mx-auto max-w-8xl flex flex-wrap items-center justify-between gap-4">
           
           {/* A. Heure Officielle du Bénin */}
           <div className="flex items-center gap-3">
@@ -289,9 +293,10 @@ export function BeninLiveSection() {
 
         </div>
       </ScrollReveal>
+      )}
 
       {/* 2. Cultural & Touristic Events Section */}
-      {events.length > 0 && (
+      {showEvents && events.length > 0 && (
         <div
           className="mx-auto max-w-8xl px-6 py-10 md:px-12"
           onMouseEnter={() => setIsPaused(true)}
@@ -304,7 +309,7 @@ export function BeninLiveSection() {
                 <span>En direct du Bénin</span>
               </p>
               <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
-                Événements culturels & Saison touristique
+                Événements culturels, Histoires & Saison touristique
               </h3>
             </div>
 

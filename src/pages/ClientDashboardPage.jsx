@@ -555,9 +555,9 @@ export function ClientDashboardPage() {
             <div className="rounded-3xl border border-foreground/10 bg-card p-6 sm:p-10 shadow-md">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-foreground/10 pb-4">
                 <div>
-                  <h3 className="font-heading text-lg font-bold">Incontournables & Bonnes Tables</h3>
+                  <h3 className="font-heading text-lg font-bold">Gastronomie & Prestations en Villa</h3>
                   <p className="text-xs text-foreground/60 mt-0.5">
-                    Explorez les monuments et les restaurants locaux recommandés pour sublimer votre passage au Bénin.
+                    Explorez les meilleures tables gourmandes et profitez de nos services à domicile (coiffure, soins, massage, chef privé) dans votre villa.
                   </p>
                 </div>
                 <Link
@@ -565,7 +565,7 @@ export function ClientDashboardPage() {
                   className="inline-flex items-center gap-2 rounded-full bg-accent/20 text-accent font-semibold px-4 py-2 text-xs hover:bg-accent/30 transition-all"
                 >
                   <FontAwesomeIcon icon={faCompass} className="h-3.5 w-3.5" />
-                  <span>Voir toutes les découvertes</span>
+                  <span>Voir tout le catalogue</span>
                 </Link>
               </div>
 
@@ -588,30 +588,30 @@ export function ClientDashboardPage() {
                 <div className="rounded-2xl border border-foreground/10 overflow-hidden bg-background p-4 hover:shadow-lg transition-all">
                   <div className="h-32 rounded-xl overflow-hidden mb-3">
                     <img
-                      src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80"
-                      alt="Ouidah"
+                      src="https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80"
+                      alt="Coiffure en Villa"
                       className="h-full w-full object-cover"
                     />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Histoire · Ouidah</span>
-                  <h4 className="font-heading text-sm font-bold mt-1">La Porte du Non-Retour</h4>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Service en Villa · Cotonou</span>
+                  <h4 className="font-heading text-sm font-bold mt-1">Coiffure & Tresses Afro-Chic</h4>
                   <p className="text-xs text-foreground/60 mt-1 line-clamp-2">
-                    Mémorial face à l'océan Atlantique et balade sur la mythique Route des Esclaves.
+                    Knotless braids et coiffures événementielles réalisées directement dans votre résidence.
                   </p>
                 </div>
 
                 <div className="rounded-2xl border border-foreground/10 overflow-hidden bg-background p-4 hover:shadow-lg transition-all">
                   <div className="h-32 rounded-xl overflow-hidden mb-3">
                     <img
-                      src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80"
-                      alt="Ganvié"
+                      src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=800&q=80"
+                      alt="Massage en Villa"
                       className="h-full w-full object-cover"
                     />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Nature · Lac Nokoué</span>
-                  <h4 className="font-heading text-sm font-bold mt-1">Ganvié sur Pilotis</h4>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Service en Villa · Cotonou & Ouidah</span>
+                  <h4 className="font-heading text-sm font-bold mt-1">Sérénité Spa & Massages</h4>
                   <p className="text-xs text-foreground/60 mt-1 line-clamp-2">
-                    Excursion en pirogue à l'aube sur le lac et marché flottant traditionnel.
+                    Massage relaxant californien et huiles bio aux essences béninoises en toute intimité.
                   </p>
                 </div>
               </div>

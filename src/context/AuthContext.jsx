@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 
 const AuthContext = createContext(null);
 
@@ -36,8 +36,7 @@ export function resolveUserRole(email, rawRole = null) {
   if (
     cleanEmail === SUPER_ADMIN_EMAIL ||
     cleanEmail === 'admin@beninbeyond.com' ||
-    cleanEmail === 'admin@beninbeyond.bj' ||
-    cleanEmail.startsWith('admin@')
+    cleanEmail === 'admin@beninbeyond.bj'
   ) {
     return 'admin';
   }
@@ -217,7 +216,13 @@ export function AuthProvider({ children }) {
     const handleFocus = () => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
-          syncSupabaseSession(session.user);
+          setUser((currentUser) => {
+            const cleanSessionEmail = (session.user.email || '').trim().toLowerCase();
+            if (!currentUser || currentUser.id !== session.user.id || currentUser.email !== cleanSessionEmail) {
+              syncSupabaseSession(session.user);
+            }
+            return currentUser;
+          });
         }
       });
     };
@@ -343,7 +348,7 @@ export function AuthProvider({ children }) {
     if (isSupabaseConfigured && supabase && (assignedRole === 'owner' || assignedRole === 'admin' || assignedRole === 'subadmin')) {
       try {
         const dbRole = assignedRole === 'admin' ? 'admin' : (assignedRole === 'subadmin' ? 'subadmin' : 'partner');
-        await supabase
+        await runSupabaseQuery('profiles.upsert', supabase
           .from('profiles')
           .upsert({
             id: authUser.id,
@@ -353,7 +358,7 @@ export function AuthProvider({ children }) {
             company_name: resolvedCompany || 'Partenaire Hébergeur & Mobilité',
             verified: assignedRole === 'admin' ? true : Boolean(profile?.verified || existingLocalUser?.verified),
             updated_at: new Date().toISOString()
-          }, { onConflict: 'email' });
+          }, { onConflict: 'email' }));
       } catch (err) {
         console.warn('Synchro rôle Supabase profiles:', err);
       }
@@ -389,7 +394,7 @@ export function AuthProvider({ children }) {
       return { success: false, error: 'Veuillez saisir votre mot de passe.' };
     }
 
-    const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.com' || cleanEmail === 'admin@beninbeyond.bj' || cleanEmail.startsWith('admin@');
+    const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.com' || cleanEmail === 'admin@beninbeyond.bj';
 
     // 1. Authentification officielle avec Supabase Auth si configuré
     if (isSupabaseConfigured && supabase) {
@@ -407,6 +412,14 @@ export function AuthProvider({ children }) {
         console.warn('Supabase signInWithPassword:', err);
       }
     }
+
+    // Les comptes à privilèges (admin / assistant) doivent obligatoirement passer par Supabase Auth
+    // lorsque le backend est configuré : aucun mot de passe local ou "maître" n'est accepté.
+    const privilegedLoginRefused = {
+      success: false,
+      isWrongPassword: true,
+      error: "Identifiants administrateur invalides. Connectez-vous avec Google ou utilisez 'Mot de passe oublié' pour définir votre mot de passe."
+    };
 
     // 2. Vérification de l'existence du compte dans Supabase (table profiles)
     let supabaseProfile = null;
@@ -450,10 +463,12 @@ export function AuthProvider({ children }) {
       };
     }
 
-    // 4. VÉRIFICATION DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR
+    // 4. VÉRIFICATION DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR (mode local hors Supabase uniquement)
     if (isAdmin) {
+      if (isSupabaseConfigured) return privilegedLoginRefused;
+
       const customAdminPassword = localStorage.getItem('benin_beyond_admin_custom_password');
-      const validAdminPasswords = ['BeninBeyond2025!', 'admin123', 'admin', 'demo123', 'Benin2025!'];
+      const validAdminPasswords = ['BeninBeyond2025!'];
 
       const matchesCustom = customAdminPassword && cleanPassword === customAdminPassword;
       const matchesSavedPassword = savedUser?.password && savedUser.password === cleanPassword;
@@ -493,7 +508,9 @@ export function AuthProvider({ children }) {
 
     // 5. GESTION STRICTE DES COMPTES PROMUS OU CONFIGURÉS EN ASSISTANT ADMIN (SUB-ADMIN)
     if (isPromotedSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
-      const validSubAdminPasswords = ['BeninBeyond2025!', 'admin123', 'assistant123', 'demo123'];
+      if (isSupabaseConfigured) return privilegedLoginRefused;
+
+      const validSubAdminPasswords = ['BeninBeyond2025!'];
       const matchesSaved = savedUser?.password && savedUser.password === cleanPassword;
       const matchesMaster = validSubAdminPasswords.includes(cleanPassword);
       // Si l'assistant n'a pas encore de mot de passe défini, accepter le premier mot de passe saisi
@@ -527,7 +544,7 @@ export function AuthProvider({ children }) {
 
     // 6. VÉRIFICATION DU MOT DE PASSE POUR LES COMPTES DÉMO (SI NON MODIFIÉS PAR L'ADMIN)
     if (demoMatch && !userOverride) {
-      const validDemoPasswords = ['BeninBeyond2025!', 'demo123', 'admin123', 'Benin2025!'];
+      const validDemoPasswords = ['BeninBeyond2025!', 'demo123'];
       if (!validDemoPasswords.includes(cleanPassword)) {
         return {
           success: false,
@@ -755,7 +772,7 @@ export function AuthProvider({ children }) {
 
         if (!error && data?.user) {
           try {
-            await supabase.from('profiles').upsert({
+            await runSupabaseQuery('profiles.upsert', supabase.from('profiles').upsert({
               id: data.user.id,
               email: cleanEmail,
               full_name: name,
@@ -769,7 +786,7 @@ export function AuthProvider({ children }) {
               kyc_status: assignedRole === 'owner' ? 'pending' : 'verified',
               verified: assignedRole === 'admin',
               updated_at: new Date().toISOString()
-            }, { onConflict: 'email' });
+            }, { onConflict: 'email' }));
           } catch {}
 
           const registeredUser = await syncSupabaseSession(data.user);
@@ -814,8 +831,11 @@ export function AuthProvider({ children }) {
 
       if (isSupabaseConfigured && supabase) {
         try {
-          await supabase.auth.updateUser({ password: trimmedPass });
-        } catch {}
+          const { error } = await supabase.auth.updateUser({ password: trimmedPass });
+          if (error) console.warn('[Auth] Mot de passe Supabase non mis à jour :', error.message);
+        } catch (err) {
+          console.warn('[Auth] Mot de passe Supabase non mis à jour :', err?.message || err);
+        }
       }
 
       return {
@@ -940,14 +960,14 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
+        await runSupabaseQuery('profiles.update', supabase
           .from('profiles')
           .update({
             role: 'partner',
             company_name: updatedUser.company,
             updated_at: new Date().toISOString()
           })
-          .ilike('email', cleanEmail);
+          .ilike('email', cleanEmail));
       } catch (e) {
         console.warn('Erreur upgradeToOwner Supabase:', e);
       }

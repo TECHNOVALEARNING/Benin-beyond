@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient.js';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient.js';
 import { INITIAL_LISTINGS } from '../data/initialListings.js';
 
 const CUSTOM_LISTINGS_KEY = 'benin_beyond_custom_listings';
@@ -427,7 +427,7 @@ export async function updateListing(id, updates = {}) {
     custom[index] = updatedListing;
     saveCustomListings(custom);
   } else {
-    const initial = initialListings.find((item) => item.id === id);
+    const initial = INITIAL_LISTINGS.find((item) => item.id === id);
     if (initial) {
       updatedListing = {
         ...initial,
@@ -545,14 +545,14 @@ export async function updateListingStatus(id, newStatus, rejectionReason = '') {
   // 2. Base Supabase
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase
+      await runSupabaseQuery('listings.update', supabase
         .from('listings')
         .update({
           status: newStatus,
           rejection_reason: rejectionReason || null,
           updated_date: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', id));
     } catch (err) {
       console.warn('Erreur Supabase updateListingStatus:', err);
     }
@@ -576,10 +576,10 @@ export async function deleteListing(id) {
   // 3. Base Supabase : suppression physique
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase
+      await runSupabaseQuery('listings.delete', supabase
         .from('listings')
         .delete()
-        .eq('id', id);
+        .eq('id', id));
     } catch (err) {
       console.warn('Erreur Supabase deleteListing:', err);
     }
@@ -643,7 +643,7 @@ export async function activateOwnerListings(ownerId, ownerEmail = '') {
       }
 
       if (targetOwnerId) {
-        await supabase
+        await runSupabaseQuery('listings.update', supabase
           .from('listings')
           .update({
             status: 'active',
@@ -652,7 +652,7 @@ export async function activateOwnerListings(ownerId, ownerEmail = '') {
             updated_date: new Date().toISOString()
           })
           .eq('owner_id', targetOwnerId)
-          .eq('status', 'pending');
+          .eq('status', 'pending'));
       }
     } catch (err) {
       console.warn('Erreur Supabase activateOwnerListings:', err);
@@ -707,7 +707,7 @@ export async function suspendOwnerListings(ownerId, ownerEmail = '') {
       }
 
       if (targetOwnerId) {
-        await supabase
+        await runSupabaseQuery('listings.update', supabase
           .from('listings')
           .update({
             status: 'pending',
@@ -715,7 +715,7 @@ export async function suspendOwnerListings(ownerId, ownerEmail = '') {
             updated_date: new Date().toISOString()
           })
           .eq('owner_id', targetOwnerId)
-          .eq('status', 'active');
+          .eq('status', 'active'));
       }
     } catch (err) {
       console.warn('Erreur Supabase suspendOwnerListings:', err);

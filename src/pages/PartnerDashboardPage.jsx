@@ -53,12 +53,13 @@ import {
   faPen,
   faSpinner,
   faCircleInfo,
-  faHotel
+  faHotel,
+  faCalendarDays
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { addListing, updateListing, deleteListing, getListings, getCustomListings } from '../services/listingService';
-import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
+import { getBookings, updateBookingStatus, deleteBooking, blockListingDates, unblockListingDates } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -69,12 +70,28 @@ import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
-import { getVerificationApplication } from '../services/ownerVerificationService';
+import { getVerificationApplication, getLocalVerificationApplication } from '../services/ownerVerificationService';
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
   const { user, role, logout } = useAuth();
-  const [verificationApp, setVerificationApp] = useState(null);
+  
+  // Lecture synchrone immédiate du cache local pour éviter tout flash ou faux rebond
+  const [verificationApp, setVerificationApp] = useState(() => {
+    try {
+      return getLocalVerificationApplication(user?.id, user?.email);
+    } catch {
+      return null;
+    }
+  });
+  
+  const [loadingVerification, setLoadingVerification] = useState(() => {
+    if (user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified') {
+      return false;
+    }
+    const local = getLocalVerificationApplication(user?.id, user?.email);
+    return !local;
+  });
 
   const handlePartnerLogout = async () => {
     try {
@@ -90,23 +107,42 @@ export function PartnerDashboardPage() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     if (user) {
-      getVerificationApplication(user.id, user.email).then((app) => {
-        if (app) setVerificationApp(app);
-      });
+      getVerificationApplication(user.id, user.email)
+        .then((app) => {
+          if (isMounted && app) {
+            setVerificationApp(app);
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoadingVerification(false);
+          }
+        });
+    } else {
+      setLoadingVerification(false);
     }
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
-  // Redirection obligatoire vers l'onboarding si le partenaire n'a pas complété sa vérification KYC
+  // Redirection obligatoire vers l'onboarding UNIQUEMENT après confirmation que le KYC n'a pas été soumis
   useEffect(() => {
+    if (loadingVerification) return; // ATTENDRE impérativement la fin de la vérification !
+
     if (user && user.role !== 'admin' && user.role !== 'subadmin') {
       const certified = Boolean(user.verified || user.kyc_status === 'verified');
-      const hasCompletedOnboarding = Boolean(verificationApp && (verificationApp.status === 'submitted' || verificationApp.status === 'under_review' || verificationApp.status === 'approved' || verificationApp.status === 'additional_info_required'));
+      const hasCompletedOnboarding = Boolean(
+        verificationApp &&
+        ['submitted', 'under_review', 'approved', 'additional_info_required'].includes(verificationApp.status)
+      );
       if (!certified && !hasCompletedOnboarding) {
         navigate('/onboarding/partner', { replace: true });
       }
     }
-  }, [user, verificationApp, navigate]);
+  }, [user, verificationApp, loadingVerification, navigate]);
 
   const verifStatus = verificationApp?.status || (user?.kyc_status === 'verified' ? 'approved' : (user?.kyc_status || 'draft'));
   const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified' || verifStatus === 'approved');
@@ -232,6 +268,30 @@ export function PartnerDashboardPage() {
   const [payoutSuccessMessage, setPayoutSuccessMessage] = useState('');
   const [payoutError, setPayoutError] = useState('');
   const [partnerPayouts, setPartnerPayouts] = useState([]);
+
+  // Availability & Physical Booking state
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockListingId, setBlockListingId] = useState('');
+  const [blockStartDate, setBlockStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [blockEndDate, setBlockEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    return d.toISOString().split('T')[0];
+  });
+  const [blockCustomerName, setBlockCustomerName] = useState('');
+  const [blockCustomerPhone, setBlockCustomerPhone] = useState('');
+  const [blockCustomerEmail, setBlockCustomerEmail] = useState('');
+  const [blockReason, setBlockReason] = useState('Réservation physique / Client en direct');
+  const [blockNotes, setBlockNotes] = useState('');
+  const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
+  const [blockFilterListing, setBlockFilterListing] = useState('all');
+  const [blockSearch, setBlockSearch] = useState('');
+  const [blockSuccessToast, setBlockSuccessToast] = useState('');
+  const [blockErrorAlert, setBlockErrorAlert] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -876,6 +936,105 @@ export function PartnerDashboardPage() {
     }
   };
 
+  // Availability / Manual Block Handlers
+  const handleOpenBlockModal = (targetListing = null) => {
+    if (targetListing?.id) {
+      setBlockListingId(targetListing.id);
+    } else if (!blockListingId && listings.length > 0) {
+      setBlockListingId(listings[0].id);
+    }
+    const d1 = new Date();
+    d1.setDate(d1.getDate() + 1);
+    const d2 = new Date();
+    d2.setDate(d2.getDate() + 4);
+    setBlockStartDate(d1.toISOString().split('T')[0]);
+    setBlockEndDate(d2.toISOString().split('T')[0]);
+    setBlockCustomerName('');
+    setBlockCustomerPhone('');
+    setBlockCustomerEmail('');
+    setBlockNotes('');
+    setBlockErrorAlert('');
+    setBlockReason('Réservation physique / Client en direct');
+    setShowBlockModal(true);
+  };
+
+  const handleSubmitBlockDates = async (e) => {
+    e?.preventDefault?.();
+    setBlockErrorAlert('');
+
+    if (!blockListingId) {
+      setBlockErrorAlert('Veuillez sélectionner le bien ou véhicule concerné.');
+      return;
+    }
+    if (!blockStartDate || !blockEndDate) {
+      setBlockErrorAlert('Veuillez renseigner les dates de début et de fin.');
+      return;
+    }
+    if (new Date(blockEndDate) < new Date(blockStartDate)) {
+      setBlockErrorAlert('La date de fin ne peut pas précéder la date de début.');
+      return;
+    }
+
+    const selectedListing = listings.find((l) => String(l.id) === String(blockListingId));
+    setIsSubmittingBlock(true);
+
+    try {
+      const res = await blockListingDates({
+        listingId: blockListingId,
+        listingTitle: selectedListing?.title || 'Bien partenaire',
+        listingImage: selectedListing?.image || selectedListing?.gallery?.[0] || '',
+        listingLocation: selectedListing?.location || '',
+        listingType: selectedListing?.type || 'stay',
+        startDate: blockStartDate,
+        endDate: blockEndDate,
+        customerName: blockCustomerName.trim() || 'Client Réservation Directe',
+        customerPhone: blockCustomerPhone.trim(),
+        customerEmail: blockCustomerEmail.trim(),
+        notes: blockNotes.trim(),
+        reason: blockReason,
+        ownerId: user?.id,
+        ownerEmail: user?.email,
+        ownerName: user?.name
+      });
+
+      if (res?.success) {
+        setShowBlockModal(false);
+        setBlockSuccessToast(`Période du ${blockStartDate} au ${blockEndDate} verrouillée avec succès ! Ce bien est désormais inaccessible aux réservations en ligne pour ces dates.`);
+        setTimeout(() => setBlockSuccessToast(''), 5000);
+        await loadAllData();
+      } else {
+        setBlockErrorAlert('Une erreur est survenue lors du blocage. Veuillez réessayer.');
+      }
+    } catch (err) {
+      console.error('Erreur blocage dates:', err);
+      setBlockErrorAlert('Erreur inattendue : ' + (err.message || 'Échec'));
+    } finally {
+      setIsSubmittingBlock(false);
+    }
+  };
+
+  const handleUnblockPeriod = (booking) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Libérer / Débloquer ces dates ?',
+      message: `Souhaitez-vous débloquer la période du ${booking.start_date || booking.dates || 'sélectionnée'} pour "${booking.items?.[0]?.title || 'ce bien'}" ? Ces dates redeviendront immédiatement disponibles pour les voyageurs sur le site Bénin Beyond.`,
+      confirmText: 'Débloquer & Ré-ouvrir',
+      cancelText: 'Conserver bloqué',
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          await unblockListingDates(booking.id, booking.booking_ref);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setBlockSuccessToast('Dates libérées avec succès ! Le bien est de nouveau ouvert à la réservation en ligne.');
+          setTimeout(() => setBlockSuccessToast(''), 5000);
+          await loadAllData();
+        } catch (err) {
+          console.error('Erreur déblocage dates:', err);
+        }
+      }
+    });
+  };
+
   // Publishing an item
   const handlePublishSubmit = async (e) => {
     e.preventDefault();
@@ -972,6 +1131,35 @@ export function PartnerDashboardPage() {
     }, 2000);
   };
 
+  const blockedBookings = useMemo(() => {
+    return bookings.filter(
+      (b) =>
+        b.is_manual_block ||
+        b.block_reason ||
+        (b.payment_method && b.payment_method.toLowerCase().includes('physique'))
+    );
+  }, [bookings]);
+
+  const filteredBlockedBookings = useMemo(() => {
+    return blockedBookings.filter((b) => {
+      if (blockFilterListing !== 'all') {
+        const targetId = String(blockFilterListing);
+        const matchesDirect = String(b.listing_id || '') === targetId;
+        const matchesItem = Array.isArray(b.items) && b.items.some((it) => String(it.listing_id || it.id || '') === targetId);
+        if (!matchesDirect && !matchesItem) return false;
+      }
+      if (blockSearch.trim()) {
+        const q = blockSearch.toLowerCase();
+        const matchName = (b.customer_name || '').toLowerCase().includes(q);
+        const matchRef = (b.booking_ref || '').toLowerCase().includes(q);
+        const matchReason = (b.block_reason || '').toLowerCase().includes(q);
+        const matchItem = Array.isArray(b.items) && b.items.some((it) => (it.title || '').toLowerCase().includes(q));
+        if (!matchName && !matchRef && !matchReason && !matchItem) return false;
+      }
+      return true;
+    });
+  }, [blockedBookings, blockFilterListing, blockSearch]);
+
   // Nav Items with FontAwesome
   const navItems = [
     { key: 'overview', label: 'Vue d’ensemble', icon: faChartPie },
@@ -980,6 +1168,12 @@ export function PartnerDashboardPage() {
       label: 'Réservations reçues',
       icon: faCalendarCheck,
       badge: financials.pendingCount > 0 ? `${financials.pendingCount} en attente` : null
+    },
+    {
+      key: 'availability',
+      label: 'Disponibilités & Calendrier',
+      icon: faCalendarDays,
+      badge: blockedBookings.length > 0 ? `${blockedBookings.length} bloqué(s)` : null
     },
     { key: 'listings', label: 'Mes annonces & biens', icon: faHouse, count: listings.length },
     { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus, highlight: true },
@@ -1660,6 +1854,16 @@ export function PartnerDashboardPage() {
                       En attente ({financials.pendingCount})
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBlockModal()}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3.5 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 hover:bg-amber-500 hover:text-white transition-all shadow-xs"
+                    title="Enregistrer une réservation directe (hors plateforme) ou bloquer des dates"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
+                    <span>Réservation physique</span>
+                  </button>
                 </div>
               </div>
 
@@ -1791,6 +1995,280 @@ export function PartnerDashboardPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION DISPONIBILITÉS & BLOCAGES CALENDRIER PAR LE PROPRIÉTAIRE */}
+          {/* ========================================================================= */}
+          {currentSection === 'availability' && (
+            <div className="space-y-6 animate-section-stagger">
+              {/* Header & Main Action */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-xl font-bold text-foreground flex items-center gap-2">
+                    <FontAwesomeIcon icon={faCalendarDays} className="text-primary text-base" />
+                    <span>Disponibilités des Biens & Réservations Physiques</span>
+                  </h2>
+                  <p className="text-xs text-foreground/60 mt-1 max-w-2xl leading-relaxed">
+                    Gérez en direct les disponibilités de votre parc. Si vous avez déjà fait une réservation pour un client en physique (hors plateforme), bloquez l'accès à ces dates : elles deviendront immédiatement indisponibles pour les réservations en ligne, tandis que toute date ultérieure restera librement réservable.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBlockModal()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all active:scale-95"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="text-[11px]" />
+                    <span>Bloquer des dates / Réservation physique</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Toast confirmation banner */}
+              {blockSuccessToast && (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-200 flex items-center justify-between animate-fadeIn shadow-sm">
+                  <div className="flex items-center gap-2.5 font-medium">
+                    <FontAwesomeIcon icon={faCheckCircle} className="text-emerald-600 text-sm" />
+                    <span>{blockSuccessToast}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBlockSuccessToast('')}
+                    className="text-emerald-700 hover:text-emerald-900 text-xs font-bold"
+                  >
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </div>
+              )}
+
+              {/* KPI Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider block">
+                    Biens sous gestion
+                  </span>
+                  <div className="font-heading text-2xl font-bold text-foreground mt-1">
+                    {listings.length}
+                  </div>
+                  <span className="text-[11px] text-foreground/60 mt-0.5 block">
+                    Villas, Lofts & Véhicules
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider block">
+                    Périodes bloquées en direct
+                  </span>
+                  <div className="font-heading text-2xl font-bold text-amber-700 mt-1">
+                    {blockedBookings.length}
+                  </div>
+                  <span className="text-[11px] text-amber-600/80 mt-0.5 block">
+                    Réservations physiques actives
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider block">
+                    Réservations en ligne
+                  </span>
+                  <div className="font-heading text-2xl font-bold text-primary mt-1">
+                    {bookings.filter((b) => !b.is_manual_block && !b.block_reason).length}
+                  </div>
+                  <span className="text-[11px] text-foreground/60 mt-0.5 block">
+                    Payées via Bénin Beyond
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider block">
+                    Synchronisation
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-heading text-sm font-bold text-emerald-800">Temps Réel</span>
+                  </div>
+                  <span className="text-[11px] text-emerald-600/80 mt-0.5 block">
+                    Anti-conflit calendrier actif
+                  </span>
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative min-w-[200px]">
+                    <FontAwesomeIcon
+                      icon={faMagnifyingGlass}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par client, note, réf..."
+                      value={blockSearch}
+                      onChange={(e) => setBlockSearch(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background pl-8 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <select
+                    value={blockFilterListing}
+                    onChange={(e) => setBlockFilterListing(e.target.value)}
+                    className="rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="all">Tous mes biens ({listings.length})</option>
+                    {listings.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="text-xs text-foreground/60 font-medium">
+                  {filteredBlockedBookings.length} blocage(s) affiché(s)
+                </div>
+              </div>
+
+              {/* List of Blocked Periods */}
+              {filteredBlockedBookings.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-10 text-center max-w-xl mx-auto shadow-xs">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+                    <FontAwesomeIcon icon={faCalendarDays} className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Aucune période bloquée manuellement
+                  </h3>
+                  <p className="mt-1.5 text-xs text-foreground/65 leading-relaxed">
+                    Vos biens sont actuellement ouverts aux réservations en ligne selon leurs disponibilités standard. Si vous concluez une réservation en direct ou souhaitez bloquer des dates pour un usage personnel, cliquez ci-dessous.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBlockModal()}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
+                    <span>Bloquer des dates maintenant</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredBlockedBookings.map((b) => {
+                    const it = b.items?.[0] || {};
+                    const start = b.start_date || b.check_in || it.startDate || '';
+                    const end = b.end_date || b.check_out || it.endDate || '';
+                    const todayStr = new Date().toISOString().slice(0, 10);
+                    const isCurrent = start <= todayStr && end >= todayStr;
+                    const isUpcoming = start > todayStr;
+
+                    return (
+                      <div
+                        key={b.id || b.booking_ref}
+                        className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm hover:border-foreground/20 transition-all flex flex-col justify-between gap-4"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          {it.image && (
+                            <img
+                              src={it.image}
+                              alt=""
+                              className="h-16 w-20 rounded-xl object-cover border border-foreground/10 shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-[10px] text-foreground/50 uppercase font-semibold">
+                                {b.booking_ref}
+                              </span>
+                              {isCurrent ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                  <span>En cours</span>
+                                </span>
+                              ) : isUpcoming ? (
+                                <span className="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                                  À venir
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-medium text-foreground/60">
+                                  Terminé
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="font-heading text-sm font-bold text-foreground mt-0.5 truncate">
+                              {it.title || b.title || 'Bien partenaire'}
+                            </h4>
+
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-200">
+                                <FontAwesomeIcon icon={faCalendarDays} className="text-[11px]" />
+                                <span>Du {start} au {end}</span>
+                              </span>
+                              {b.duration_days && (
+                                <span className="text-[11px] text-foreground/60 font-medium">
+                                  ({b.duration_days} nuit{b.duration_days > 1 ? 's' : ''})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Motif & Client */}
+                        <div className="rounded-xl bg-muted/40 p-3 text-xs space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground/50 text-[11px]">Motif du blocage :</span>
+                            <span className="font-semibold text-foreground/85">
+                              {b.block_reason || 'Réservation physique / Directe'}
+                            </span>
+                          </div>
+                          {b.customer_name && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-foreground/50 text-[11px]">Client physique :</span>
+                              <span className="font-semibold text-foreground/90">{b.customer_name}</span>
+                            </div>
+                          )}
+                          {b.customer_phone && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-foreground/50 text-[11px]">Contact :</span>
+                              <a
+                                href={`tel:${b.customer_phone}`}
+                                className="font-semibold text-primary hover:underline flex items-center gap-1"
+                              >
+                                <FontAwesomeIcon icon={faPhone} className="text-[10px]" />
+                                <span>{b.customer_phone}</span>
+                              </a>
+                            </div>
+                          )}
+                          {b.notes && (
+                            <div className="pt-1 border-t border-foreground/10 text-[11px] text-foreground/70 italic">
+                              « {b.notes} »
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
+                            <FontAwesomeIcon icon={faBan} className="text-[10px]" />
+                            <span>Verrouillé en ligne</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleUnblockPeriod(b)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-500 hover:text-white transition-all shadow-xs"
+                          >
+                            <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
+                            <span>Libérer / Débloquer</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1941,6 +2419,14 @@ export function PartnerDashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenBlockModal(item)}
+                            className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                            title="Gérer les disponibilités / Bloquer des dates (réservation physique)"
+                          >
+                            <FontAwesomeIcon icon={faCalendarDays} />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(item)}
@@ -4480,6 +4966,200 @@ export function PartnerDashboardPage() {
                   Fermer
                 </button>
               </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL : BLOQUER DES DATES / RÉSERVATION PHYSIQUE EN DIRECT */}
+      {/* ========================================================================= */}
+      {showBlockModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fadeIn">
+          <div className="bg-card w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl border border-foreground/15 shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm px-6 py-4 border-b border-foreground/10 flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-lg font-bold text-foreground flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCalendarDays} className="text-primary" />
+                  <span>Bloquer des dates / Réservation physique</span>
+                </h3>
+                <p className="text-xs text-foreground/60 mt-0.5">
+                  Verrouillez l'accès pour un client direct ou une indisponibilité
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBlockModal(false)}
+                className="text-foreground/50 hover:text-foreground p-1.5 rounded-lg hover:bg-muted transition-colors"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitBlockDates} className="p-6 space-y-4">
+              {blockErrorAlert && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 font-medium flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCircleExclamation} className="shrink-0" />
+                  <span>{blockErrorAlert}</span>
+                </div>
+              )}
+
+              {/* Bien concerné */}
+              <div>
+                <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                  Sélectionner le bien ou véhicule concerné *
+                </label>
+                <select
+                  value={blockListingId}
+                  onChange={(e) => setBlockListingId(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary font-medium"
+                >
+                  <option value="">-- Choisissez un bien --</option>
+                  {listings.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.title} — {l.location} ({formatPrice(l.price)}/{l.price_unit || 'j'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Motif du blocage */}
+              <div>
+                <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                  Motif du blocage *
+                </label>
+                <select
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary font-medium"
+                >
+                  <option value="Réservation physique / Client en direct">
+                    Réservation physique / Client en direct (hors plateforme)
+                  </option>
+                  <option value="Indisponibilité temporaire (Travaux / Rénovation)">
+                    Indisponibilité temporaire (Travaux, rénovation ou entretien)
+                  </option>
+                  <option value="Usage personnel du propriétaire">
+                    Usage personnel du propriétaire
+                  </option>
+                  <option value="Autre indisponibilité">
+                    Autre motif d'indisponibilité
+                  </option>
+                </select>
+              </div>
+
+              {/* Dates début et fin */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                    Date de début (Arrivée) *
+                  </label>
+                  <input
+                    type="date"
+                    value={blockStartDate}
+                    onChange={(e) => setBlockStartDate(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                    Date de fin (Départ) *
+                  </label>
+                  <input
+                    type="date"
+                    value={blockEndDate}
+                    min={blockStartDate}
+                    onChange={(e) => setBlockEndDate(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Client physique infos */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                    Nom du client physique
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ex: M. Roland Koffi"
+                    value={blockCustomerName}
+                    onChange={(e) => setBlockCustomerName(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                    Téléphone du client (optionnel)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="ex: +229 97 00 00 00"
+                    value={blockCustomerPhone}
+                    onChange={(e) => setBlockCustomerPhone(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Note / Commentaire */}
+              <div>
+                <label className="caption text-foreground/70 block mb-1 text-[11px] font-semibold uppercase tracking-wider">
+                  Notes ou observations (optionnel)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="ex: Acompte remis en espèces, remise des clés effectuée en main propre..."
+                  value={blockNotes}
+                  onChange={(e) => setBlockNotes(e.target.value)}
+                  className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              {/* Reassurance Info Banner */}
+              <div className="rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3.5 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <FontAwesomeIcon icon={faShieldHalved} className="text-amber-600" />
+                  <span>Verrouillage anti-doublon en ligne</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-foreground/80">
+                  Dès l'enregistrement, ce bien sera marqué comme <strong>déjà réservé</strong> du <strong>{blockStartDate}</strong> au <strong>{blockEndDate}</strong>. Les voyageurs sur le site ne pourront pas réserver cet intervalle, mais pourront continuer à réserver librement pour toute date ultérieure.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-foreground/10">
+                <button
+                  type="button"
+                  onClick={() => setShowBlockModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingBlock}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white hover:bg-primary/90 transition-all shadow-md disabled:opacity-50"
+                >
+                  {isSubmittingBlock ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} className="animate-spin text-xs" />
+                      <span>Verrouillage en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faBan} className="text-xs" />
+                      <span>Bloquer l'accès pour ces dates</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

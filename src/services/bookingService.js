@@ -54,6 +54,46 @@ const withTimeout = (promise, ms = 3000) => {
   ]);
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (value) => typeof value === 'string' && UUID_REGEX.test(value);
+const ALLOWED_BOOKING_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
+
+// Colonne absente du schéma (migration non appliquée) : PostgREST PGRST204 / Postgres 42703
+const isMissingColumnError = (error) =>
+  Boolean(error) && (error.code === 'PGRST204' || error.code === '42703');
+
+const toDateOrNull = (value) => {
+  if (!value) return null;
+  const str = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
+};
+
+const toAmount = (...values) => {
+  for (const v of values) {
+    if (v === null || v === undefined || v === '') continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) return Math.max(0, Math.round(n));
+  }
+  return 0;
+};
+
+/**
+ * Insère une réservation dans Supabase. Si une colonne étendue n'existe pas encore
+ * dans la base (migration non appliquée), on réessaie avec les seules colonnes du schéma de base.
+ */
+async function insertRemoteBooking(corePayload, extendedPayload) {
+  const first = await supabase
+    .from('bookings')
+    .insert([{ ...corePayload, ...extendedPayload }])
+    .select()
+    .single();
+
+  if (!first.error || !isMissingColumnError(first.error)) return first;
+
+  console.warn('[Bookings] Colonnes étendues absentes, insertion du schéma de base :', first.error.message);
+  return supabase.from('bookings').insert([corePayload]).select().single();
+}
+
 export async function getBookings() {
   try {
     const deletedIds = getDeletedBookingIds();
@@ -190,21 +230,23 @@ export async function updateBookingStatus(bookingId, newStatus) {
     localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(updated));
 
     if (isSupabaseConfigured && supabase) {
+      if (!ALLOWED_BOOKING_STATUSES.includes(newStatus)) {
+        console.warn(`[Bookings] Statut "${newStatus}" non autorisé par la base, mise à jour locale uniquement.`);
+        return true;
+      }
       try {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (bookingId && uuidRegex.test(bookingId)) {
-          await supabase
-            .from('bookings')
-            .update({ status: newStatus, updated_at: new Date().toISOString() })
-            .eq('id', bookingId);
-        } else if (bookingId) {
-          await supabase
-            .from('bookings')
-            .update({ status: newStatus, updated_at: new Date().toISOString() })
-            .eq('booking_ref', bookingId);
+        const column = isUuid(bookingId) ? 'id' : 'booking_ref';
+        const { error } = await supabase
+          .from('bookings')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq(column, bookingId);
+        if (error) {
+          console.error('[Bookings] Échec mise à jour du statut :', error.message);
+          return false;
         }
       } catch (err) {
-        console.warn('Supabase booking update error:', err);
+        console.error('[Bookings] Erreur réseau mise à jour du statut :', err);
+        return false;
       }
     }
 
@@ -238,29 +280,19 @@ export async function deleteBooking(bookingId, bookingRef = null) {
     // 3. Suppression définitive dans Supabase (table payments puis bookings)
     if (isSupabaseConfigured && supabase) {
       try {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-        // Supprimer d'abord les paiements liés pour éviter les violations de clés étrangères
-        if (bookingId && uuidRegex.test(bookingId)) {
-          try {
-            await supabase.from('payments').delete().eq('booking_id', bookingId);
-          } catch (payDelErr) {
-            console.warn('Paiement lié non supprimé ou inexistant:', payDelErr);
-          }
+        // Les paiements liés sont supprimés en cascade (payments.booking_id ON DELETE CASCADE)
+        if (isUuid(bookingId)) {
+          const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
+          if (error) console.error('[Bookings] Échec suppression par id :', error.message);
         }
 
-        // Supprimer la réservation par son UUID si valide
-        if (bookingId && uuidRegex.test(bookingId)) {
-          await supabase.from('bookings').delete().eq('id', bookingId);
-        }
-
-        // Supprimer la réservation par sa référence booking_ref
-        const refToDelete = bookingRef || (!uuidRegex.test(bookingId) ? bookingId : null);
+        const refToDelete = bookingRef || (!isUuid(bookingId) ? bookingId : null);
         if (refToDelete) {
-          await supabase.from('bookings').delete().eq('booking_ref', refToDelete);
+          const { error } = await supabase.from('bookings').delete().eq('booking_ref', refToDelete);
+          if (error) console.error('[Bookings] Échec suppression par référence :', error.message);
         }
       } catch (err) {
-        console.warn('Supabase booking delete error:', err);
+        console.error('[Bookings] Erreur réseau suppression :', err);
       }
     }
 
@@ -273,9 +305,10 @@ export async function deleteBooking(bookingId, bookingRef = null) {
 
 export async function createBooking(bookingPayload) {
   const bookingRef = bookingPayload.booking_ref || `BB-${Math.floor(Math.random() * 900000 + 100000)}`;
-  const gross = Number(bookingPayload.gross_amount || bookingPayload.total_amount || bookingPayload.total_price || 85000);
+  const gross = toAmount(bookingPayload.gross_amount, bookingPayload.total_amount, bookingPayload.total_price);
+  const isManualBlock = Boolean(bookingPayload.is_manual_block);
   const commissionRate = 0.10;
-  const commissionAmount = Math.round(gross * commissionRate);
+  const commissionAmount = isManualBlock ? 0 : Math.round(gross * commissionRate);
   const netAmount = gross - commissionAmount;
 
   const items = Array.isArray(bookingPayload.items) ? bookingPayload.items : [];
@@ -321,8 +354,8 @@ export async function createBooking(bookingPayload) {
     owner_name: ownerName,
     owner_email: ownerEmail,
     gross_amount: gross,
-    subtotal: Number(bookingPayload.subtotal || gross),
-    options_total: Number(bookingPayload.options_total || 0),
+    subtotal: toAmount(bookingPayload.subtotal, gross),
+    options_total: toAmount(bookingPayload.options_total),
     total_amount: gross,
     commission_rate: commissionRate,
     commission_amount: commissionAmount,
@@ -330,22 +363,20 @@ export async function createBooking(bookingPayload) {
     partner_payout_amount: netAmount,
     status: bookingPayload.status || 'confirmed',
     payment_method: bookingPayload.payment_method || 'Mobile Money / Carte',
-    payment_status: 'paid',
+    payment_status: bookingPayload.payment_status || 'paid',
     created_at: new Date().toISOString()
   };
 
   // Insertion sécurisée dans Supabase (ne passe que les colonnes valides de la table bookings)
   if (isSupabaseConfigured && supabase) {
     try {
-      const supabasePayload = {
+      const status = ALLOWED_BOOKING_STATUSES.includes(record.status) ? record.status : 'confirmed';
+      const corePayload = {
         booking_ref: bookingRef,
         customer_name: record.customer_name,
         customer_email: record.customer_email,
-        customer_phone: record.customer_phone,
+        customer_phone: record.customer_phone || '',
         items: record.items,
-        rental_type: rentalType,
-        duration_days: durationDays,
-        rooms_count: roomsCount,
         protection_options: record.protection_options || {},
         subtotal: record.subtotal,
         options_total: record.options_total,
@@ -353,28 +384,41 @@ export async function createBooking(bookingPayload) {
         commission_rate: record.commission_rate,
         commission_amount: record.commission_amount,
         partner_payout_amount: record.partner_payout_amount,
-        status: record.status,
-        payment_status: 'paid',
-        guests_count: parseInt(record.guests) || 1,
+        status,
+        payment_status: ['unpaid', 'paid', 'refunded'].includes(record.payment_status) ? record.payment_status : 'paid',
+        check_in: toDateOrNull(record.check_in),
+        check_out: toDateOrNull(record.check_out),
+        guests_count: parseInt(record.guests, 10) || 1,
+        special_requests: record.notes || record.special_requests || null,
         created_at: record.created_at
       };
 
-      // Si owner_id est un UUID valide, on l'ajoute
-      if (ownerId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)) {
-        supabasePayload.owner_id = ownerId;
-      }
+      // Colonnes ajoutées par les migrations (bien, propriétaire, type de location)
+      const extendedPayload = {
+        rental_type: rentalType,
+        duration_days: durationDays,
+        rooms_count: roomsCount,
+        listing_id: listingId ? String(listingId) : null,
+        listing_title: listingTitle,
+        listing_image: listingImage,
+        location,
+        dates,
+        guests,
+        owner_email: ownerEmail,
+        gross_amount: gross,
+        net_amount: netAmount,
+        payment_method: record.payment_method
+      };
+      if (isUuid(ownerId)) extendedPayload.owner_id = ownerId;
+      if (isUuid(bookingPayload.client_id)) extendedPayload.client_id = bookingPayload.client_id;
 
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert([supabasePayload])
-        .select()
-        .single();
+      const { data, error } = await insertRemoteBooking(corePayload, extendedPayload);
 
       if (!error && data) {
         record.id = data.id;
 
-        // Enregistrement automatique de la transaction dans la table payments (Dépôt / Encaissement client)
-        try {
+        // Enregistrement de l'encaissement client (pas pour un blocage manuel du propriétaire)
+        if (!isManualBlock && record.total_amount > 0) try {
           const methodLower = (record.payment_method || '').toLowerCase();
           const cleanMethod = methodLower.includes('moov')
             ? 'moov_money'
@@ -382,7 +426,7 @@ export async function createBooking(bookingPayload) {
               ? 'celtiis'
               : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo'));
 
-          await supabase.from('payments').insert([{
+          const { error: payError } = await supabase.from('payments').insert([{
             booking_id: data.id,
             transaction_ref: `TXN-${bookingRef}`,
             customer_email: record.customer_email,
@@ -399,11 +443,13 @@ export async function createBooking(bookingPayload) {
               nyole_provider: record.nyole_provider || null
             }
           }]);
+          if (payError) console.warn('[Bookings] Transaction de paiement non enregistrée :', payError.message);
         } catch (payErr) {
           console.warn('Notice insertion transaction payment:', payErr?.message || payErr);
         }
       } else if (error) {
-        console.warn('Supabase booking insert notice:', error?.message || error);
+        console.error('[Bookings] Réservation non enregistrée dans Supabase :', error.message);
+        record.sync_error = error.message;
       }
     } catch (err) {
       console.warn('Supabase booking insert error:', err);
@@ -607,5 +653,109 @@ export async function getActiveReservationSummary(listingId) {
   }
 
   return null;
+}
+
+/**
+ * =========================================================================
+ * GESTION DE LA DISPONIBILITÉ PAR LE PROPRIÉTAIRE (BLOCAGE & RÉSERVATIONS PHYSIQUES)
+ * =========================================================================
+ */
+
+/**
+ * Permet au propriétaire d'enregistrer une réservation physique ou de bloquer des dates.
+ * Ces dates deviennent immédiatement indisponibles pour les voyageurs en ligne.
+ */
+export async function blockListingDates({
+  listingId,
+  listingTitle,
+  listingImage,
+  listingLocation,
+  listingType = 'stay',
+  startDate,
+  endDate,
+  customerName = 'Réservation physique directe',
+  customerPhone = '',
+  customerEmail = '',
+  notes = '',
+  reason = 'Réservation physique / Client direct',
+  ownerId = null,
+  ownerEmail = null,
+  ownerName = null
+}) {
+  const startD = new Date(startDate);
+  const endD = new Date(endDate);
+  const diffDays = Math.max(1, Math.round((endD - startD) / (1000 * 60 * 60 * 24)));
+
+  const bookingRef = `BB-PHY-${Date.now().toString().slice(-6)}`;
+
+  const payload = {
+    booking_ref: bookingRef,
+    customer_name: customerName || 'Client Réservation Directe',
+    customer_email: customerEmail || 'reservation-directe@benin-beyond.com',
+    customer_phone: customerPhone || '',
+    listing_id: listingId,
+    start_date: startDate,
+    end_date: endDate,
+    check_in: startDate,
+    check_out: endDate,
+    dates: `Du ${startDate} au ${endDate}`,
+    duration_days: diffDays,
+    rental_type: listingType,
+    status: 'confirmed',
+    is_manual_block: true,
+    block_reason: reason || 'Réservation physique / Client direct',
+    notes: notes || '',
+    payment_method: 'Réservation physique directe (En main propre)',
+    payment_status: 'paid',
+    total_amount: 0,
+    gross_amount: 0,
+    commission_amount: 0,
+    net_amount: 0,
+    partner_payout_amount: 0,
+    owner_id: ownerId,
+    owner_email: ownerEmail,
+    owner_name: ownerName,
+    items: [
+      {
+        id: listingId,
+        listing_id: listingId,
+        title: listingTitle || 'Bien réservé en direct',
+        image: listingImage || '',
+        location: listingLocation || '',
+        startDate: startDate,
+        endDate: endDate,
+        days: diffDays,
+        nights: diffDays,
+        rental_type: listingType
+      }
+    ]
+  };
+
+  const res = await createBooking(payload);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('benin_beyond_availability_updated', {
+        detail: { listingId, startDate, endDate, bookingRef }
+      })
+    );
+  }
+
+  return res;
+}
+
+/**
+ * Libère une période précédemment bloquée par le propriétaire
+ */
+export async function unblockListingDates(bookingId, bookingRef = null) {
+  const success = await deleteBooking(bookingId, bookingRef);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('benin_beyond_availability_updated', {
+        detail: { bookingId, bookingRef }
+      })
+    );
+  }
+  return success;
 }
 

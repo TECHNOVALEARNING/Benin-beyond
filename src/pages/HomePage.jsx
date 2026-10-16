@@ -56,7 +56,14 @@ export function HomePage() {
       <HeroPinterestCarousel />
 
       {/* 2. Benin Live Hub: Weather, GMT+1 Time & Cultural Events */}
-      <BeninLiveSection />
+      {/* Desktop (>= md): Barre météo + Événements culturels en haut */}
+      <div className="hidden md:block">
+        <BeninLiveSection showWeather={true} showEvents={true} />
+      </div>
+      {/* Mobile (< md): Barre météo en haut, la section Événements & Histoires est positionnée plus bas après les packs */}
+      <div className="block md:hidden">
+        <BeninLiveSection showWeather={true} showEvents={false} />
+      </div>
 
       {/* 3. Curated Category Sections */}
       {SECTIONS.map((sec) => (
@@ -178,6 +185,11 @@ export function HomePage() {
           </div>
         )}
       </section>
+
+      {/* 4.b Mobile uniquement: Événements culturels & Histoires placés après les Packs */}
+      <div className="block md:hidden">
+        <BeninLiveSection showWeather={false} showEvents={true} />
+      </div>
 
       {/* 5. Section Stratégique : Avis & Témoignages des Voyageurs Vérifiés */}
       <TravelerReviewsSection />

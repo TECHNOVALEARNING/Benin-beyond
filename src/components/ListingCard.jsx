@@ -6,8 +6,6 @@ import { formatPrice } from '../data/initialListings';
 import { getActiveReservationSummary } from '../services/bookingService';
 
 export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
-  if (!listing) return null;
-
   const [activeReservation, setActiveReservation] = useState(null);
 
   useEffect(() => {
@@ -22,6 +20,8 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
       active = false;
     };
   }, [listing?.id]);
+
+  if (!listing) return null;
 
   const isVehicle = listing.type === 'drive' || listing.subcategory === 'car';
   const displaySpecs = isVehicle

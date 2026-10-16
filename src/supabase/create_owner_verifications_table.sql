@@ -1,8 +1,9 @@
 -- ==============================================================================
--- BÉNIN BEYOND — MIGRATION : TABLE DÉDIÉE À L'ONBOARDING ET VÉRIFICATION PROPRIÉTAIRE
+-- BÉNIN BEYOND — MIGRATION : TABLE D'ONBOARDING PROPRIÉTAIRE & STORAGE PDF
 -- ==============================================================================
--- Script 100% idempotent créant la structure pour le stockage sécurisé des
--- dossiers de vérification KYC/KYB des propriétaires et l'historique d'audit.
+-- Exécutez ce script dans l'éditeur SQL de votre projet Supabase (SQL Editor)
+-- 100% idempotent : crée les tables nécessaires, configure les accès RLS
+-- et autorise les documents PDF/Images dans le bucket Supabase Storage 'listings'.
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -57,35 +58,72 @@ CREATE INDEX IF NOT EXISTS idx_verif_audit_app_id ON public.verification_audit_l
 ALTER TABLE public.owner_verification_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Lecture : Les propriétaires voient uniquement leur propre dossier ; les admins voient tout
+-- Lecture et écriture souples pour les candidatures d'onboarding
 DROP POLICY IF EXISTS "owners_read_own_verif_policy" ON public.owner_verification_applications;
 CREATE POLICY "owners_read_own_verif_policy"
   ON public.owner_verification_applications FOR SELECT
-  USING (
-    auth.uid()::text = user_id 
-    OR auth.jwt() ->> 'email' = owner_email 
-    OR public.is_admin() 
-    OR true
-  );
+  TO authenticated, anon, public
+  USING (true);
 
--- Écriture : Les propriétaires peuvent créer ou mettre à jour leur dossier ; les admins peuvent mettre à jour
 DROP POLICY IF EXISTS "owners_upsert_verif_policy" ON public.owner_verification_applications;
 CREATE POLICY "owners_upsert_verif_policy"
   ON public.owner_verification_applications FOR ALL
-  USING (
-    auth.uid()::text = user_id 
-    OR auth.jwt() ->> 'email' = owner_email 
-    OR public.is_admin() 
-    OR true
-  );
+  TO authenticated, anon, public
+  USING (true)
+  WITH CHECK (true);
 
--- Audit : Enregistrement accessible aux administrateurs
 DROP POLICY IF EXISTS "audit_logs_select_policy" ON public.verification_audit_logs;
 CREATE POLICY "audit_logs_select_policy"
   ON public.verification_audit_logs FOR SELECT
-  USING (public.is_admin() OR true);
+  TO authenticated, anon, public
+  USING (true);
 
 DROP POLICY IF EXISTS "audit_logs_insert_policy" ON public.verification_audit_logs;
 CREATE POLICY "audit_logs_insert_policy"
   ON public.verification_audit_logs FOR INSERT
+  TO authenticated, anon, public
   WITH CHECK (true);
+
+-- 4. CONFIGURATION DU BUCKET STORAGE 'listings' POUR LES DOCUMENTS PDF & IMAGES
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'listings',
+  'listings',
+  true,
+  52428800,
+  ARRAY[
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+    'video/mp4', 'video/webm', 'video/quicktime',
+    'application/pdf', 'application/x-pdf', 'application/acrobat'
+  ]
+)
+ON CONFLICT (id) DO UPDATE SET 
+  public = true,
+  file_size_limit = 52428800,
+  allowed_mime_types = ARRAY[
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+    'video/mp4', 'video/webm', 'video/quicktime',
+    'application/pdf', 'application/x-pdf', 'application/acrobat'
+  ];
+
+-- Politiques de téléversement et accès aux objets storage
+DROP POLICY IF EXISTS "Allow uploads to listings" ON storage.objects;
+CREATE POLICY "Allow uploads to listings"
+ON storage.objects FOR INSERT
+TO authenticated, anon, public
+WITH CHECK (bucket_id = 'listings');
+
+DROP POLICY IF EXISTS "Allow select on listings" ON storage.objects;
+CREATE POLICY "Allow select on listings"
+ON storage.objects FOR SELECT
+TO authenticated, anon, public
+USING (bucket_id = 'listings');
+
+DROP POLICY IF EXISTS "Allow update on listings" ON storage.objects;
+CREATE POLICY "Allow update on listings"
+ON storage.objects FOR UPDATE
+TO authenticated, anon, public
+USING (bucket_id = 'listings');
+
+-- Message de confirmation dans les résultats de l'éditeur SQL
+SELECT 'Migration terminée avec succès : Table owner_verification_applications créée et Bucket listings mis à jour avec support PDF !' AS status;

@@ -15,12 +15,14 @@ import {
   faTriangleExclamation
 } from '@fortawesome/free-solid-svg-icons';
 import { fileToDataUrl } from '../services/mediaStorage';
+import { uploadVerificationDocument } from '../services/ownerVerificationService';
 
 export function DocumentUploadCard({
   rule,
   documentData,
   onUpload,
   onRemove,
+  userId = 'owner',
   disabled = false
 }) {
   const fileInputRef = useRef(null);
@@ -55,20 +57,40 @@ export function DocumentUploadCard({
 
     setUploading(true);
     try {
-      const dataUrl = await fileToDataUrl(file);
+      // Téléversement prioritaire vers Supabase Storage
+      const fileUrl = await uploadVerificationDocument(file, {
+        userId,
+        ruleId: rule.id
+      });
+
       const docPayload = {
         ruleId: rule.id,
         name: file.name,
         fileType: file.type || (fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
         fileSize: file.size,
-        fileUrl: dataUrl,
+        fileUrl,
         uploadedAt: new Date().toISOString(),
         status: 'pending' // Repasse en attente dès téléversement
       };
 
       onUpload?.(rule.id, docPayload);
     } catch (err) {
-      setErrorMessage('Échec de la lecture du fichier. Veuillez réessayer.');
+      console.warn('Erreur téléversement document, repli local:', err);
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        const docPayload = {
+          ruleId: rule.id,
+          name: file.name,
+          fileType: file.type || (fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+          fileSize: file.size,
+          fileUrl: dataUrl,
+          uploadedAt: new Date().toISOString(),
+          status: 'pending'
+        };
+        onUpload?.(rule.id, docPayload);
+      } catch {
+        setErrorMessage('Échec du traitement du fichier. Veuillez réessayer.');
+      }
     } finally {
       setUploading(false);
     }

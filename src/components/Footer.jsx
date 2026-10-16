@@ -146,10 +146,6 @@ export function Footer() {
             <Link to="/admin" className="hover:text-accent transition-colors text-secondary-foreground/75 font-semibold">
               Console Administration
             </Link>
-            <span className="text-secondary-foreground/30 hidden md:inline">•</span>
-            <span className="text-secondary-foreground/40 hidden md:inline">
-              Plateforme Curatée d'Hospitalité & Mobilité
-            </span>
           </div>
         </div>
       </div>

@@ -21,6 +21,26 @@ export function ProtectedRoute({ children, allowedRoles = [], redirectTo = '/log
 
   // 2. Rôle insuffisant → redirection vers le dashboard approprié
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    // Si la route est destinée aux propriétaires/partenaires, vérifier si l'utilisateur a soumis son KYC propriétaire
+    const isOwnerTargetRoute = allowedRoles.some((r) => r === 'owner' || r === 'partner');
+    if (isOwnerTargetRoute && user.role === 'client') {
+      try {
+        const rawApps = localStorage.getItem('benin_beyond_owner_applications');
+        if (rawApps) {
+          const apps = JSON.parse(rawApps);
+          const hasOwnerApp = apps.some(
+            (a) =>
+              (String(a.user_id) === String(user.id) ||
+                (a.owner_email && a.owner_email.toLowerCase() === user.email?.toLowerCase())) &&
+              ['submitted', 'under_review', 'approved', 'additional_info_required'].includes(a.status)
+          );
+          if (hasOwnerApp) {
+            return children;
+          }
+        }
+      } catch {}
+    }
+
     const fallback =
       user.role === 'admin' || user.role === 'subadmin' || user.role === 'superadmin'
         ? '/admin'

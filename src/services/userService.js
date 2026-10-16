@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 
 const STORAGE_KEY = 'benin_beyond_registered_users';
 const OVERRIDES_STORAGE_KEY = 'benin_beyond_user_admin_overrides';
@@ -315,7 +315,7 @@ export async function createAssistantAdmin({ name, email, phone }) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('profiles').upsert(
+      await runSupabaseQuery('profiles.upsert', supabase.from('profiles').upsert(
         {
           email: cleanEmail,
           full_name: assistantUser.name,
@@ -328,7 +328,7 @@ export async function createAssistantAdmin({ name, email, phone }) {
           updated_at: new Date().toISOString()
         },
         { onConflict: 'email' }
-      );
+      ));
     } catch (e) {
       console.warn('Erreur upsert profile assistant Supabase:', e);
     }
@@ -413,11 +413,11 @@ export async function updateUser(userId, updates) {
 
       if (!updatedInSupabase && cleanEmail) {
         try {
-          await supabase.from('profiles').upsert({
+          await runSupabaseQuery('profiles.upsert', supabase.from('profiles').upsert({
             ...(isUuid ? { id: userId } : {}),
             email: cleanEmail,
             ...payload
-          }, { onConflict: 'email' });
+          }, { onConflict: 'email' }));
         } catch (e) {
           console.warn('Erreur upsert profile Supabase:', e);
         }
@@ -531,7 +531,8 @@ export async function deleteUser(userId, userEmail = '') {
       } else if (cleanEmail) {
         query = query.ilike('email', cleanEmail);
       }
-      await query;
+      const { error } = await query;
+      if (error) console.error('[Supabase] profiles.delete :', error.message);
     } catch (e) {
       console.warn('Erreur deleteUser Supabase:', e);
     }

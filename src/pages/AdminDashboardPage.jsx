@@ -54,8 +54,15 @@ import {
   faSpinner,
   faCircleInfo,
   faFilePdf,
-  faRotateRight
+  faRotateRight,
+  faCompass,
+  faScissors,
+  faUtensils,
+  faLandmark,
+  faLeaf,
+  faPrint
 } from '@fortawesome/free-solid-svg-icons';
+import { faWhatsapp } from '@fortawesome/free-brands-svg-icons';
 import { useAuth, DEMO_USERS } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings, suspendOwnerListings } from '../services/listingService';
@@ -63,6 +70,7 @@ import { getBookings, updateBookingStatus, deleteBooking } from '../services/boo
 import { getReviews, deleteReview, updateReviewStatus } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
 import { getEvents, addEvent, updateEvent, deleteEvent } from '../services/eventService';
+import { getDiscoveries, addDiscovery, updateDiscovery, deleteDiscovery, toggleDiscoveryStatus, INITIAL_DISCOVERIES } from '../services/discoveryService';
 import { getUsers, updateUser, toggleUserStatus, deleteUser, verifyPartnerKYC, rejectPartnerKYC, resetPartnerKYC, createAssistantAdmin } from '../services/userService';
 import { getAllVerificationApplications, reviewIndividualDocument, reviewApplicationOverall, getApplicationAuditTrail } from '../services/ownerVerificationService';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
@@ -289,6 +297,27 @@ export function AdminDashboardPage() {
   const [evtImage, setEvtImage] = useState('');
   const [evtTag, setEvtTag] = useState('Culture & Spiritualité');
 
+  // Discoveries & Services (Gastronomie, Autres Services, Monuments, Nature)
+  const [discoveriesList, setDiscoveriesList] = useState(() => INITIAL_DISCOVERIES);
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
+  const [editingDiscovery, setEditingDiscovery] = useState(null);
+  const [discCategory, setDiscCategory] = useState('restaurants');
+  const [discSubcategory, setDiscSubcategory] = useState('gastronomie');
+  const [discTitle, setDiscTitle] = useState('');
+  const [discTagline, setDiscTagline] = useState('');
+  const [discBadge, setDiscBadge] = useState('Table Recommandée');
+  const [discLocation, setDiscLocation] = useState('Cotonou · Quartier Haie Vive');
+  const [discDescription, setDiscDescription] = useState('');
+  const [discHighlights, setDiscHighlights] = useState('');
+  const [discTips, setDiscTips] = useState('');
+  const [discPricing, setDiscPricing] = useState('');
+  const [discPhone, setDiscPhone] = useState('+229 ');
+  const [discWhatsapp, setDiscWhatsapp] = useState('+229 ');
+  const [discInHomeService, setDiscInHomeService] = useState(false);
+  const [discImage, setDiscImage] = useState('');
+  const [discFilterCategory, setDiscFilterCategory] = useState('all');
+  const [discSearch, setDiscSearch] = useState('');
+
   // Modals & Details
   const [selectedBookingModal, setSelectedBookingModal] = useState(null);
   const [selectedKycModal, setSelectedKycModal] = useState(null);
@@ -390,14 +419,15 @@ export function AdminDashboardPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [allListings, allBookings, allPacks, allEvents, allUsers, allReviews, allVerifications] = await Promise.all([
+      const [allListings, allBookings, allPacks, allEvents, allUsers, allReviews, allVerifications, allDiscoveries] = await Promise.all([
         getListings({ includePending: true }),
         getBookings(),
         getPacks(),
         getEvents(),
         getUsers(),
         getReviews(null, { includeAll: true }),
-        getAllVerificationApplications()
+        getAllVerificationApplications(),
+        getDiscoveries()
       ]);
       setListings(allListings || []);
       setBookings(allBookings || []);
@@ -406,6 +436,7 @@ export function AdminDashboardPage() {
       setUsersList(allUsers || []);
       setReviewsList(allReviews || []);
       setVerificationApplications(allVerifications || []);
+      setDiscoveriesList(allDiscoveries || []);
 
       // Récupération des partenaires réels depuis le registre unifié
       const ownerUsers = (allUsers || []).filter((u) => u.role === 'owner' || u.role === 'partner');
@@ -535,6 +566,131 @@ export function AdminDashboardPage() {
         showToast(`Événement "${title}" supprimé.`);
       }
     });
+  };
+
+  // Discovery Handlers (Gastronomie, Autres Services, Monuments, Nature)
+  const handleOpenCreateDiscovery = () => {
+    setEditingDiscovery(null);
+    setDiscCategory('restaurants');
+    setDiscSubcategory('gastronomie');
+    setDiscTitle('');
+    setDiscTagline('Saveurs & Spécialités Culinaires');
+    setDiscBadge('Table Recommandée');
+    setDiscLocation('Cotonou · Quartier Haie Vive');
+    setDiscDescription('');
+    setDiscHighlights('Poissons nobles et grillades au feu de bois\nCadre convivial et accueil chaleureux\nRéservation garantie Bénin Beyond');
+    setDiscTips('Réservation conseillée pour les tables en terrasse.');
+    setDiscPricing('Plats dès 8 000 FCFA');
+    setDiscPhone('+229 ');
+    setDiscWhatsapp('+229 ');
+    setDiscInHomeService(false);
+    setDiscImage('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80');
+    setShowDiscoveryModal(true);
+  };
+
+  const handleOpenEditDiscovery = (disc) => {
+    setEditingDiscovery(disc);
+    setDiscCategory(disc.category || 'restaurants');
+    setDiscSubcategory(disc.subcategory || 'gastronomie');
+    setDiscTitle(disc.title || '');
+    setDiscTagline(disc.tagline || '');
+    setDiscBadge(disc.badge || '');
+    setDiscLocation(disc.location || '');
+    setDiscDescription(disc.description || '');
+    setDiscHighlights(Array.isArray(disc.highlights) ? disc.highlights.join('\n') : (disc.highlights || ''));
+    setDiscTips(disc.tips || '');
+    setDiscPricing(disc.pricing || '');
+    setDiscPhone(disc.phone || '+229 ');
+    setDiscWhatsapp(disc.whatsapp ? `+${disc.whatsapp}` : '+229 ');
+    setDiscInHomeService(Boolean(disc.inHomeService));
+    setDiscImage(disc.image || '');
+    setShowDiscoveryModal(true);
+  };
+
+  const handleSaveDiscovery = async (e) => {
+    e.preventDefault();
+    if (!discTitle.trim()) {
+      showToast('Veuillez renseigner le nom de la découverte ou du service.');
+      return;
+    }
+
+    const highlightsArr = discHighlights
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const cleanWhatsapp = (discWhatsapp || discPhone).replace(/[^0-9]/g, '');
+
+    if (editingDiscovery) {
+      await updateDiscovery(editingDiscovery.id, {
+        category: discCategory,
+        subcategory: discSubcategory,
+        title: discTitle.trim(),
+        badge: discBadge.trim() || (discInHomeService ? 'Service en Villa' : 'Recommandé'),
+        location: discLocation.trim(),
+        tagline: discTagline.trim(),
+        description: discDescription.trim(),
+        highlights: highlightsArr,
+        tips: discTips.trim(),
+        pricing: discPricing.trim(),
+        phone: discPhone.trim(),
+        whatsapp: cleanWhatsapp,
+        inHomeService: Boolean(discInHomeService),
+        image: discImage
+      });
+      showToast(`Découverte "${discTitle}" mise à jour avec succès !`);
+    } else {
+      await addDiscovery({
+        category: discCategory,
+        subcategory: discSubcategory,
+        title: discTitle.trim(),
+        badge: discBadge.trim() || (discInHomeService ? 'Service en Villa' : 'Recommandé'),
+        location: discLocation.trim(),
+        tagline: discTagline.trim(),
+        description: discDescription.trim(),
+        highlights: highlightsArr,
+        tips: discTips.trim(),
+        pricing: discPricing.trim(),
+        phone: discPhone.trim(),
+        whatsapp: cleanWhatsapp,
+        inHomeService: Boolean(discInHomeService),
+        image: discImage,
+        creator_role: 'admin',
+        payment_status: 'free_admin',
+        status: 'active'
+      });
+      showToast(`Nouvelle découverte "${discTitle}" ajoutée gratuitement par l'Admin !`);
+    }
+
+    const updated = await getDiscoveries();
+    setDiscoveriesList(updated);
+    setShowDiscoveryModal(false);
+  };
+
+  const handleDeleteDiscovery = (disc) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Supprimer cette découverte ?',
+      message: `Êtes-vous sûr de vouloir retirer définitivement "${disc.title}" de l'espace Découvertes ?`,
+      confirmText: 'Supprimer',
+      cancelText: 'Annuler',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        await deleteDiscovery(disc.id);
+        const updated = await getDiscoveries();
+        setDiscoveriesList(updated);
+        showToast(`"${disc.title}" a été supprimé.`);
+      }
+    });
+  };
+
+  const handleToggleDiscoveryStatus = async (disc) => {
+    await toggleDiscoveryStatus(disc.id);
+    const updated = await getDiscoveries();
+    setDiscoveriesList(updated);
+    const newStatus = disc.status === 'active' ? 'suspendue' : 'activée';
+    showToast(`La fiche "${disc.title}" est maintenant ${newStatus}.`);
   };
 
   // User Management Handlers (Super-Admin)
@@ -2059,6 +2215,13 @@ export function AdminDashboardPage() {
           label: 'Événements & Agenda',
           icon: faCalendarCheck,
           badge: events.length > 0 ? `${events.length} publiés` : null,
+          badgeColor: 'bg-primary/20 text-primary border-primary/30'
+        },
+        {
+          key: 'discoveries',
+          label: 'Découvertes & Services',
+          icon: faCompass,
+          badge: discoveriesList.length > 0 ? `${discoveriesList.length} fiches` : null,
           badgeColor: 'bg-primary/20 text-primary border-primary/30'
         },
         {
@@ -4760,6 +4923,265 @@ export function AdminDashboardPage() {
           )}
 
           {/* ========================================================================= */}
+          {/* SECTION: DÉCOUVERTES, GASTRONOMIE & SERVICES À DOMICILE */}
+          {/* ========================================================================= */}
+          {currentSection === 'discoveries' && (
+            <div className="space-y-6 animate-section-stagger">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
+                    <FontAwesomeIcon icon={faCompass} className="h-3 w-3" />
+                    Guide Découvertes & Répertoire Partenaires
+                  </div>
+                  <h2 className="font-heading text-2xl font-black text-foreground">
+                    Gestion des Découvertes & Services
+                  </h2>
+                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
+                    Gérez les tables gastronomiques, les prestataires à domicile (coiffure, onglerie, soins) et les sites touristiques du Bénin. 
+                    <strong className="text-primary font-bold"> Privilège Admin :</strong> Vous pouvez créer et référencer n'importe quel établissement ou service <strong>gratuitement (0 FCFA)</strong>.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateDiscovery}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 shrink-0"
+                >
+                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                  <span>Ajouter une Découverte (0 FCFA)</span>
+                </button>
+              </div>
+
+              {/* Status info & Metrics Banner */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50">Total Fiches</span>
+                  <p className="text-xl font-black text-foreground mt-1">{discoveriesList.length}</p>
+                </div>
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Gastronomie (Tables)</span>
+                  <p className="text-xl font-black text-foreground mt-1">
+                    {discoveriesList.filter(d => d.category === 'restaurants').length} tables
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Services en Villa</span>
+                  <p className="text-xl font-black text-foreground mt-1">
+                    {discoveriesList.filter(d => d.category === 'services').length} prestataires
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">Total Référencé</span>
+                  <p className="text-xl font-black text-foreground mt-1">
+                    {discoveriesList.length} fiches actives
+                  </p>
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card/40 p-3 rounded-2xl border border-foreground/10">
+                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                  {[
+                    { key: 'all', label: 'Toutes' },
+                    { key: 'restaurants', label: 'Gastronomie (0F Gratuit)' },
+                    { key: 'services', label: 'Services à domicile (500F)' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setDiscFilterCategory(tab.key)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                        discFilterCategory === tab.key
+                          ? 'bg-primary text-white shadow-sm font-bold'
+                          : 'text-foreground/70 hover:bg-muted'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom ou ville..."
+                    value={discSearch}
+                    onChange={(e) => setDiscSearch(e.target.value)}
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Discovery Grid */}
+              {discoveriesList.filter(d => {
+                if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
+                if (discSearch) {
+                  const q = discSearch.toLowerCase();
+                  return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
+                }
+                return true;
+              }).length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card/40">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-foreground/40">
+                    <FontAwesomeIcon icon={faCompass} className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-heading text-base font-bold text-foreground">
+                    Aucune fiche trouvée
+                  </h3>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/60">
+                    Ajoutez une table gastronomique, un prestataire de service à domicile (coiffure, onglerie) ou un monument.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateDiscovery}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
+                    <span>Créer une fiche</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {discoveriesList
+                    .filter(d => {
+                      if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
+                      if (discSearch) {
+                        const q = discSearch.toLowerCase();
+                        return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
+                      }
+                      return true;
+                    })
+                    .map((disc) => (
+                      <div
+                        key={disc.id}
+                        className="group relative rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-xl hover:border-primary/30 transition-all flex flex-col"
+                      >
+                        {/* Image Header with Badge */}
+                        <div className="relative h-44 w-full overflow-hidden bg-muted">
+                          <img
+                            src={disc.image}
+                            alt={disc.title}
+                            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                            <span className="rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
+                              {disc.badge}
+                            </span>
+                            {disc.inHomeService && (
+                              <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm flex items-center gap-1">
+                                <FontAwesomeIcon icon={faHouse} className="h-2.5 w-2.5" />
+                                <span>En Villa</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="absolute right-3 top-3">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border backdrop-blur-md ${
+                              disc.status === 'active'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            }`}>
+                              {disc.status === 'active' ? 'En ligne' : 'Suspendu'}
+                            </span>
+                          </div>
+
+                          <div className="absolute bottom-2.5 left-3 text-[11px] font-medium text-white/90 flex items-center gap-1">
+                            <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-accent" />
+                            <span>{disc.location}</span>
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-5 flex flex-col flex-1 justify-between">
+                          <div>
+                            <div className="flex items-center justify-between text-[10px] text-foreground/50 mb-1">
+                              <span className="uppercase font-bold tracking-wider text-primary">
+                                {disc.category === 'restaurants' ? 'Gastronomie' : 'Service en Villa'}
+                              </span>
+                              {disc.creator_role === 'provider' ? (
+                                <span className="text-emerald-600 font-semibold">• Prestataire inscrit (500F)</span>
+                              ) : disc.creator_role === 'restaurant_partner' ? (
+                                <span className="text-amber-600 font-semibold">• Restaurateur (0F Offert)</span>
+                              ) : (
+                                <span className="text-foreground/50">• Admin (0F)</span>
+                              )}
+                            </div>
+
+                            <h3 className="font-heading text-base font-bold text-foreground line-clamp-1">
+                              {disc.title}
+                            </h3>
+
+                            <p className="text-xs text-foreground/65 line-clamp-2 mt-2 leading-relaxed">
+                              {disc.description}
+                            </p>
+
+                            {(disc.phone || disc.whatsapp) && (
+                              <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground/80">
+                                {disc.phone && (
+                                  <span className="flex items-center gap-1 text-[11px] text-foreground/70">
+                                    <FontAwesomeIcon icon={faPhone} className="h-3 w-3 text-primary" />
+                                    <span>{disc.phone}</span>
+                                  </span>
+                                )}
+                                {disc.whatsapp && (
+                                  <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                                    <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5" />
+                                    <span>WhatsApp</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {disc.pricing && (
+                              <div className="mt-2 text-[11px] font-semibold text-accent">
+                                {disc.pricing}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="mt-4 pt-3 border-t border-foreground/10 flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDiscoveryStatus(disc)}
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                                disc.status === 'active'
+                                  ? 'border-amber-500/30 text-amber-600 hover:bg-amber-500/10'
+                                  : 'border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10'
+                              }`}
+                            >
+                              {disc.status === 'active' ? 'Suspendre' : 'Activer'}
+                            </button>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditDiscovery(disc)}
+                                className="h-8 w-8 rounded-xl border border-foreground/15 text-foreground hover:bg-muted hover:text-primary flex items-center justify-center transition-colors"
+                                title="Modifier cette fiche"
+                              >
+                                <FontAwesomeIcon icon={faPen} className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDiscovery(disc)}
+                                className="h-8 w-8 rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
+                                title="Supprimer définitivement"
+                              >
+                                <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
           {/* SECTION 7: PUBLIER UNE NOUVELLE ANNONCE (SUPER-ADMIN & PROPRIÉTAIRE) */}
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
@@ -6572,6 +6994,345 @@ export function AdminDashboardPage() {
                   className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
                 >
                   {editingEvent ? 'Enregistrer les Modifications' : 'Publier en Ligne'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL CRÉATION / MODIFICATION DÉCOUVERTE & SERVICE */}
+      {/* ========================================================================= */}
+      {showDiscoveryModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in overflow-hidden">
+          <div className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-[28px] sm:rounded-3xl bg-card border border-foreground/15 shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
+            <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-foreground/10 shrink-0 bg-card z-10">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                  {editingDiscovery ? 'Mise à jour Fiche' : 'Nouvelle Découverte / Service'}
+                </span>
+                <h3 className="font-heading text-base sm:text-lg font-bold text-foreground">
+                  {editingDiscovery ? `Modifier "${editingDiscovery.title}"` : 'Ajouter une Découverte ou Service'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscoveryModal(false)}
+                className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
+                title="Fermer"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDiscovery} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 space-y-4">
+                
+                {/* Admin Free Notice */}
+                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-primary font-bold">
+                    <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
+                    <span>Privilège Administrateur : Gratuit 0 FCFA</span>
+                  </div>
+                  <span className="text-[11px] text-foreground/65">
+                    Aucuns frais d'activation requis pour l'équipe administrative.
+                  </span>
+                </div>
+
+                {/* Catégorie */}
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1.5">
+                    Catégorie Principale *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscCategory('restaurants');
+                        setDiscInHomeService(false);
+                      }}
+                      className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-3 ${
+                        discCategory === 'restaurants'
+                          ? 'border-emerald-500 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30'
+                          : 'border-foreground/15 bg-card text-foreground/70 hover:border-foreground/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center transition-colors ${
+                          discCategory === 'restaurants' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-muted text-foreground/70'
+                        }`}>
+                          <FontAwesomeIcon icon={faUtensils} className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-foreground">Gastronomie & Tables</p>
+                          <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black tracking-wide">
+                            <FontAwesomeIcon icon={faCheck} className="h-2 w-2" />
+                            <span>0 FCFA · Gratuit</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className={`h-5 w-5 rounded-full flex items-center justify-center transition-all ${
+                        discCategory === 'restaurants' ? 'bg-emerald-600 text-white shadow-xs' : 'border border-foreground/30 text-transparent'
+                      }`}>
+                        <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscCategory('services');
+                        setDiscInHomeService(true);
+                      }}
+                      className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-3 ${
+                        discCategory === 'services'
+                          ? 'border-amber-500 bg-amber-500/10 shadow-sm ring-1 ring-amber-500/30'
+                          : 'border-foreground/15 bg-card text-foreground/70 hover:border-foreground/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center transition-colors ${
+                          discCategory === 'services' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-muted text-foreground/70'
+                        }`}>
+                          <FontAwesomeIcon icon={faScissors} className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-foreground">Services en Villa VIP</p>
+                          <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tracking-wide">
+                            <FontAwesomeIcon icon={faCheck} className="h-2 w-2 stroke-[3]" />
+                            <span>Tarif public : 500 FCFA</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className={`h-5 w-5 rounded-full flex items-center justify-center transition-all ${
+                        discCategory === 'services' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'border border-foreground/30 text-transparent'
+                      }`}>
+                        <FontAwesomeIcon icon={faCheck} className="h-3 w-3 stroke-[3]" />
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sous-catégorie pour Services */}
+                {discCategory === 'services' && (
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1.5">
+                      Spécialité du Service
+                    </label>
+                    <select
+                      value={discSubcategory}
+                      onChange={(e) => setDiscSubcategory(e.target.value)}
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="coiffure">Coiffure, Tresses & Barbiers</option>
+                      <option value="onglerie">Onglerie & Pédicure Spa</option>
+                      <option value="soins">Massages, Spa & Soins Bien-Être</option>
+                      <option value="chef">Chef Privé & Cuisine en Villa</option>
+                      <option value="pressing">Blanchisserie & Pressing Express</option>
+                      <option value="autre">Autre Service Spécialisé</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Titre & Slogan */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Nom / Titre *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={discTitle}
+                      onChange={(e) => setDiscTitle(e.target.value)}
+                      placeholder="Ex : Atelier Glamour, Le Jardin de Canala..."
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Slogan / Accroche
+                    </label>
+                    <input
+                      type="text"
+                      value={discTagline}
+                      onChange={(e) => setDiscTagline(e.target.value)}
+                      placeholder="Ex : Coiffure VIP en Villa, Saveurs du terroir..."
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Badge & Localisation */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Badge d'accroche
+                    </label>
+                    <input
+                      type="text"
+                      value={discBadge}
+                      onChange={(e) => setDiscBadge(e.target.value)}
+                      placeholder="Ex : Table Recommandée, Prestation en Villa..."
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Localisation / Zone couverte
+                    </label>
+                    <input
+                      type="text"
+                      value={discLocation}
+                      onChange={(e) => setDiscLocation(e.target.value)}
+                      placeholder="Ex : Cotonou · Haie Vive, Littoral..."
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Option Déplacement en Villa */}
+                {discCategory === 'services' && (
+                  <div className="rounded-xl border border-foreground/15 bg-muted/40 p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Déplacement en villa ou appartement</p>
+                      <p className="text-[11px] text-foreground/60">Affiche le badge officiel « Déplacement en Villa »</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discInHomeService}
+                        onChange={(e) => setDiscInHomeService(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Description */}
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    Description détaillée *
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={discDescription}
+                    onChange={(e) => setDiscDescription(e.target.value)}
+                    placeholder="Présentez les spécialités, les soins proposés, le savoir-faire..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* Points forts & Tarifs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Points Forts (1 par ligne)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={discHighlights}
+                      onChange={(e) => setDiscHighlights(e.target.value)}
+                      placeholder="Déplacement en villa&#10;Matériel professionnel stérilisé&#10;Disponibilité 7j/7"
+                      className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Tarifs indicatifs
+                    </label>
+                    <input
+                      type="text"
+                      value={discPricing}
+                      onChange={(e) => setDiscPricing(e.target.value)}
+                      placeholder="Ex : Prestations dès 10 000 FCFA"
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none mb-2"
+                    />
+
+                    <label className="text-xs font-bold text-foreground block mb-1">
+                      Conseil / Modalités de réservation
+                    </label>
+                    <input
+                      type="text"
+                      value={discTips}
+                      onChange={(e) => setDiscTips(e.target.value)}
+                      placeholder="Ex : Réservation 24h à l'avance conseillée"
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Contacts Téléphone & WhatsApp */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1 flex items-center gap-1.5">
+                      <FontAwesomeIcon icon={faPhone} className="h-3 w-3 text-primary" />
+                      <span>Téléphone d'appel</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={discPhone}
+                      onChange={(e) => setDiscPhone(e.target.value)}
+                      placeholder="+229 97 00 00 00"
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-1 flex items-center gap-1.5">
+                      <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>WhatsApp pour commandes</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={discWhatsapp}
+                      onChange={(e) => setDiscWhatsapp(e.target.value)}
+                      placeholder="+229 97 00 00 00"
+                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo de Présentation */}
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-1">
+                    URL ou Photo de Présentation
+                  </label>
+                  <input
+                    type="url"
+                    value={discImage}
+                    onChange={(e) => setDiscImage(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                  {discImage && (
+                    <div className="mt-2 h-24 w-36 rounded-xl overflow-hidden border border-foreground/15 bg-muted">
+                      <img src={discImage} alt="Aperçu" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              <div className="shrink-0 px-5 py-3.5 sm:px-6 sm:py-4 border-t border-foreground/10 flex items-center justify-end gap-3 bg-card/95 backdrop-blur-sm z-10 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+                <button
+                  type="button"
+                  onClick={() => setShowDiscoveryModal(false)}
+                  className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all"
+                >
+                  {editingDiscovery ? 'Enregistrer les Modifications' : 'Publier Gratuitement (Admin)'}
                 </button>
               </div>
             </form>

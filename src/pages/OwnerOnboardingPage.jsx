@@ -29,7 +29,11 @@ import {
   faArrowUpRightFromSquare,
   faLock,
   faSpinner,
-  faRightFromBracket
+  faRightFromBracket,
+  faXmark,
+  faFilePdf,
+  faPen,
+  faExpand
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -42,11 +46,12 @@ import {
 } from '../services/ownerVerificationService';
 import { DocumentUploadCard } from '../components/DocumentUploadCard';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { BrandLogo } from '../components/BrandLogo';
 
 export function OwnerOnboardingPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isPartnerCertified, logout, loadingAuth } = useAuth();
+  const { user, isPartnerCertified, upgradeToOwner, logout, loadingAuth } = useAuth();
 
   const hasAuthTokenInUrl = typeof window !== 'undefined' && (
     window.location.hash.includes('access_token') ||
@@ -81,6 +86,10 @@ export function OwnerOnboardingPage() {
   const [applicationStatus, setApplicationStatus] = useState('draft'); // 'draft' | 'submitted' | 'under_review' | 'additional_info_required' | 'approved' | 'rejected'
   const [adminFeedback, setAdminFeedback] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Modals pour la consultation et le plein écran des pièces justificatives
+  const [showDocsPreviewModal, setShowDocsPreviewModal] = useState(false);
+  const [fullscreenDoc, setFullscreenDoc] = useState(null);
 
   // Étape 2 : Profil et Identité Personnelle
   const [profile, setProfile] = useState({
@@ -130,6 +139,10 @@ export function OwnerOnboardingPage() {
     return getRequiredDocuments(ownerType, assetCategories);
   }, [ownerType, assetCategories]);
 
+  const initialLoadedRef = useRef(false);
+  const currentUserId = user?.id;
+  const currentUserEmail = user?.email;
+
   // Chargement des données existantes (Supabase ou Local)
   useEffect(() => {
     let mounted = true;
@@ -137,13 +150,18 @@ export function OwnerOnboardingPage() {
     async function loadData() {
       if (isResolvingAuth) return;
 
-      if (!user) {
+      if (!currentUserId && !currentUserEmail) {
         setLoadingInitial(false);
         return;
       }
 
+      // Si le chargement initial a déjà été effectué, ne pas écraser les pièces et données en cours de saisie !
+      if (initialLoadedRef.current) {
+        return;
+      }
+
       try {
-        const app = await getVerificationApplication(user.id, user.email);
+        const app = await getVerificationApplication(currentUserId, currentUserEmail);
         if (app && mounted) {
           setApplicationId(app.id);
           setApplicationStatus(app.status || 'draft');
@@ -172,7 +190,7 @@ export function OwnerOnboardingPage() {
               });
             }
           }
-          if (app.documents) {
+          if (app.documents && Object.keys(app.documents).length > 0) {
             setUploadedDocuments(app.documents);
           }
           if (app.declarations) {
@@ -206,21 +224,25 @@ export function OwnerOnboardingPage() {
       } catch (err) {
         console.warn('Erreur chargement application de vérification:', err);
       } finally {
-        if (mounted) setLoadingInitial(false);
+        if (mounted) {
+          setLoadingInitial(false);
+          initialLoadedRef.current = true;
+        }
       }
     }
 
     loadData();
     return () => { mounted = false; };
-  }, [user, isResolvingAuth]);
+  }, [currentUserId, currentUserEmail, isResolvingAuth]);
 
-  // Sauvegarde automatique du brouillon (Autosave décorrélé)
-  const handleSaveDraft = async (showNotification = true) => {
+  // Sauvegarde automatique du brouillon (Autosave décorrélé avec override facultatif)
+  const handleSaveDraft = async (showNotification = true, overrideDocs = null) => {
     if (!user) return;
     setSavingDraft(true);
     setSaveFeedback('');
 
     try {
+      const docsToSave = overrideDocs || uploadedDocuments;
       const payload = {
         id: applicationId || undefined,
         user_id: user.id,
@@ -234,7 +256,7 @@ export function OwnerOnboardingPage() {
           ...(ownerType === 'registered_business' ? businessInfo : {}),
           ...(ownerType === 'authorized_manager' ? managerInfo : {})
         },
-        documents: uploadedDocuments,
+        documents: docsToSave,
         declarations,
         status: applicationStatus === 'draft' ? 'draft' : applicationStatus,
         current_step: currentStep
@@ -262,8 +284,8 @@ export function OwnerOnboardingPage() {
         ...prev,
         [ruleId]: docPayload
       };
-      // Sauvegarde immédiate du brouillon en arrière-plan
-      setTimeout(() => handleSaveDraft(false), 200);
+      // Sauvegarde immédiate du brouillon avec les documents à jour
+      handleSaveDraft(false, updated);
       return updated;
     });
   };
@@ -272,7 +294,7 @@ export function OwnerOnboardingPage() {
     setUploadedDocuments((prev) => {
       const copy = { ...prev };
       delete copy[ruleId];
-      setTimeout(() => handleSaveDraft(false), 200);
+      handleSaveDraft(false, copy);
       return copy;
     });
   };
@@ -443,6 +465,13 @@ export function OwnerOnboardingPage() {
       };
 
       const result = await submitVerificationApplication(user.id, fullPayload);
+      if (upgradeToOwner && user && user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin' && user.role !== 'subadmin') {
+        try {
+          await upgradeToOwner(profile?.fullName || businessInfo?.businessName || user.name || '');
+        } catch (e) {
+          console.warn('upgradeToOwner in submit notice:', e);
+        }
+      }
       setApplicationStatus('submitted');
       setApplicationId(result.id);
       setCurrentStep(7);
@@ -453,6 +482,66 @@ export function OwnerOnboardingPage() {
       setSubmitting(false);
     }
   };
+
+  // Redirection sécurisée vers le tableau de bord partenaire avec garantie du rôle propriétaire
+  const handleGoToPartnerDashboard = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      if (upgradeToOwner && user && user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin' && user.role !== 'subadmin') {
+        await upgradeToOwner(businessInfo?.businessName || profile?.fullName || user.name || '');
+      }
+    } catch (err) {
+      console.warn('upgradeToOwner navigation notice:', err);
+    }
+    navigate('/dashboard/partner');
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || isNaN(bytes)) return '';
+    if (bytes < 1024) return `${bytes} o`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  };
+
+  const submittedDocsList = useMemo(() => {
+    const entries = Object.entries(uploadedDocuments || {});
+    return entries.map(([ruleId, doc]) => {
+      const catalogInfo = DOCUMENT_CATALOG[ruleId] || {};
+      const isPdf =
+        doc?.fileType?.includes('pdf') ||
+        doc?.name?.toLowerCase().endsWith('.pdf') ||
+        (typeof doc?.fileUrl === 'string' && (doc?.fileUrl.toLowerCase().includes('.pdf') || doc?.fileUrl.startsWith('data:application/pdf')));
+      return {
+        ruleId,
+        doc,
+        catalogInfo,
+        isPdf,
+        name: catalogInfo.name || ruleId,
+        shortName: catalogInfo.shortName || ruleId,
+        category: catalogInfo.category || 'other',
+        fileName: doc?.name || 'document-soumis',
+        fileUrl: doc?.fileUrl,
+        fileSize: doc?.fileSize,
+        status: doc?.status || 'pending',
+        uploadedAt: doc?.uploadedAt,
+        adminComment: doc?.adminComment || ''
+      };
+    });
+  }, [uploadedDocuments]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (fullscreenDoc) {
+          setFullscreenDoc(null);
+        } else if (showDocsPreviewModal) {
+          setShowDocsPreviewModal(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fullscreenDoc, showDocsPreviewModal]);
 
   // Resoumission rapide des documents corrigés (depuis le statut "additional_info_required")
   const handleResubmitCorrections = async () => {
@@ -543,9 +632,7 @@ export function OwnerOnboardingPage() {
       {/* Top Header Navigation */}
       <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 lg:px-8 flex items-center justify-between shrink-0">
         <Link to="/" className="flex items-center gap-2 group">
-          <span className="font-heading font-black text-base sm:text-lg tracking-tight text-foreground group-hover:text-primary transition-colors">
-            Bénin <span className="text-primary font-serif italic font-normal">Beyond</span>
-          </span>
+          <BrandLogo size="sm" />
           <span className="hidden sm:inline-block text-[11px] font-semibold text-foreground/50 border-l border-foreground/15 pl-2">
             Espace Certification Partenaire
           </span>
@@ -1292,6 +1379,7 @@ export function OwnerOnboardingPage() {
                   <DocumentUploadCard
                     key={rule.id}
                     rule={rule}
+                    userId={user?.id || 'owner'}
                     documentData={uploadedDocuments[rule.id]}
                     onUpload={handleDocumentUpload}
                     onRemove={handleDocumentRemove}
@@ -1435,14 +1523,23 @@ export function OwnerOnboardingPage() {
                       Félicitations, votre dossier a été validé avec succès par notre équipe de conformité. Vos privilèges de publication directe sont actifs.
                     </p>
                   </div>
-                  <div className="pt-4 flex justify-center gap-3">
-                    <Link
-                      to="/dashboard/partner"
+                  <div className="pt-4 flex flex-wrap justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleGoToPartnerDashboard}
                       className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-6 py-3 shadow-lg shadow-emerald-600/20 transition-all inline-flex items-center gap-2"
                     >
                       Accéder à mon tableau de bord propriétaire
                       <FontAwesomeIcon icon={faArrowRight} />
-                    </Link>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDocsPreviewModal(true)}
+                      className="rounded-2xl border border-foreground/20 hover:bg-muted text-foreground text-xs font-semibold px-4 py-3 transition-colors inline-flex items-center gap-2"
+                    >
+                      <FontAwesomeIcon icon={faEye} />
+                      Consulter mes documents soumis
+                    </button>
                   </div>
                 </>
               ) : applicationStatus === 'rejected' ? (
@@ -1504,18 +1601,20 @@ export function OwnerOnboardingPage() {
                   </div>
 
                   <div className="pt-4 flex flex-wrap justify-center gap-3">
-                    <Link
-                      to="/dashboard/partner"
+                    <button
+                      type="button"
+                      onClick={handleGoToPartnerDashboard}
                       className="rounded-2xl bg-primary hover:bg-primary-dark text-white text-xs font-bold px-6 py-3 shadow-lg shadow-primary/20 transition-all inline-flex items-center gap-2"
                     >
                       Accéder à mon tableau de bord propriétaire
                       <FontAwesomeIcon icon={faArrowRight} />
-                    </Link>
+                    </button>
                     <button
                       type="button"
-                      onClick={() => setCurrentStep(5)}
-                      className="rounded-2xl border border-foreground/20 hover:bg-muted text-foreground text-xs font-semibold px-4 py-3 transition-colors"
+                      onClick={() => setShowDocsPreviewModal(true)}
+                      className="rounded-2xl border border-foreground/20 hover:bg-muted text-foreground text-xs font-semibold px-4 py-3 transition-colors inline-flex items-center gap-2"
                     >
+                      <FontAwesomeIcon icon={faEye} />
                       Consulter mes documents soumis
                     </button>
                   </div>
@@ -1595,11 +1694,333 @@ export function OwnerOnboardingPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL 1 : Aperçu interactif des documents justificatifs soumis            */}
+      {/* ========================================================================= */}
+      {showDocsPreviewModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowDocsPreviewModal(false);
+          }}
+        >
+          <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl bg-card border border-foreground/15 shadow-2xl overflow-hidden animate-scale-up">
+            {/* Barre d'accentuation en dégradé */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-primary via-emerald-500 to-primary" />
+
+            {/* En-tête du modal */}
+            <div className="p-4 sm:p-6 border-b border-foreground/10 flex items-center justify-between gap-4 bg-muted/20">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-lg shrink-0">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading text-lg font-black text-foreground">
+                      Aperçu de mes pièces justificatives
+                    </h3>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-primary/10 text-primary border border-primary/20">
+                      {submittedDocsList.length} pièce{submittedDocsList.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground/60 mt-0.5">
+                    Contrôlez la lisibilité et la conformité des fichiers transmis à l'équipe de validation.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDocsPreviewModal(false)}
+                className="h-9 w-9 rounded-xl bg-foreground/5 hover:bg-foreground/10 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors shrink-0"
+                title="Fermer"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Corps du modal défilable */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Statut du dossier */}
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3 text-xs">
+                <FontAwesomeIcon icon={faClock} className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-foreground">
+                    {applicationStatus === 'approved'
+                      ? 'Dossier vérifié & approuvé'
+                      : applicationStatus === 'additional_info_required'
+                      ? 'Compléments demandés par le service conformité'
+                      : 'Dossier en cours d\'analyse réglementaire'}
+                  </p>
+                  <p className="text-foreground/70 leading-relaxed">
+                    Cliquez sur l'un de vos documents pour l'afficher en <strong>grand écran</strong> et vérifier chaque détail. Si une pièce est incomplète ou illisible, utilisez le bouton ci-dessous pour revenir à l'étape d'édition.
+                  </p>
+                </div>
+              </div>
+
+              {submittedDocsList.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <div className="h-16 w-16 mx-auto rounded-full bg-muted flex items-center justify-center text-foreground/40 text-2xl">
+                    <FontAwesomeIcon icon={faFileContract} />
+                  </div>
+                  <p className="text-xs text-foreground/70 font-medium">
+                    Aucun document n'a été enregistré pour le moment.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDocsPreviewModal(false);
+                      setCurrentStep(5);
+                    }}
+                    className="rounded-xl bg-primary text-white text-xs font-bold px-4 py-2 hover:bg-primary-dark transition-colors inline-flex items-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faPen} /> Téléverser mes pièces à l'étape 5
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {submittedDocsList.map((item) => (
+                    <div
+                      key={item.ruleId}
+                      className="rounded-2xl border border-foreground/10 bg-background/80 hover:border-primary/40 hover:shadow-lg transition-all p-4 flex flex-col justify-between space-y-3 group"
+                    >
+                      {/* En-tête de la carte document */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-foreground/5 text-foreground/70 border border-foreground/10 truncate">
+                            {item.shortName}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                              item.status === 'approved'
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                                : item.status === 'action_required'
+                                ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                                : 'bg-primary/10 text-primary'
+                            }`}
+                          >
+                            <FontAwesomeIcon
+                              icon={item.status === 'approved' ? faCircleCheck : faClock}
+                              className="text-[9px]"
+                            />
+                            {item.status === 'approved' ? 'Validé' : 'Transmis'}
+                          </span>
+                        </div>
+
+                        <h4 className="font-bold text-xs text-foreground line-clamp-1" title={item.name}>
+                          {item.name}
+                        </h4>
+                        <p className="text-[11px] text-foreground/60 truncate mt-0.5">
+                          {item.fileName} {item.fileSize ? `• ${formatFileSize(item.fileSize)}` : ''}
+                        </p>
+                      </div>
+
+                      {/* Boîte d'aperçu miniature cliquable */}
+                      {item.isPdf ? (
+                        <div
+                          onClick={() => setFullscreenDoc(item)}
+                          className="relative h-44 w-full rounded-2xl overflow-hidden bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20 flex flex-col items-center justify-center cursor-pointer group hover:bg-rose-500/15 transition-all p-3 text-center"
+                          title="Cliquez pour agrandir en grand écran"
+                        >
+                          <div className="h-12 w-12 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center text-2xl mb-2 group-hover:scale-110 transition-transform">
+                            <FontAwesomeIcon icon={faFilePdf} />
+                          </div>
+                          <span className="text-xs font-bold text-foreground">Document PDF officiel</span>
+                          <span className="text-[10px] text-foreground/60 truncate max-w-[90%] mt-0.5">
+                            {item.fileName}
+                          </span>
+                          <span className="mt-3 text-[10px] px-3 py-1 rounded-full bg-rose-600 text-white font-bold flex items-center gap-1.5 shadow-md shadow-rose-600/20">
+                            <FontAwesomeIcon icon={faExpand} /> Voir en grand écran
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setFullscreenDoc(item)}
+                          className="relative h-44 w-full rounded-2xl overflow-hidden bg-black/5 dark:bg-white/5 border border-foreground/10 cursor-pointer group"
+                          title="Cliquez pour agrandir en grand écran"
+                        >
+                          <img
+                            src={item.fileUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-bold backdrop-blur-[1px]">
+                            <FontAwesomeIcon icon={faExpand} /> Plein écran
+                          </div>
+                          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-medium backdrop-blur-sm">
+                            Image
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Boutons d'action rapides */}
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-foreground/5">
+                        <button
+                          type="button"
+                          onClick={() => setFullscreenDoc(item)}
+                          className="rounded-xl bg-foreground/5 hover:bg-foreground/10 text-foreground text-[11px] font-semibold py-2 px-2.5 flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <FontAwesomeIcon icon={faExpand} className="text-primary text-xs" />
+                          <span>Grand écran</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.open(item.fileUrl, '_blank')}
+                          className="rounded-xl border border-foreground/10 hover:bg-muted text-foreground/80 hover:text-foreground text-[11px] font-semibold py-2 px-2.5 flex items-center justify-center gap-1.5 transition-colors"
+                          title="Ouvrir dans un nouvel onglet"
+                        >
+                          <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-xs" />
+                          <span>Ouvrir</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Pied de page du modal */}
+            <div className="p-4 sm:p-5 border-t border-foreground/10 bg-muted/30 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDocsPreviewModal(false);
+                  setCurrentStep(5);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="rounded-2xl border border-primary/30 hover:bg-primary/10 text-primary text-xs font-bold px-4 py-2.5 transition-all flex items-center gap-2"
+              >
+                <FontAwesomeIcon icon={faPen} />
+                Modifier ou remplacer mes pièces (Étape 5)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDocsPreviewModal(false)}
+                className="rounded-2xl bg-foreground/10 hover:bg-foreground/20 text-foreground text-xs font-semibold px-5 py-2.5 transition-colors"
+              >
+                Fermer l'aperçu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2 : Visionneuse plein écran / Lightbox Haute Définition             */}
+      {/* ========================================================================= */}
+      {fullscreenDoc && (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col bg-black/90 backdrop-blur-md animate-fade-in p-3 sm:p-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFullscreenDoc(null);
+          }}
+        >
+          {/* Barre supérieure */}
+          <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 text-white shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-primary-light text-lg">
+                <FontAwesomeIcon icon={fullscreenDoc.isPdf ? faFilePdf : faEye} />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold leading-tight text-white line-clamp-1">
+                  {fullscreenDoc.name}
+                </h3>
+                <p className="text-[11px] text-white/70">
+                  {fullscreenDoc.fileName} {fullscreenDoc.fileSize ? `• ${formatFileSize(fullscreenDoc.fileSize)}` : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.open(fullscreenDoc.fileUrl, '_blank')}
+                className="rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-2 flex items-center gap-1.5 transition-colors"
+                title="Ouvrir dans un nouvel onglet"
+              >
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+                <span className="hidden sm:inline">Nouvel onglet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFullscreenDoc(null)}
+                className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                title="Fermer (Échap)"
+              >
+                <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Corps de la visionneuse */}
+          <div className="flex-1 flex items-center justify-center p-2 sm:p-4 overflow-hidden relative">
+            {fullscreenDoc.isPdf ? (
+              <div className="w-full h-full max-h-[84vh] max-w-5xl flex flex-col rounded-2xl overflow-hidden border border-white/20 bg-slate-900 shadow-2xl">
+                <div className="p-2 bg-slate-800 text-white text-xs flex items-center justify-between px-4 border-b border-white/10 shrink-0">
+                  <span className="font-mono text-[11px] text-white/80">Affichage PDF officiel</span>
+                  <a
+                    href={fullscreenDoc.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary-light hover:underline text-[11px] flex items-center gap-1"
+                  >
+                    Ouvrir en plein écran <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+                  </a>
+                </div>
+                <iframe
+                  src={fullscreenDoc.fileUrl}
+                  title={fullscreenDoc.name}
+                  className="w-full flex-1 border-0 bg-white"
+                />
+              </div>
+            ) : (
+              <div className="relative max-h-[84vh] max-w-full flex items-center justify-center">
+                <img
+                  src={fullscreenDoc.fileUrl}
+                  alt={fullscreenDoc.name}
+                  className="max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/10 bg-black/40"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Navigation entre pièces jointes si plusieurs */}
+          {submittedDocsList.length > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-3 border-t border-white/10 text-white text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = submittedDocsList.findIndex((d) => d.ruleId === fullscreenDoc.ruleId);
+                  const prevIdx = (idx - 1 + submittedDocsList.length) % submittedDocsList.length;
+                  setFullscreenDoc(submittedDocsList[prevIdx]);
+                }}
+                className="rounded-xl bg-white/10 hover:bg-white/20 px-3.5 py-1.5 flex items-center gap-2 transition-colors font-medium"
+              >
+                <FontAwesomeIcon icon={faArrowLeft} /> Document précédent
+              </button>
+              <span className="text-white/60 font-mono text-[11px]">
+                {submittedDocsList.findIndex((d) => d.ruleId === fullscreenDoc.ruleId) + 1} / {submittedDocsList.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = submittedDocsList.findIndex((d) => d.ruleId === fullscreenDoc.ruleId);
+                  const nextIdx = (idx + 1) % submittedDocsList.length;
+                  setFullscreenDoc(submittedDocsList[nextIdx]);
+                }}
+                className="rounded-xl bg-white/10 hover:bg-white/20 px-3.5 py-1.5 flex items-center gap-2 transition-colors font-medium"
+              >
+                Document suivant <FontAwesomeIcon icon={faArrowRight} />
+              </button>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      )}
     </div>
   );
 }

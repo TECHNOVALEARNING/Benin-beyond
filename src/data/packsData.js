@@ -61,7 +61,7 @@ export const SAMPLE_DEMO_PACKS = [
       }
     ],
     advantages: [
-      "Guide touristique imprimé des monuments d'Ouidah offert",
+      "Guide gastronomique et adresses locales offert",
       "Hamac et accès direct plage de Ouidah",
       "Assurance tous risques véhicule incluse",
       "Assistance conciergerie locale"

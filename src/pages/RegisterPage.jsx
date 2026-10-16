@@ -15,7 +15,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { BrandIcon } from '../components/BrandLogo';
+import { BrandIcon, BrandLogo } from '../components/BrandLogo';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -129,11 +129,8 @@ export function RegisterPage() {
 
           {/* Header Hôte */}
           <div className="text-center mb-8 flex flex-col items-center">
-            <Link to="/" className="inline-flex flex-col items-center gap-2 group mb-2">
-              <BrandIcon size="lg" className="hover:scale-105 transition-transform" />
-              <span className="font-heading text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors">
-                Bénin Beyond
-              </span>
+            <Link to="/" className="inline-flex items-center justify-center group mb-3 hover:opacity-90 transition-opacity">
+              <BrandLogo size="xl" />
             </Link>
             <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-2">
               Créer votre compte Hôte

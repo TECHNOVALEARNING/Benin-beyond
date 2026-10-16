@@ -7,7 +7,8 @@ import {
   faPhone,
   faCircleCheck,
   faHouse,
-  faCar
+  faCar,
+  faBagShopping
 } from '@fortawesome/free-solid-svg-icons';
 import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
@@ -47,12 +48,12 @@ export function PacksPage() {
           Packs Combinés Hébergement & Mobilité
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-foreground/70">
-          Associez nos villas et lofts d’exception à des véhicules tout-terrain, berlines avec chauffeur ou visites patrimoniales privées. Profitez d’une économie immédiate et d’une prise en charge VIP dès votre arrivée au Bénin.
+          Associez nos villas et lofts d’exception à des véhicules tout-terrain, berlines avec chauffeur ou visites patrimoniales privées. Profitez d’une économie immédiate et d’une prise en charge dès votre arrivée au Bénin.
         </p>
       </ScrollReveal>
 
       {/* 2. Perks Strip with staggered entry */}
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 rounded-2xl border border-foreground/10 bg-card p-4 sm:p-5 shadow-sm">
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 rounded-2xl border border-foreground/10 bg-card p-4 sm:p-5 shadow-sm">
         <ScrollReveal delay={0} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent-foreground font-bold">
             %
@@ -63,7 +64,7 @@ export function PacksPage() {
           </div>
         </ScrollReveal>
 
-        <ScrollReveal delay={70} y={15} scale={0.97} className="flex items-center gap-2.5">
+        <ScrollReveal delay={50} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
           </div>
@@ -73,17 +74,27 @@ export function PacksPage() {
           </div>
         </ScrollReveal>
 
-        <ScrollReveal delay={140} y={15} scale={0.97} className="flex items-center gap-2.5">
+        <ScrollReveal delay={100} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700">
             <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4" />
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Prise aéroport</div>
-            <div className="text-[11px] text-foreground/60">Cadjehoun VIP</div>
+            <div className="text-[11px] text-foreground/60">Aéroport Cadjehoun</div>
           </div>
         </ScrollReveal>
 
-        <ScrollReveal delay={210} y={15} scale={0.97} className="flex items-center gap-2.5">
+        <ScrollReveal delay={150} y={15} scale={0.97} className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-violet-700">
+            <FontAwesomeIcon icon={faBagShopping} className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-foreground">Courses & livraisons</div>
+            <div className="text-[11px] text-foreground/60">Service direct en villa</div>
+          </div>
+        </ScrollReveal>
+
+        <ScrollReveal delay={200} y={15} scale={0.97} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-700">
             <FontAwesomeIcon icon={faPhone} className="h-3.5 w-3.5" />
           </div>

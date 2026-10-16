@@ -1,5 +1,6 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 import { updateUser, getUsers } from './userService';
+import { fileToDataUrl } from './mediaStorage';
 
 /**
  * ==============================================================================
@@ -241,13 +242,81 @@ function getLocalApplications() {
 }
 
 /**
+ * Téléverse un document officiel de vérification (CIP, CNI, RCCM, IFU, Titre foncier...) dans Supabase Storage
+ * Structure de stockage : verifications/<userId>/<ruleId>_<timestamp>.<ext>
+ */
+export async function uploadVerificationDocument(file, { userId = 'owner', ruleId = 'document' } = {}) {
+  if (!file) return '';
+
+  const sanitize = (val) => String(val || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+  const cleanUser = sanitize(userId) || 'owner';
+  const cleanRule = sanitize(ruleId) || 'doc';
+
+  let ext = 'pdf';
+  if (file.name && file.name.includes('.')) {
+    ext = file.name.split('.').pop().toLowerCase();
+  } else if (file.type?.includes('png')) {
+    ext = 'png';
+  } else if (file.type?.includes('jpeg') || file.type?.includes('jpg')) {
+    ext = 'jpg';
+  } else if (file.type?.includes('webp')) {
+    ext = 'webp';
+  }
+
+  const storagePath = `verifications/${cleanUser}/${cleanRule}_${Date.now()}.${ext}`;
+  const contentType = file.type || (ext === 'pdf' ? 'application/pdf' : `image/${ext}`);
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.storage
+        .from('listings')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType
+        });
+
+      if (!error && data?.path) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('listings')
+          .getPublicUrl(data.path);
+
+        if (publicUrl) {
+          return publicUrl;
+        }
+      } else if (error) {
+        console.warn('Supabase Storage notice (vérifiez la migration SQL pour autoriser le type MIME) :', error.message);
+      }
+    } catch (err) {
+      console.warn('Exception upload Supabase Storage:', err);
+    }
+  }
+
+  // Repli automatique garanti si hors-ligne ou si le bucket n'accepte pas encore le type MIME
+  return await fileToDataUrl(file);
+}
+
+/**
  * Enregistre la liste des demandes dans le stockage local
  */
 function saveLocalApplications(apps) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(apps));
+    const compactApps = (apps || []).map((app) => {
+      if (!app || !app.documents) return app;
+      const compactDocs = {};
+      for (const [k, d] of Object.entries(app.documents)) {
+        if (!d) continue;
+        const isHugeBase64 = typeof d.fileUrl === 'string' && d.fileUrl.startsWith('data:') && d.fileUrl.length > 50000;
+        compactDocs[k] = {
+          ...d,
+          fileUrl: isHugeBase64 ? d.fileUrl.slice(0, 120) + '...[cached_preview]' : d.fileUrl
+        };
+      }
+      return { ...app, documents: compactDocs };
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(compactApps));
   } catch (err) {
-    console.warn('Erreur de sauvegarde locale des demandes KYC:', err);
+    console.warn('Erreur de sauvegarde locale des demandes KYC (quota localStorage):', err);
   }
 }
 
@@ -277,6 +346,25 @@ function appendAuditLog(entry) {
     log.unshift(newEntry);
     localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(log.slice(0, 500)));
     return newEntry;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Récupère immédiatement et de manière synchrone l'application de vérification locale
+ */
+export function getLocalVerificationApplication(userId, userEmail = '') {
+  const cleanEmail = (userEmail || '').trim().toLowerCase();
+  try {
+    const localList = getLocalApplications();
+    return (
+      localList.find((app) => {
+        const matchId = userId && String(app.user_id) === String(userId);
+        const matchEmail = cleanEmail && app.owner_email && app.owner_email.toLowerCase() === cleanEmail;
+        return matchId || matchEmail;
+      }) || null
+    );
   } catch {
     return null;
   }
@@ -361,7 +449,7 @@ export async function saveVerificationDraft(userId, payload) {
   // 2. Persistance Supabase (asynchrone avec repli)
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('owner_verification_applications').upsert(applicationData, { onConflict: 'id' });
+      await runSupabaseQuery('owner_verification_applications.upsert', supabase.from('owner_verification_applications').upsert(applicationData, { onConflict: 'id' }));
     } catch (e) {
       console.warn('Supabase saveVerificationDraft notice:', e?.message || e);
     }
@@ -594,7 +682,7 @@ export async function reviewIndividualDocument(applicationId, ruleId, decision, 
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('owner_verification_applications').upsert(updatedApp, { onConflict: 'id' });
+      await runSupabaseQuery('owner_verification_applications.upsert', supabase.from('owner_verification_applications').upsert(updatedApp, { onConflict: 'id' }));
     } catch {}
   }
 
@@ -661,7 +749,7 @@ export async function reviewApplicationOverall(applicationId, decision, adminNot
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('owner_verification_applications').upsert(updatedApp, { onConflict: 'id' });
+      await runSupabaseQuery('owner_verification_applications.upsert', supabase.from('owner_verification_applications').upsert(updatedApp, { onConflict: 'id' }));
     } catch {}
   }
 

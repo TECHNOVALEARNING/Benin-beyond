@@ -112,8 +112,21 @@ export function ListingDetailPage() {
         console.warn('Erreur résumé réservation:', err);
       });
 
+    const handleAvailabilityChange = () => {
+      if (!id) return;
+      checkDateAvailability(id, startDate, endDate).then((res) => {
+        if (active) setAvailability(res);
+      });
+      getActiveReservationSummary(id).then((summary) => {
+        if (active) setReservationSummary(summary);
+      });
+    };
+
+    window.addEventListener('benin_beyond_availability_updated', handleAvailabilityChange);
+
     return () => {
       active = false;
+      window.removeEventListener('benin_beyond_availability_updated', handleAvailabilityChange);
     };
   }, [id, startDate, endDate, hasAutoAdjustedInitialDates]);
 
@@ -717,10 +730,10 @@ export function ListingDetailPage() {
                     <span>Période déjà réservée & indisponible</span>
                   </div>
                   <p className="text-foreground/80 leading-relaxed text-[11px]">
-                    Ce bien a déjà fait l'objet d'un règlement validé du{' '}
+                    Ce bien est déjà réservé ou indisponible du{' '}
                     <strong>{new Date(availability.conflict.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</strong> au{' '}
                     <strong>{new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>.
-                    Aucune réservation concurrente n'est possible avant cette date d'échéance.
+                    Les réservations en ligne sont bloquées pour cet intervalle. Vous pouvez librement sélectionner une date ultérieure.
                   </p>
                   <button
                     type="button"

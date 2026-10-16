@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 
 const STORAGE_KEY = 'benin_beyond_cultural_events';
 
@@ -90,7 +90,7 @@ export async function addEvent(eventData) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('events').insert([newEvent]);
+      await runSupabaseQuery('events.insert', supabase.from('events').insert([newEvent]));
     } catch (err) {
       console.warn('Erreur insert events Supabase:', err);
     }
@@ -105,7 +105,7 @@ export async function addEvent(eventData) {
 export async function updateEvent(id, updatedFields) {
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('events').update(updatedFields).eq('id', id);
+      await runSupabaseQuery('events.update', supabase.from('events').update(updatedFields).eq('id', id));
     } catch (err) {
       console.warn('Erreur update events Supabase:', err);
     }
@@ -120,7 +120,7 @@ export async function updateEvent(id, updatedFields) {
 export async function deleteEvent(id) {
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('events').delete().eq('id', id);
+      await runSupabaseQuery('events.delete', supabase.from('events').delete().eq('id', id));
     } catch (err) {
       console.warn('Erreur delete events Supabase:', err);
     }
