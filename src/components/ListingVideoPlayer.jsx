@@ -13,8 +13,10 @@ import {
   faRotateRight
 } from '@fortawesome/free-solid-svg-icons';
 import { resolveVideoUrl, parseVideoEmbed } from '../services/mediaStorage';
+import { useLanguage } from '../context/LanguageContext';
 
 export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite immersive', compact = false }) {
+  const { t } = useLanguage();
   const [resolvedUrl, setResolvedUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -103,17 +105,17 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
             </div>
             <div>
               <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground">
-                Visite Vidéo Exclusive & Immersive
+                {t("Visite Vidéo Exclusive & Immersive")}
               </h3>
               <p className="text-xs text-foreground/60">
-                Découvrez ce bien d'exception en mouvement et sous tous ses angles
+                {t("Découvrez ce bien d'exception en mouvement et sous tous ses angles")}
               </p>
             </div>
           </div>
 
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
             <FontAwesomeIcon icon={faCircleCheck} className="h-3 w-3" />
-            <span>Vidéo Réelle Certifiée</span>
+            <span>{t("Vidéo Réelle Certifiée")}</span>
           </span>
         </div>
       )}
@@ -129,7 +131,7 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
           <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-white/60 text-xs">
             <div className="flex flex-col items-center gap-2">
               <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-              <span>Chargement de la vidéo immersive…</span>
+              <span>{t("Chargement de la vidéo immersive…")}</span>
             </div>
           </div>
         ) : error ? (
@@ -138,9 +140,9 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
               <FontAwesomeIcon icon={faVideo} />
             </div>
             <div>
-              <p className="font-semibold text-sm text-white">Lecture externe disponible</p>
+              <p className="font-semibold text-sm text-white">{t("Lecture externe disponible")}</p>
               <p className="text-[11px] text-white/60 mt-1 max-w-sm">
-                Ce flux vidéo est hébergé sur un serveur externe sécurisé. Vous pouvez le visionner directement ci-dessous :
+                {t("Ce flux vidéo est hébergé sur un serveur externe sécurisé. Vous pouvez le visionner directement ci-dessous :")}
               </p>
             </div>
             <div className="flex items-center gap-2 pt-1">
@@ -154,7 +156,7 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
                 className="rounded-xl border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1.5"
               >
                 <FontAwesomeIcon icon={faRotateRight} />
-                <span>Réessayer</span>
+                <span>{t("Réessayer")}</span>
               </button>
               <a
                 href={currentUrl}
@@ -162,7 +164,7 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
                 rel="noopener noreferrer"
                 className="rounded-xl bg-accent px-4 py-1.5 text-xs font-bold text-neutral-950 shadow hover:bg-accent/90 transition-colors inline-flex items-center gap-1.5"
               >
-                <span>Ouvrir la vidéo</span>
+                <span>{t("Ouvrir la vidéo")}</span>
                 <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-[10px]" />
               </a>
             </div>
@@ -206,7 +208,7 @@ export function ListingVideoPlayer({ videoUrl, poster = '', title = 'Visite imme
                   <FontAwesomeIcon icon={faPlay} className="ml-1 text-xl" />
                 </div>
                 <p className="mt-3 font-heading text-sm font-semibold text-white drop-shadow">
-                  Lancer la visite immersive
+                  {t("Lancer la visite immersive")}
                 </p>
                 <span className="mt-1 text-[11px] text-white/70">
                   {embedInfo?.serviceName || 'Vidéo certifiée'}

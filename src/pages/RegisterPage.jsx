@@ -15,9 +15,11 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { BrandIcon, BrandLogo } from '../components/BrandLogo';
+import { BrandLogo } from '../components/BrandLogo';
+import { useLanguage } from '../context/LanguageContext';
 
 export function RegisterPage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const { register, loginWithGoogle, user } = useAuth();
@@ -25,7 +27,7 @@ export function RegisterPage() {
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || '';
 
-  // Form states : uniquement email & mot de passe pour l'inscription (le profil et KYC sont gérés dans l'Onboarding)
+  // Form states : uniquement email & mot de passe ; le propriétaire arrive ensuite directement sur son tableau de bord
   const [email, setEmail] = useState(() => emailParam);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -65,12 +67,12 @@ export function RegisterPage() {
       });
 
       if (res.success) {
-        setSuccessMsg('Compte partenaire créé avec succès ! Redirection vers votre dossier d’onboarding...');
+        setSuccessMsg('Compte partenaire créé avec succès ! Redirection vers votre espace propriétaire...');
         try {
           localStorage.setItem('benin_beyond_just_registered', 'true');
         } catch {}
         setTimeout(() => {
-          navigate('/onboarding/partner?new=1', { replace: true });
+          navigate('/dashboard/partner', { replace: true });
         }, 600);
       } else {
         setError(res.error || "Impossible de créer votre compte partenaire.");
@@ -89,7 +91,7 @@ export function RegisterPage() {
       try {
         localStorage.setItem('benin_beyond_just_registered', 'true');
       } catch {}
-      const res = await loginWithGoogle('owner', 'Partenaire Bénin Beyond', '/onboarding/partner');
+      const res = await loginWithGoogle('owner', 'Partenaire Bénin Beyond', '/dashboard/partner');
       if (res?.error) {
         setError(res.error);
       }
@@ -115,14 +117,14 @@ export function RegisterPage() {
               <div className="flex items-center gap-2 text-foreground/80">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
                 <span className="truncate">
-                  Connecté : <strong>{user.name || user.email}</strong> ({user.role === 'admin' ? 'Superviseur Admin' : user.role === 'owner' || user.role === 'partner' ? 'Partenaire' : 'Voyageur'})
+                  {t('Connecté :')} <strong>{user.name || user.email}</strong> ({user.role === 'admin' ? t("Superviseur Admin") : user.role === 'owner' || user.role === 'partner' ? t("Partenaire") : t("Voyageur")})
                 </span>
               </div>
               <Link
                 to={user.role === 'admin' || user.role === 'subadmin' ? '/admin' : user.role === 'owner' || user.role === 'partner' ? '/dashboard/partner' : '/dashboard/client'}
                 className="font-bold text-primary hover:underline shrink-0 text-[11px]"
               >
-                Accéder à mon espace →
+                {t("Accéder à mon espace →")}
               </Link>
             </div>
           )}
@@ -133,10 +135,10 @@ export function RegisterPage() {
               <BrandLogo size="xl" />
             </Link>
             <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-2">
-              Créer votre compte Hôte
+              {t("Créer votre compte Hôte")}
             </h1>
             <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
-              Rejoignez le réseau officiel de prestige au Bénin. Créez vos identifiants pour démarrer votre dossier d'onboarding.
+              {t("Rejoignez le réseau officiel de prestige au Bénin. Créez votre compte et publiez votre première annonce.")}
             </p>
           </div>
 
@@ -146,11 +148,11 @@ export function RegisterPage() {
               <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center justify-between gap-2.5 animate-fadeIn">
                 <div className="flex items-center gap-2">
                   <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
-                  <span>{error}</span>
+                  <span>{t(error)}</span>
                 </div>
                 {error.includes('déjà associé') && (
                   <Link to="/login" className="font-bold underline text-primary shrink-0 ml-2">
-                    Se connecter
+                    {t("Se connecter")}
                   </Link>
                 )}
               </div>
@@ -159,7 +161,7 @@ export function RegisterPage() {
             {successMsg && (
               <div className="mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2.5 animate-fadeIn">
                 <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
-                <span>{successMsg}</span>
+                <span>{t(successMsg)}</span>
               </div>
             )}
 
@@ -176,13 +178,13 @@ export function RegisterPage() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
-              <span>{loadingGoogle ? 'Connexion Google...' : "S'inscrire avec Google"}</span>
+              <span>{loadingGoogle ? t("Connexion Google...") : t("S'inscrire avec Google")}</span>
             </button>
 
             <div className="relative my-5 flex items-center justify-center">
               <div className="w-full border-t border-foreground/10" />
               <span className="absolute bg-card px-3 text-[10px] font-medium uppercase tracking-wider text-foreground/50">
-                ou avec votre adresse e-mail
+                {t("ou avec votre adresse e-mail")}
               </span>
             </div>
 
@@ -190,7 +192,7 @@ export function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-foreground mb-1.5">
-                  Adresse e-mail professionnelle / de gestion *
+                  {t("Adresse e-mail professionnelle / de gestion *")}
                 </label>
                 <div className="relative">
                   <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
@@ -207,7 +209,7 @@ export function RegisterPage() {
 
               <div>
                 <label className="block text-xs font-bold text-foreground mb-1.5">
-                  Mot de passe de sécurité *
+                  {t("Mot de passe de sécurité *")}
                 </label>
                 <div className="relative">
                   <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
@@ -216,14 +218,14 @@ export function RegisterPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Au moins 6 caractères"
+                    placeholder={t("Au moins 6 caractères")}
                     className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2.5 text-xs sm:text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                    title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
+                    title={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-foreground/40 hover:text-foreground transition-colors cursor-pointer focus:outline-none"
                   >
                     <FontAwesomeIcon
@@ -233,7 +235,7 @@ export function RegisterPage() {
                   </button>
                 </div>
                 <p className="text-[10px] text-foreground/50 mt-1">
-                  Ce mot de passe protégera l'accès à vos annonces, tarifs et versements financiers.
+                  {t("Ce mot de passe protégera l'accès à vos annonces, tarifs et versements financiers.")}
                 </p>
               </div>
 
@@ -246,11 +248,11 @@ export function RegisterPage() {
                   {loading ? (
                     <>
                       <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
-                      <span>Création de votre compte...</span>
+                      <span>{t("Création de votre compte...")}</span>
                     </>
                   ) : (
                     <>
-                      <span>Créer mon compte Hôte</span>
+                      <span>{t("Créer mon compte Hôte")}</span>
                       <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
                     </>
                   )}
@@ -258,9 +260,9 @@ export function RegisterPage() {
               </div>
 
               <div className="pt-2 text-center text-xs text-foreground/60">
-                <span>Déjà inscrit sur Bénin Beyond ? </span>
+                <span>{t("Déjà inscrit sur Bénin Beyond ?")} </span>
                 <Link to="/login" className="font-bold text-primary hover:underline">
-                  Se connecter
+                  {t("Se connecter")}
                 </Link>
               </div>
             </form>
@@ -270,18 +272,18 @@ export function RegisterPage() {
           <div className="mt-8 rounded-2xl border border-foreground/10 bg-card/60 p-4 text-center backdrop-blur-sm">
             <div className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground mb-1">
               <FontAwesomeIcon icon={faShieldHalved} className="text-emerald-500 h-3.5 w-3.5" />
-              <span>Dossier KYC & Certifications</span>
+              <span>{t("Annonces vérifiées")}</span>
             </div>
             <p className="text-[11px] text-foreground/60 max-w-md mx-auto">
-              Après la création de vos identifiants, vous serez orienté vers votre espace d'onboarding officiel pour renseigner votre enseigne, coordonnées et documents légaux.
+              {t("Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce est vérifiée par notre équipe avant sa mise en ligne.")}
             </p>
             <div className="mt-3 pt-3 border-t border-foreground/10 flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-foreground/70">
-              <span>Vous êtes un voyageur ?</span>
+              <span>{t("Vous êtes un voyageur ?")}</span>
               <Link
                 to="/"
                 className="font-bold text-accent hover:underline flex items-center gap-1"
               >
-                <span>Explorer et réserver un séjour directement</span>
+                <span>{t("Explorer et réserver un séjour directement")}</span>
                 <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
               </Link>
             </div>

@@ -27,8 +27,12 @@ import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
+import { ReportListingButton } from '../components/ReportListingButton';
+import { useLanguage } from '../context/LanguageContext';
+import { AutoText } from '../services/translationService';
 
 export function ListingDetailPage() {
+  const { t, locale } = useLanguage();
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();
@@ -235,15 +239,15 @@ export function ListingDetailPage() {
   if (!listing) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-32 text-center">
-        <h1 className="section-title text-3xl">Annonce non trouvée</h1>
+        <h1 className="section-title text-3xl">{t("Annonce non trouvée")}</h1>
         <p className="mt-3 text-foreground/60">
-          Cette prestation n'est pas disponible ou a été déplacée.
+          {t("Cette prestation n'est pas disponible ou a été déplacée.")}
         </p>
         <Link
           to="/explore"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
         >
-          Retour au catalogue
+          {t("Retour au catalogue")}
         </Link>
       </div>
     );
@@ -257,7 +261,7 @@ export function ListingDetailPage() {
         className="mb-6 inline-flex items-center gap-2 text-sm text-foreground/60 hover:text-primary transition-colors"
       >
         <FontAwesomeIcon icon={faChevronLeft} className="h-3.5 w-3.5" />
-        <span>Catalogue</span>
+        <span>{t("Catalogue")}</span>
       </Link>
 
       {/* MASTER GALLERY & VIDEO HERO (PLEINE LARGEUR AVEC FLÈCHES) */}
@@ -294,7 +298,7 @@ export function ListingDetailPage() {
                 <button
                   type="button"
                   onClick={handlePrevPhoto}
-                  aria-label="Photo précédente"
+                  aria-label={t("Photo précédente")}
                   className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
                 >
                   <FontAwesomeIcon icon={faChevronLeft} className="text-base" />
@@ -306,7 +310,7 @@ export function ListingDetailPage() {
                 <button
                   type="button"
                   onClick={handleNextPhoto}
-                  aria-label="Photo suivante"
+                  aria-label={t("Photo suivante")}
                   className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-xl transition-all hover:scale-110 active:scale-95 z-20"
                 >
                   <FontAwesomeIcon icon={faChevronRight} className="text-base" />
@@ -329,9 +333,9 @@ export function ListingDetailPage() {
                     setImageFitMode((prev) => (prev === 'contain' ? 'cover' : 'contain'));
                   }}
                   className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
-                  title={imageFitMode === 'contain' ? 'Remplir tout le cadre' : 'Afficher l’image entière (sans découpe)'}
+                  title={imageFitMode === 'contain' ? t("Remplir tout le cadre") : t("Afficher l’image entière (sans découpe)")}
                 >
-                  <span>{imageFitMode === 'contain' ? 'Plein cadre' : 'Vue entière'}</span>
+                  <span>{imageFitMode === 'contain' ? t("Plein cadre") : t("Vue entière")}</span>
                 </button>
 
                 <button
@@ -343,7 +347,7 @@ export function ListingDetailPage() {
                   className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-3.5 py-1 text-xs font-semibold text-white border border-white/15 shadow hover:bg-black/90 transition-all"
                 >
                   <FontAwesomeIcon icon={faExpand} className="text-xs" />
-                  <span>Agrandir</span>
+                  <span>{t("Agrandir")}</span>
                 </button>
               </div>
             </div>
@@ -395,7 +399,7 @@ export function ListingDetailPage() {
           <button
             onClick={() => setIsLightboxOpen(false)}
             className="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all z-50"
-            aria-label="Fermer"
+            aria-label={t("Fermer")}
           >
             <FontAwesomeIcon icon={faXmark} className="text-xl" />
           </button>
@@ -404,7 +408,7 @@ export function ListingDetailPage() {
             <button
               onClick={handlePrevPhoto}
               className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white transition-all z-50"
-              aria-label="Précédent"
+              aria-label={t("Précédent")}
             >
               <FontAwesomeIcon icon={faChevronLeft} className="text-xl sm:text-2xl" />
             </button>
@@ -414,7 +418,7 @@ export function ListingDetailPage() {
             <button
               onClick={handleNextPhoto}
               className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white transition-all z-50"
-              aria-label="Suivant"
+              aria-label={t("Suivant")}
             >
               <FontAwesomeIcon icon={faChevronRight} className="text-xl sm:text-2xl" />
             </button>
@@ -446,15 +450,15 @@ export function ListingDetailPage() {
               {listing.badge && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent-foreground">
                   <FontAwesomeIcon icon={faCertificate} className="h-3.5 w-3.5" />
-                  {listing.badge}
+                  {t(listing.badge)}
                 </span>
               )}
-              <span className="caption text-foreground/50">{listing.price_unit}</span>
+              <span className="caption text-foreground/50">{t(listing.price_unit)}</span>
             </div>
 
             {/* Title */}
             <h1 className="section-title mt-3 text-3xl md:text-5xl">
-              {listing.title}
+              <AutoText text={listing.title} />
             </h1>
 
             {/* Location */}
@@ -470,7 +474,7 @@ export function ListingDetailPage() {
           {listing.summary && (
             <ScrollReveal delay={100} y={20}>
               <p className="mt-6 text-lg leading-relaxed text-foreground/80 font-light">
-                {listing.summary}
+                <AutoText text={listing.summary} />
               </p>
             </ScrollReveal>
           )}
@@ -478,14 +482,14 @@ export function ListingDetailPage() {
           {/* Specs */}
           {listing.specs && listing.specs.length > 0 && (
             <ScrollReveal delay={150} y={20} className="mt-8 border-t border-foreground/10 pt-8">
-              <h3 className="caption text-foreground/50">Caractéristiques</h3>
+              <h3 className="caption text-foreground/50">{t("Caractéristiques")}</h3>
               <div className="mt-3 flex flex-wrap gap-2">
                 {listing.specs.map((spec) => (
                   <span
                     key={spec}
                     className="rounded-full border border-foreground/15 px-3 py-1.5 text-sm bg-card"
                   >
-                    {spec}
+                    <AutoText text={spec} />
                   </span>
                 ))}
               </div>
@@ -495,9 +499,9 @@ export function ListingDetailPage() {
           {/* Description */}
           {listing.description && (
             <ScrollReveal delay={200} y={20} className="mt-8 border-t border-foreground/10 pt-8">
-              <h3 className="caption text-foreground/50">À propos</h3>
+              <h3 className="caption text-foreground/50">{t("À propos")}</h3>
               <p className="mt-3 leading-relaxed text-foreground/75 whitespace-pre-line text-base">
-                {listing.description}
+                <AutoText text={listing.description} />
               </p>
             </ScrollReveal>
           )}
@@ -505,7 +509,7 @@ export function ListingDetailPage() {
           {/* Amenities */}
           {listing.amenities && listing.amenities.length > 0 && (
             <ScrollReveal delay={250} y={20} className="mt-8 border-t border-foreground/10 pt-8">
-              <h3 className="caption text-foreground/50">Équipements & Prestations</h3>
+              <h3 className="caption text-foreground/50">{t("Équipements & Prestations")}</h3>
               <ul className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 {listing.amenities.map((amenity) => (
                   <li key={amenity} className="flex items-center gap-2 text-foreground/80">
@@ -531,7 +535,7 @@ export function ListingDetailPage() {
           {/* Host / Guide card */}
           {listing.host && (
             <ScrollReveal delay={300} y={20} className="mt-8 border-t border-foreground/10 pt-8">
-              <h3 className="caption text-foreground/50">Hôte / Partenaire référent</h3>
+              <h3 className="caption text-foreground/50">{t("Hôte / Partenaire référent")}</h3>
               <div className="mt-3 flex items-center gap-4 rounded-lg border border-foreground/10 p-5 bg-card shadow-sm">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-heading font-bold text-lg">
                   {listing.host.name?.charAt(0) || 'B'}
@@ -562,12 +566,12 @@ export function ListingDetailPage() {
                   {formatPrice(listing.price)}
                 </span>
                 <span className="text-xs text-foreground/60 ml-1">
-                  / {listing.price_unit}
+                  / {t(listing.price_unit)}
                 </span>
               </div>
               <div className="text-xs text-foreground/50 flex items-center gap-1">
                 <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5 text-accent" />
-                Garantie Vérifiée
+                {t("Garantie Vérifiée")}
               </div>
             </div>
 
@@ -576,10 +580,10 @@ export function ListingDetailPage() {
               <div className="mt-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs text-foreground flex items-start gap-2.5 animate-fadeIn">
                 <FontAwesomeIcon icon={faLock} className="text-amber-600 dark:text-amber-400 mt-0.5 text-xs shrink-0" />
                 <div className="flex-1">
-                  <p className="font-bold text-amber-700 dark:text-amber-400">Bien actuellement réservé</p>
+                  <p className="font-bold text-amber-700 dark:text-amber-400">{t("Bien actuellement réservé")}</p>
                   <p className="text-[11px] text-foreground/75 mt-0.5">
-                    Actuellement occupé par un voyageur jusqu'au{' '}
-                    <strong>{new Date(reservationSummary.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                    {t("Actuellement occupé par un voyageur jusqu'au")}{' '}
+                    <strong>{new Date(reservationSummary.endDate).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
                   </p>
                 </div>
               </div>
@@ -591,28 +595,28 @@ export function ListingDetailPage() {
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-primary uppercase tracking-wider text-[10px] flex items-center gap-1.5">
                     <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5" />
-                    <span>Véhicule certifié disponible</span>
+                    <span>{t("Véhicule certifié disponible")}</span>
                   </p>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-                    Tarif / 24h
+                    {t("Tarif / 24h")}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-foreground/80">
                   <div className="flex items-center gap-1.5">
                     <FontAwesomeIcon icon={faUsers} className="text-primary/70 h-3 w-3 shrink-0" />
-                    <span>{listing.vehicle_seats || listing.seats || (listing.type === 'drive' && listing.rooms_count > 0 ? listing.rooms_count : 5)} places</span>
+                    <span>{listing.vehicle_seats || listing.seats || (listing.type === 'drive' && listing.rooms_count > 0 ? listing.rooms_count : 5)} {t('places')}</span>
                   </div>
                   <div className="flex items-center gap-1.5 capitalize">
                     <FontAwesomeIcon icon={faSliders} className="text-primary/70 h-3 w-3 shrink-0" />
-                    <span>Boîte {listing.transmission || 'Automatique'}</span>
+                    <span>{t('Boîte')} {t(listing.transmission || 'Automatique')}</span>
                   </div>
                   <div className="flex items-center gap-1.5 capitalize">
                     <FontAwesomeIcon icon={faClock} className="text-primary/70 h-3 w-3 shrink-0" />
-                    <span>{listing.fuel_type || 'Essence'}</span>
+                    <span>{t(listing.fuel_type || 'Essence')}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <FontAwesomeIcon icon={faShieldHalved} className="text-primary/70 h-3 w-3 shrink-0" />
-                    <span>{listing.with_driver ? 'Avec chauffeur' : 'Sans chauffeur'}</span>
+                    <span>{listing.with_driver ? t("Avec chauffeur") : t("Sans chauffeur")}</span>
                   </div>
                 </div>
               </div>
@@ -621,14 +625,14 @@ export function ListingDetailPage() {
                 <div className="mt-4 rounded-xl bg-accent/15 border border-accent/30 p-3 text-xs text-foreground">
                   <p className="font-bold text-accent uppercase tracking-wider text-[10px] flex items-center gap-1.5">
                     <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5" />
-                    <span>Période de disponibilité hôtelière</span>
+                    <span>{t("Période de disponibilité hôtelière")}</span>
                   </p>
                   <p className="mt-1 font-semibold text-foreground">
-                    Du {new Date(listing.availability.available_from).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} au {new Date(listing.availability.available_to || Date.now()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {t('Du')} {new Date(listing.availability.available_from).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })} {t('au')} {new Date(listing.availability.available_to || Date.now()).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                   {listing.availability.rooms_count > 0 && (
                     <p className="text-[11px] text-foreground/70 mt-0.5">
-                      {listing.availability.rooms_count} chambre(s) restante(s) pour cette période
+                      {listing.availability.rooms_count} {t('chambre(s) restante(s) pour cette période')}
                     </p>
                   )}
                 </div>
@@ -643,7 +647,7 @@ export function ListingDetailPage() {
                     <div>
                       <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
                         <FontAwesomeIcon icon={isVehicle ? faCar : faCalendarDays} className="h-3 w-3" />
-                        {isVehicle ? 'Prise en charge' : 'Arrivée'}
+                        {isVehicle ? t("Prise en charge") : t("Arrivée")}
                       </label>
                       <input
                         type="date"
@@ -662,7 +666,7 @@ export function ListingDetailPage() {
                     <div className="border-l border-foreground/15 pl-2">
                       <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
                         <FontAwesomeIcon icon={isVehicle ? faClock : faCalendarDays} className="h-3 w-3" />
-                        {isVehicle ? 'Restitution' : 'Départ'}
+                        {isVehicle ? t("Restitution") : t("Départ")}
                       </label>
                       <input
                         type="date"
@@ -677,8 +681,8 @@ export function ListingDetailPage() {
                   {/* Quick duration presets */}
                   <div className="flex items-center justify-between text-xs px-1">
                     <span className="text-[11px] text-foreground/60 font-medium">
-                      Durée : <strong className="text-primary font-mono">{duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}</strong>
-                      {isVehicle && <span className="text-[10px] text-foreground/50 ml-1">(24h/j)</span>}
+                      {t("Durée :")} <strong className="text-primary font-mono">{duration} {t(isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit'))}</strong>
+                      {isVehicle && <span className="text-[10px] text-foreground/50 ml-1">{t('(24h/j)')}</span>}
                     </span>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 7].map((num) => (
@@ -696,7 +700,7 @@ export function ListingDetailPage() {
                               : 'bg-muted/40 text-foreground/70 border-foreground/10 hover:border-foreground/30'
                           }`}
                         >
-                          {num} {isVehicle ? 'j' : 'n'}
+                          {num} {isVehicle ? t('j') : t('n')}
                         </button>
                       ))}
                     </div>
@@ -707,7 +711,7 @@ export function ListingDetailPage() {
               {/* Guests */}
               <div className="rounded-lg border border-foreground/15 p-2 bg-background">
                 <label className="caption text-[10px] text-foreground/50 flex items-center gap-1">
-                  <FontAwesomeIcon icon={faUsers} className="h-3 w-3" /> Voyageurs / Participants
+                  <FontAwesomeIcon icon={faUsers} className="h-3 w-3" /> {t("Voyageurs / Participants")}
                 </label>
                 <select
                   value={guests}
@@ -716,7 +720,7 @@ export function ListingDetailPage() {
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
                     <option key={num} value={num}>
-                      {num} {num === 1 ? 'personne' : 'personnes'}
+                      {num} {num === 1 ? t("personne") : t("personnes")}
                     </option>
                   ))}
                 </select>
@@ -727,20 +731,20 @@ export function ListingDetailPage() {
                 <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3.5 text-xs text-rose-900 dark:text-rose-200 animate-fadeIn space-y-2">
                   <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-400">
                     <FontAwesomeIcon icon={faBan} className="shrink-0" />
-                    <span>Période déjà réservée & indisponible</span>
+                    <span>{t("Période déjà réservée & indisponible")}</span>
                   </div>
                   <p className="text-foreground/80 leading-relaxed text-[11px]">
-                    Ce bien est déjà réservé ou indisponible du{' '}
-                    <strong>{new Date(availability.conflict.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</strong> au{' '}
-                    <strong>{new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>.
-                    Les réservations en ligne sont bloquées pour cet intervalle. Vous pouvez librement sélectionner une date ultérieure.
+                    {t("Ce bien est déjà réservé ou indisponible du")}{' '}
+                    <strong>{new Date(availability.conflict.startDate).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}</strong> {t('au')}{' '}
+                    <strong>{new Date(availability.conflict.endDate).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}</strong>.
+                    {t("Les réservations en ligne sont bloquées pour cet intervalle. Vous pouvez librement sélectionner une date ultérieure.")}
                   </p>
                   <button
                     type="button"
                     onClick={() => handlePickNextAvailableDate(availability.conflict.endDate)}
                     className="w-full text-center py-2 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
                   >
-                    <span>Choisir à partir du {new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                    <span>{t('Choisir à partir du')} {new Date(availability.conflict.endDate).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}</span>
                     <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
                   </button>
                 </div>
@@ -751,10 +755,10 @@ export function ListingDetailPage() {
                 <div className="rounded-lg bg-muted/30 border border-foreground/10 p-2 text-[11px] text-foreground/70 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <FontAwesomeIcon icon={faCalendarDays} className="text-primary text-[10px]" />
-                    <span>Périodes déjà occupées :</span>
+                    <span>{t("Périodes déjà occupées :")}</span>
                   </span>
                   <span className="font-semibold text-foreground/80">
-                    {availability.allBookedPeriods.length} réservation(s)
+                    {availability.allBookedPeriods.length} {t('réservation(s)')}
                   </span>
                 </div>
               )}
@@ -766,19 +770,19 @@ export function ListingDetailPage() {
                 <span>
                   {formatPrice(listing.price)} × {effectiveMultiplier}{' '}
                   {listing.price_unit === 'nuit'
-                    ? 'nuit(s)'
+                    ? t("nuit(s)")
                     : listing.price_unit === 'jour'
-                    ? 'jour(s)'
-                    : 'prestation'}
+                    ? t("jour(s)")
+                    : t("prestation")}
                 </span>
                 <span>{formatPrice(totalPrice)}</span>
               </div>
               <div className="flex justify-between text-foreground/70">
-                <span>Frais de conciergerie</span>
-                <span className="text-emerald-700 font-medium">Inclus (0 FCFA)</span>
+                <span>{t("Frais de conciergerie")}</span>
+                <span className="text-emerald-700 font-medium">{t("Inclus (0 FCFA)")}</span>
               </div>
               <div className="flex justify-between font-semibold text-base border-t border-foreground/10 pt-3 text-foreground">
-                <span>Total estimé</span>
+                <span>{t("Total estimé")}</span>
                 <span className="font-heading text-xl font-bold text-primary">
                   {formatPrice(totalPrice)}
                 </span>
@@ -795,15 +799,15 @@ export function ListingDetailPage() {
                     ? 'bg-muted text-foreground/40 border border-foreground/15 cursor-not-allowed shadow-none'
                     : 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98]'
                 }`}
-                title={!availability.isAvailable ? 'Ce bien est déjà réservé sur cette période' : ''}
+                title={!availability.isAvailable ? t("Ce bien est déjà réservé sur cette période") : ''}
               >
                 <FontAwesomeIcon icon={!availability.isAvailable ? faLock : faCalendarDays} className="h-4 w-4" />
                 <span>
                   {!availability.isAvailable
-                    ? `Réservé jusqu'au ${new Date(availability.conflict.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+                    ? `${t("Réservé jusqu'au")} ${new Date(availability.conflict.endDate).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}`
                     : isAdding
-                    ? 'Initialisation…'
-                    : 'Réserver & Payer maintenant'}
+                    ? t("Initialisation…")
+                    : t("Réserver & Payer maintenant")}
                 </span>
               </button>
 
@@ -815,10 +819,14 @@ export function ListingDetailPage() {
                     ? 'bg-muted/40 text-foreground/30 border-foreground/10 cursor-not-allowed'
                     : 'border-foreground/20 text-foreground hover:bg-muted/50'
                 }`}
-                title={!availability.isAvailable ? 'Ce bien est déjà réservé sur cette période' : ''}
+                title={!availability.isAvailable ? t("Ce bien est déjà réservé sur cette période") : ''}
               >
-                <span>{!availability.isAvailable ? 'Indisponible pour ces dates' : 'Ajouter au panier'}</span>
+                <span>{!availability.isAvailable ? t("Indisponible pour ces dates") : t("Ajouter au panier")}</span>
               </button>
+            </div>
+
+            <div className="mt-5 border-t border-foreground/10 pt-4 text-center">
+              <ReportListingButton listingId={listing.id} listingTitle={listing.title} />
             </div>
           </ScrollReveal>
         </div>

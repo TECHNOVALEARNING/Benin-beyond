@@ -4,8 +4,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLocationDot, faArrowUpRightFromSquare, faVideo, faCar, faLock } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../data/initialListings';
 import { getActiveReservationSummary } from '../services/bookingService';
+import { useLanguage } from '../context/LanguageContext';
+import { AutoText } from '../services/translationService';
 
 export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
+  const { t } = useLanguage();
   const [activeReservation, setActiveReservation] = useState(null);
 
   useEffect(() => {
@@ -53,14 +56,14 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
           <div className="absolute left-3 top-3 z-10">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-black/85 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30 shadow-md">
               <FontAwesomeIcon icon={faLock} className="text-[9px]" />
-              <span>Réservé</span>
+              <span>{t("Réservé")}</span>
             </span>
           </div>
         ) : (
           listing.badge && (
             <div className="absolute left-3 top-3 z-10 transition-opacity duration-300 group-hover:opacity-0">
               <span className="inline-flex items-center rounded-full bg-[#d99f2b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#221804] shadow-sm">
-                {listing.badge}
+                {t(listing.badge)}
               </span>
             </div>
           )
@@ -71,7 +74,7 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
           <div className="absolute right-3 top-3 z-10">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold text-accent border border-white/15 shadow-sm">
               <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
-              <span>Vidéo</span>
+              <span>{t("Vidéo")}</span>
             </span>
           </div>
         )}
@@ -84,7 +87,7 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
                 key={spec}
                 className="inline-flex items-center rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur-md shadow-sm"
               >
-                {spec}
+                <AutoText text={spec} />
               </span>
             ))}
           </div>
@@ -95,7 +98,7 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
           <div className="absolute left-3 bottom-3 z-10">
             <span className="inline-flex items-center gap-1 rounded-md bg-black/75 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white border border-white/15 shadow-sm">
               <FontAwesomeIcon icon={faCar} className="text-emerald-400 text-[9px]" />
-              <span>{listing.vehicle_seats ? `${listing.vehicle_seats} places` : 'Véhicule certifié'}</span>
+              <span>{listing.vehicle_seats ? `${listing.vehicle_seats} ${t('places')}` : t("Véhicule certifié")}</span>
             </span>
           </div>
         ) : (
@@ -113,7 +116,7 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
           <div className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-md backdrop-blur-sm">
             <span>{formatPrice(listing.price)}</span>
             <span className="ml-1 text-[10px] font-normal opacity-80">
-              / {listing.price_unit}
+              / {t(listing.price_unit)}
             </span>
           </div>
         </div>
@@ -123,7 +126,7 @@ export function ListingCard({ listing, featured = false, aspectRatio, className 
       <div className="flex flex-col justify-between p-4 bg-card flex-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-heading text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary line-clamp-1">
-            {listing.title}
+            <AutoText text={listing.title} />
           </h3>
           <FontAwesomeIcon
             icon={faArrowUpRightFromSquare}

@@ -5,8 +5,11 @@ import { faBagShopping, faArrowRight, faTrash, faCar, faShieldHalved, faUsers } 
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { useLanguage } from '../context/LanguageContext';
+import { AutoText } from '../services/translationService';
 
 export function CartPage() {
+  const { t } = useLanguage();
   const { items, removeItem, updateItem, subtotal } = useCart();
 
   if (items.length === 0) {
@@ -14,16 +17,16 @@ export function CartPage() {
       <ScrollReveal delay={0} y={20} className="mx-auto flex max-w-8xl flex-col items-center px-6 py-32 text-center md:px-12">
         <FontAwesomeIcon icon={faBagShopping} className="h-14 w-14 text-foreground/30" />
         <h1 className="section-title mt-6 text-3xl md:text-4xl">
-          Votre panier est vide
+          {t("Votre panier est vide")}
         </h1>
         <p className="mt-3 text-foreground/60 max-w-md">
-          Découvrez nos villas d'exception, véhicules de voyage et expériences patrimoniales au Bénin.
+          {t("Découvrez nos villas d'exception, véhicules de voyage et expériences patrimoniales au Bénin.")}
         </p>
         <Link
           to="/explore"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 shadow-md"
         >
-          <span>Explorer le catalogue</span>
+          <span>{t("Explorer le catalogue")}</span>
           <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
         </Link>
       </ScrollReveal>
@@ -34,7 +37,7 @@ export function CartPage() {
     <div className="mx-auto max-w-8xl px-4 py-8 sm:px-6 sm:py-12 md:px-12 md:py-16">
       <ScrollReveal delay={0} y={20}>
         <h1 className="section-title border-t border-foreground/15 pt-6 text-2xl sm:text-3xl md:text-4xl">
-          Mon panier
+          {t("Mon panier")}
         </h1>
       </ScrollReveal>
 
@@ -82,15 +85,15 @@ export function CartPage() {
                       <div className="min-w-0 pr-1">
                         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                           <h3 className="font-heading text-base sm:text-lg font-semibold leading-snug break-words">
-                            {item.title}
+                            <AutoText text={item.title} />
                           </h3>
                           {isVehicle ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold shrink-0">
-                              <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5" /> Véhicule (24h/j)
+                              <FontAwesomeIcon icon={faCar} className="h-2.5 w-2.5" /> {t("Véhicule (24h/j)")}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent-foreground px-2 py-0.5 text-[10px] font-bold shrink-0">
-                              Hébergement
+                              {t("Hébergement")}
                             </span>
                           )}
                         </div>
@@ -112,7 +115,7 @@ export function CartPage() {
                               <span className="capitalize">· Boîte {item.transmission}</span>
                             )}
                             {item.with_driver && (
-                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">· Avec chauffeur</span>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">· {t("Avec chauffeur")}</span>
                             )}
                           </div>
                         )}
@@ -120,8 +123,8 @@ export function CartPage() {
                       <button
                         onClick={() => removeItem(index)}
                         className="text-foreground/40 hover:text-destructive transition-colors p-1.5 shrink-0 -mr-1"
-                        title="Supprimer du panier"
-                        aria-label="Supprimer du panier"
+                        title={t("Supprimer du panier")}
+                        aria-label={t("Supprimer du panier")}
                       >
                         <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
                       </button>
@@ -132,7 +135,7 @@ export function CartPage() {
                       {(item.price_unit === 'nuit' || item.price_unit === 'jour' || isVehicle) ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-foreground/60 font-medium">
-                            {isVehicle ? 'Durée :' : 'Séjour :'}
+                            {isVehicle ? t("Durée :") : t("Séjour :")}
                           </span>
                           <div className="inline-flex items-center rounded-lg border border-foreground/15 bg-background overflow-hidden shadow-sm">
                             <button
@@ -147,12 +150,12 @@ export function CartPage() {
                               }}
                               disabled={duration <= 1}
                               className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted disabled:opacity-30 transition-colors"
-                              title="Diminuer"
+                              title={t("Diminuer")}
                             >
                               -
                             </button>
                             <span className="px-2.5 sm:px-3 py-1 text-xs font-bold text-foreground min-w-[3rem] sm:min-w-[3.5rem] text-center font-mono bg-muted/30">
-                              {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
+                              {duration} {isVehicle ? (duration > 1 ? t("jours") : t("jour")) : (duration > 1 ? t("nuits") : t("nuit"))}
                             </span>
                             <button
                               type="button"
@@ -165,14 +168,14 @@ export function CartPage() {
                                 });
                               }}
                               className="px-2.5 py-1 text-xs font-bold text-foreground/70 hover:bg-muted transition-colors"
-                              title="Augmenter"
+                              title={t("Augmenter")}
                             >
                               +
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-foreground/50">Prestation unique</span>
+                        <span className="text-xs text-foreground/50">{t("Prestation unique")}</span>
                       )}
 
                       {item.guests && (
@@ -184,7 +187,7 @@ export function CartPage() {
 
                     <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-foreground/5">
                       <span className="text-xs text-foreground/60">
-                        {formatPrice(item.price)} × {duration} {isVehicle ? (duration > 1 ? 'jours' : 'jour') : (duration > 1 ? 'nuits' : 'nuit')}
+                        {formatPrice(item.price)} × {duration} {isVehicle ? (duration > 1 ? t("jours") : t("jour")) : (duration > 1 ? t("nuits") : t("nuit"))}
                       </span>
                       <span className="font-heading text-base sm:text-lg font-bold text-primary">
                         {formatPrice(itemTotal)}
@@ -200,21 +203,21 @@ export function CartPage() {
         {/* Sticky Summary Card */}
         <div className="lg:sticky lg:top-8 lg:h-fit">
           <ScrollReveal delay={120} y={24} scale={0.97} className="rounded-xl border border-foreground/10 bg-card p-6 shadow-xl shadow-foreground/5">
-            <h2 className="caption text-foreground/50">Récapitulatif</h2>
+            <h2 className="caption text-foreground/50">{t("Récapitulatif")}</h2>
 
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between text-foreground/80">
-                <span>Sous-total</span>
+                <span>{t("Sous-total")}</span>
                 <span className="font-medium">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between text-foreground/80">
-                <span>Frais de service</span>
+                <span>{t("Frais de service")}</span>
                 <span className="text-emerald-700 font-medium">0 FCFA</span>
               </div>
             </div>
 
             <div className="mt-4 flex justify-between items-baseline border-t border-foreground/10 pt-4">
-              <span className="font-semibold text-foreground">Total</span>
+              <span className="font-semibold text-foreground">{t("Total")}</span>
               <span className="font-heading text-2xl font-bold text-primary">
                 {formatPrice(subtotal)}
               </span>
@@ -222,7 +225,7 @@ export function CartPage() {
 
             <Link to="/checkout" className="block mt-6">
               <button className="w-full rounded-full bg-primary py-4 text-base font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all active:scale-[0.98]">
-                Passer au paiement
+                {t("Passer au paiement")}
               </button>
             </Link>
           </ScrollReveal>

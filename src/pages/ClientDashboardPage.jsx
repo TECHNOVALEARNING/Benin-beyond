@@ -27,11 +27,12 @@ import { submitReview } from '../services/reviewService';
 import { formatPrice } from '../data/initialListings';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
-import { BrandIcon } from '../components/BrandLogo';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
+import { useHasPacks } from '../services/packService';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
+  const hasPacks = useHasPacks();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -203,7 +204,6 @@ export function ClientDashboardPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-3.5 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-2.5 sm:gap-3">
             <Link to="/" className="flex items-center gap-2 font-heading text-lg sm:text-xl font-bold tracking-tight text-foreground hover:text-primary transition-colors">
-              <BrandIcon size={26} />
               <span>Bénin Beyond</span>
             </Link>
             <span className="hidden md:inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary border border-primary/20">
@@ -362,13 +362,15 @@ export function ClientDashboardPage() {
                       <span>Parcourir le catalogue</span>
                       <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                     </Link>
-                    <Link
-                      to="/packs"
-                      className="inline-flex items-center gap-2 rounded-full border border-foreground/15 bg-background px-6 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
-                    >
-                      <FontAwesomeIcon icon={faLayerGroup} className="h-3 w-3 text-accent" />
-                      <span>Formules & Packs</span>
-                    </Link>
+                    {hasPacks && (
+                      <Link
+                        to="/packs"
+                        className="inline-flex items-center gap-2 rounded-full border border-foreground/15 bg-background px-6 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-all"
+                      >
+                        <FontAwesomeIcon icon={faLayerGroup} className="h-3 w-3 text-accent" />
+                        <span>Formules & Packs</span>
+                      </Link>
+                    )}
                   </div>
                 </div>
               ) : (

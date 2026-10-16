@@ -11,8 +11,11 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { getFeaturedHomeReviews } from '../services/reviewService';
 import { ScrollReveal } from './ScrollReveal';
+import { useLanguage } from '../context/LanguageContext';
+import { AutoText } from '../services/translationService';
 
 export function TravelerReviewsSection() {
+  const { t, locale } = useLanguage();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -130,13 +133,13 @@ export function TravelerReviewsSection() {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent text-xs font-bold uppercase tracking-wider mb-3">
               <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-              <span>Expériences & Séjours Vérifiés</span>
+              <span>{t("Expériences & Séjours Vérifiés")}</span>
             </div>
             <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-black text-foreground tracking-tight">
-              Paroles de nos Voyageurs
+              {t("Paroles de nos Voyageurs")}
             </h2>
             <p className="text-xs sm:text-sm text-foreground/60 max-w-2xl mt-2 leading-relaxed">
-              Découvrez les retours authentiques laissés par nos clients après leur séjour dans nos villas privées ou leurs déplacements avec nos chauffeurs VIP au Bénin.
+              {t("Découvrez les retours authentiques laissés par nos clients après leur séjour dans nos villas privées ou leurs déplacements avec nos chauffeurs VIP au Bénin.")}
             </p>
           </div>
 
@@ -151,7 +154,7 @@ export function TravelerReviewsSection() {
               <span className="text-foreground/30">•</span>
               <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
                 <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
-                <span>100% Vérifiés</span>
+                <span>{t("100% Vérifiés")}</span>
               </span>
             </div>
 
@@ -162,8 +165,8 @@ export function TravelerReviewsSection() {
                   type="button"
                   onClick={handlePrev}
                   className="h-9 w-9 rounded-xl border border-foreground/15 bg-card flex items-center justify-center text-foreground hover:bg-muted hover:border-foreground/30 transition-all shadow-xs active:scale-95"
-                  title="Avis précédents"
-                  aria-label="Avis précédents"
+                  title={t("Avis précédents")}
+                  aria-label={t("Avis précédents")}
                 >
                   <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
                 </button>
@@ -171,8 +174,8 @@ export function TravelerReviewsSection() {
                   type="button"
                   onClick={handleNext}
                   className="h-9 w-9 rounded-xl border border-foreground/15 bg-card flex items-center justify-center text-foreground hover:bg-muted hover:border-foreground/30 transition-all shadow-xs active:scale-95"
-                  title="Avis suivants"
-                  aria-label="Avis suivants"
+                  title={t("Avis suivants")}
+                  aria-label={t("Avis suivants")}
                 >
                   <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
                 </button>
@@ -247,7 +250,7 @@ export function TravelerReviewsSection() {
                     ? 'w-7 bg-primary shadow-xs'
                     : 'w-2 bg-foreground/20 hover:bg-foreground/40'
                 }`}
-                title={`Afficher le groupe ${i + 1}`}
+                title={`${t('Afficher le groupe')} ${i + 1}`}
                 aria-label={`Slide ${i + 1}`}
               />
             ))}
@@ -262,6 +265,7 @@ export function TravelerReviewsSection() {
  * Carte de témoignage individuelle avec rendu haut de gamme
  */
 function ReviewCard({ review, delay = 0 }) {
+  const { t, locale } = useLanguage();
   const rating = Number(review.rating) || 5;
 
   return (
@@ -286,13 +290,13 @@ function ReviewCard({ review, delay = 0 }) {
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
               <FontAwesomeIcon icon={faCircleCheck} className="h-2 w-2" />
-              <span>Séjour Vérifié</span>
+              <span>{t("Séjour Vérifié")}</span>
             </span>
           </div>
 
           {/* Commentaire du client */}
           <p className="text-xs sm:text-[13px] text-foreground/80 leading-relaxed italic relative z-10 break-words mb-6">
-            « {review.comment || 'Séjour remarquable et service hautement professionnel.'} »
+            « {review.comment ? <AutoText text={review.comment} /> : t("Séjour remarquable et service hautement professionnel.")} »
           </p>
         </div>
 
@@ -321,7 +325,7 @@ function ReviewCard({ review, delay = 0 }) {
 
             <div className="min-w-0">
               <h4 className="font-heading text-xs font-bold text-foreground truncate">
-                {review.author_name || 'Voyageur Bénin Beyond'}
+                {review.author_name || t("Voyageur Bénin Beyond")}
               </h4>
               <p className="text-[10.5px] text-foreground/50 truncate flex items-center gap-1">
                 <FontAwesomeIcon icon={faCompass} className="h-2.5 w-2.5 text-primary shrink-0" />
@@ -333,7 +337,7 @@ function ReviewCard({ review, delay = 0 }) {
           {/* Date de publication */}
           <span className="text-[10px] text-foreground/40 font-mono shrink-0">
             {review.created_at
-              ? new Date(review.created_at).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })
+              ? new Date(review.created_at).toLocaleDateString(locale, { month: 'short', year: 'numeric' })
               : 'Récemment'}
           </span>
         </div>

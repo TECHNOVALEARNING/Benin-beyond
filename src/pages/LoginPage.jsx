@@ -19,9 +19,11 @@ import {
 import { useAuth, getPostLoginPath } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { BrandIcon, BrandLogo } from '../components/BrandLogo';
+import { BrandLogo } from '../components/BrandLogo';
+import { useLanguage } from '../context/LanguageContext';
 
 export function LoginPage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -308,15 +310,15 @@ export function LoginPage() {
             <BrandLogo size="md" />
           </div>
           <div className="text-center">
-            <h1 className="text-lg font-semibold text-foreground">Nouveau mot de passe</h1>
-            <p className="mt-1 text-xs text-foreground/55">Choisissez un mot de passe d’au moins 8 caractères.</p>
+            <h1 className="text-lg font-semibold text-foreground">{t("Nouveau mot de passe")}</h1>
+            <p className="mt-1 text-xs text-foreground/55">{t("Choisissez un mot de passe d’au moins 8 caractères.")}</p>
           </div>
           <input
             type="password"
             autoComplete="new-password"
             value={recoveryPassword}
             onChange={(e) => setRecoveryPassword(e.target.value)}
-            placeholder="Nouveau mot de passe"
+            placeholder={t("Nouveau mot de passe")}
             className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none"
           />
           <input
@@ -324,16 +326,16 @@ export function LoginPage() {
             autoComplete="new-password"
             value={recoveryConfirm}
             onChange={(e) => setRecoveryConfirm(e.target.value)}
-            placeholder="Confirmer le mot de passe"
+            placeholder={t("Confirmer le mot de passe")}
             className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none"
           />
-          {recoveryError && <p className="text-xs text-rose-600">{recoveryError}</p>}
+          {recoveryError && <p className="text-xs text-rose-600">{t(recoveryError)}</p>}
           <button
             type="submit"
             disabled={recoverySaving}
             className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
-            {recoverySaving ? 'Enregistrement…' : 'Enregistrer le mot de passe'}
+            {recoverySaving ? t("Enregistrement…") : t("Enregistrer le mot de passe")}
           </button>
         </form>
       </div>
@@ -357,12 +359,12 @@ export function LoginPage() {
               Bénin Beyond Authentification
             </span>
             <h2 className="font-heading text-lg font-bold text-foreground">
-              {isOnboardingRedirect ? 'Préparation de votre dossier...' : 'Connexion sécurisée en cours...'}
+              {isOnboardingRedirect ? t("Préparation de votre dossier...") : t("Connexion sécurisée en cours...")}
             </h2>
             <p className="text-xs text-foreground/60 leading-relaxed">
               {isOnboardingRedirect
                 ? "Validation de votre compte Partenaire et redirection directe vers l'espace d'onboarding officiel."
-                : 'Validation de vos accès et redirection directe vers votre tableau de bord.'}
+                : t("Validation de vos accès et redirection directe vers votre tableau de bord.")}
             </p>
           </div>
         </div>
@@ -384,10 +386,10 @@ export function LoginPage() {
               <BrandLogo size="lg" />
             </Link>
             <h1 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-0.5">
-              Connexion à votre espace
+              {t("Connexion à votre espace")}
             </h1>
             <p className="text-[11px] text-foreground/60 mt-0.5 max-w-xs mx-auto">
-              Accédez à vos réservations, gérez vos biens ou pilotez la plateforme
+              {t("Accédez à vos réservations, gérez vos biens ou pilotez la plateforme")}
             </p>
           </div>
 
@@ -400,10 +402,10 @@ export function LoginPage() {
                   <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
                     <FontAwesomeIcon icon={faShieldHalved} className="text-base text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <span>Paiement validé & Réservation confirmée !</span>
+                  <span>{t("Paiement validé & Réservation confirmée !")}</span>
                 </div>
                 <p className="text-sm sm:text-base font-semibold leading-relaxed text-foreground">
-                  Votre règlement a bien été enregistré. Connectez-vous avec votre compte <strong>Google</strong> ou vos identifiants pour accéder immédiatement à votre <strong>Espace Voyageur</strong> et télécharger vos vouchers officiels.
+                  {t("Votre règlement a bien été enregistré. Connectez-vous avec votre compte")} <strong>Google</strong> {t("ou vos identifiants pour accéder immédiatement à votre")} <strong>{t("Espace Voyageur")}</strong> {t("et télécharger vos vouchers officiels.")}
                 </p>
               </div>
             )}
@@ -416,9 +418,9 @@ export function LoginPage() {
                     <div className="flex items-start gap-2.5 text-rose-600 dark:text-rose-400">
                       <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-bold text-sm">Compte introuvable</p>
+                        <p className="font-bold text-sm">{t("Compte introuvable")}</p>
                         <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
-                          {error}
+                          {t(error)}
                         </p>
                       </div>
                     </div>
@@ -428,13 +430,13 @@ export function LoginPage() {
                         className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
                       >
                         <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
-                        <span>Créer un compte Hôte</span>
+                        <span>{t("Créer un compte Hôte")}</span>
                       </Link>
                       <Link
                         to="/explore"
                         className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs font-bold text-foreground shadow-sm hover:bg-muted active:scale-[0.98] transition-all"
                       >
-                        <span>Réserver un séjour</span>
+                        <span>{t("Réserver un séjour")}</span>
                       </Link>
                       <button
                         type="button"
@@ -445,7 +447,7 @@ export function LoginPage() {
                         }}
                         className="text-xs text-foreground/60 hover:text-foreground underline"
                       >
-                        Modifier l'e-mail
+                        {t("Modifier l'e-mail")}
                       </button>
                     </div>
                   </div>
@@ -454,9 +456,9 @@ export function LoginPage() {
                     <div className="flex items-start gap-2.5 text-blue-600 dark:text-blue-400">
                       <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-bold text-sm">Compte synchronisé avec Google</p>
+                        <p className="font-bold text-sm">{t("Compte synchronisé avec Google")}</p>
                         <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
-                          {error}
+                          {t(error)}
                         </p>
                       </div>
                     </div>
@@ -473,7 +475,7 @@ export function LoginPage() {
                           <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                           <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                         </svg>
-                        <span>Se connecter avec Google</span>
+                        <span>{t("Se connecter avec Google")}</span>
                       </button>
                     </div>
                   </div>
@@ -482,9 +484,9 @@ export function LoginPage() {
                     <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
                       <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-bold text-sm">Mot de passe incorrect</p>
+                        <p className="font-bold text-sm">{t("Mot de passe incorrect")}</p>
                         <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
-                          {error}
+                          {t(error)}
                         </p>
                       </div>
                     </div>
@@ -498,14 +500,14 @@ export function LoginPage() {
                         className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5"
                       >
                         <FontAwesomeIcon icon={faKey} className="h-3 w-3" />
-                        <span>Mot de passe oublié ? Réinitialiser</span>
+                        <span>{t("Mot de passe oublié ? Réinitialiser")}</span>
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2.5 text-destructive">
                     <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">{error}</span>
+                    <span className="font-medium">{t(error)}</span>
                   </div>
                 )}
               </div>
@@ -514,7 +516,7 @@ export function LoginPage() {
             {successMsg && (
               <div className="mb-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2 animate-fadeIn">
                 <FontAwesomeIcon icon={faCircleCheck} className="h-3.5 w-3.5 shrink-0" />
-                <span>{successMsg}</span>
+                <span>{t(successMsg)}</span>
               </div>
             )}
 
@@ -547,14 +549,14 @@ export function LoginPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{loadingGoogle ? 'Connexion Google...' : 'Continuer avec Google'}</span>
+              <span>{loadingGoogle ? t("Connexion Google...") : t("Continuer avec Google")}</span>
             </button>
 
             {/* Divider */}
             <div className="relative my-3 sm:my-3.5 flex items-center justify-center">
               <div className="w-full border-t border-foreground/10" />
               <span className="absolute bg-card px-3 text-[11px] font-medium uppercase tracking-wider text-foreground/50">
-                ou avec votre e-mail
+                {t("ou avec votre e-mail")}
               </span>
             </div>
 
@@ -562,7 +564,7 @@ export function LoginPage() {
               {/* Email */}
               <div>
                 <label className="block text-xs font-medium text-foreground/80 mb-1">
-                  Adresse e-mail
+                  {t("Adresse e-mail")}
                 </label>
                 <div className="relative">
                   <FontAwesomeIcon
@@ -577,7 +579,7 @@ export function LoginPage() {
                       setEmail(e.target.value);
                       if (errorInfo) setErrorInfo(null);
                     }}
-                    placeholder="votre.email@domaine.com"
+                    placeholder={t("votre.email@domaine.com")}
                     className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2 text-xs sm:text-sm text-foreground placeholder:text-foreground/35 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                   />
                 </div>
@@ -587,7 +589,7 @@ export function LoginPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-medium text-foreground/80">
-                    Mot de passe
+                    {t("Mot de passe")}
                   </label>
                   <button
                     type="button"
@@ -597,7 +599,7 @@ export function LoginPage() {
                     }}
                     className="text-[11px] text-primary/80 hover:text-primary hover:underline cursor-pointer bg-transparent border-0 p-0"
                   >
-                    Mot de passe oublié ?
+                    {t("Mot de passe oublié ?")}
                   </button>
                 </div>
                 <div className="relative">
@@ -619,8 +621,8 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                    title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
+                    title={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-foreground/40 hover:text-foreground transition-colors cursor-pointer focus:outline-none"
                   >
                     <FontAwesomeIcon
@@ -640,11 +642,11 @@ export function LoginPage() {
                 {loading ? (
                   <>
                     <FontAwesomeIcon icon={faSpinner} className="h-3.5 w-3.5 animate-spin" />
-                    <span>Vérification...</span>
+                    <span>{t("Vérification...")}</span>
                   </>
                 ) : (
                   <>
-                    <span>Se connecter</span>
+                    <span>{t("Se connecter")}</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
                   </>
                 )}
@@ -654,22 +656,22 @@ export function LoginPage() {
             {/* Switch to Register or Explore */}
             <div className="mt-3.5 space-y-1.5 text-center text-xs text-foreground/60 border-t border-foreground/10 pt-2.5">
               <div>
-                <span>Vous êtes un voyageur ? </span>
+                <span>{t("Vous êtes un voyageur ?")} </span>
                 <Link
                   to="/explore"
                   className="font-bold text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Explorer & Réserver directement</span>
+                  <span>{t("Explorer & Réserver directement")}</span>
                   <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
                 </Link>
               </div>
               <div className="pt-0.5">
-                <span>Vous êtes propriétaire ou loueur ? </span>
+                <span>{t("Vous êtes propriétaire ou loueur ?")} </span>
                 <Link
                   to="/register"
                   className="font-bold text-accent hover:underline"
                 >
-                  Devenir Hôte
+                  {t("Devenir Hôte")}
                 </Link>
               </div>
             </div>
@@ -688,29 +690,29 @@ export function LoginPage() {
                   setForgotError('');
                 }}
                 className="absolute top-5 right-5 text-foreground/50 hover:text-foreground p-1"
-                aria-label="Fermer"
+                aria-label={t("Fermer")}
               >
                 <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
               </button>
 
               <div className="flex items-center gap-2.5 mb-2 text-primary font-bold text-sm">
                 <FontAwesomeIcon icon={faKey} />
-                <span>Sécurité & Accès</span>
+                <span>{t("Sécurité & Accès")}</span>
               </div>
               <h3 className="font-heading text-lg font-black text-foreground">
-                Mot de passe oublié ?
+                {t("Mot de passe oublié ?")}
               </h3>
               <p className="text-xs text-foreground/65 mt-1 mb-4 leading-relaxed">
-                Indiquez votre adresse e-mail ci-dessous. Si un compte existe, nous vous enverrons immédiatement les instructions pour définir un nouveau mot de passe.
+                {t("Indiquez votre adresse e-mail ci-dessous. Si un compte existe, nous vous enverrons immédiatement les instructions pour définir un nouveau mot de passe.")}
               </p>
 
               {forgotSuccess ? (
                 <div className="rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-3">
                   <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
                     <FontAwesomeIcon icon={faCircleCheck} className="text-sm" />
-                    <span>Mot de passe mis à jour</span>
+                    <span>{t("Mot de passe mis à jour")}</span>
                   </div>
-                  <p>{forgotSuccess}</p>
+                  <p>{t(forgotSuccess)}</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -719,7 +721,7 @@ export function LoginPage() {
                     }}
                     className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
                   >
-                    Retour à la connexion
+                    {t("Retour à la connexion")}
                   </button>
                 </div>
               ) : (
@@ -727,20 +729,20 @@ export function LoginPage() {
                   {forgotError && (
                     <div className="rounded-xl bg-destructive/15 border border-destructive/30 p-3 text-xs text-destructive flex items-center gap-2">
                       <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 shrink-0" />
-                      <span>{forgotError}</span>
+                      <span>{t(forgotError)}</span>
                     </div>
                   )}
 
                   <div>
                     <label className="block text-xs font-medium text-foreground/80 mb-1">
-                      Votre adresse e-mail
+                      {t("Votre adresse e-mail")}
                     </label>
                     <input
                       type="email"
                       required
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="votre.email@domaine.com"
+                      placeholder={t("votre.email@domaine.com")}
                       className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                     />
                   </div>
@@ -751,23 +753,23 @@ export function LoginPage() {
                     <div className="rounded-2xl border border-accent/40 bg-accent/10 p-3.5 space-y-3">
                       <div className="flex items-center gap-2 text-xs font-bold text-accent">
                         <FontAwesomeIcon icon={faCrown} />
-                        <span>Compte Super-Administrateur identifié</span>
+                        <span>{t("Compte Super-Administrateur identifié")}</span>
                       </div>
                       <p className="text-[11px] text-foreground/75 leading-relaxed">
-                        En tant que Super-Administrateur, vous pouvez réinitialiser et réattribuer immédiatement votre mot de passe personnel sans délai :
+                        {t("En tant que Super-Administrateur, vous pouvez réinitialiser et réattribuer immédiatement votre mot de passe personnel sans délai :")}
                       </p>
 
                       <div className="space-y-2 pt-1">
                         <div>
                           <label className="block text-[11px] font-semibold text-foreground/80 mb-1">
-                            Nouveau mot de passe
+                            {t("Nouveau mot de passe")}
                           </label>
                           <div className="relative">
                             <input
                               type={showAdminNewPassword ? 'text' : 'password'}
                               value={adminNewPassword}
                               onChange={(e) => setAdminNewPassword(e.target.value)}
-                              placeholder="Votre mot de passe personnalisé"
+                              placeholder={t("Votre mot de passe personnalisé")}
                               className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 pr-10 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                             />
                             <button
@@ -783,13 +785,13 @@ export function LoginPage() {
 
                         <div>
                           <label className="block text-[11px] font-semibold text-foreground/80 mb-1">
-                            Confirmer le mot de passe
+                            {t("Confirmer le mot de passe")}
                           </label>
                           <input
                             type={showAdminNewPassword ? 'text' : 'password'}
                             value={adminConfirmPassword}
                             onChange={(e) => setAdminConfirmPassword(e.target.value)}
-                            placeholder="Répétez le mot de passe"
+                            placeholder={t("Répétez le mot de passe")}
                             className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
                           />
                         </div>
@@ -808,7 +810,7 @@ export function LoginPage() {
                       }}
                       className="flex-1 rounded-xl border border-foreground/15 py-2.5 text-xs font-bold text-foreground/70 hover:bg-muted"
                     >
-                      Annuler
+                      {t("Annuler")}
                     </button>
                     <button
                       type="submit"
@@ -818,15 +820,15 @@ export function LoginPage() {
                       {forgotLoading ? (
                         <>
                           <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
-                          <span>Traitement...</span>
+                          <span>{t("Traitement...")}</span>
                         </>
                       ) : (
                         <span>
                           {forgotEmail.trim().toLowerCase() === 'isidoretoudonou@gmail.com' ||
                           forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.com' ||
                           forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.bj'
-                            ? 'Enregistrer mon mot de passe'
-                            : 'Envoyer le lien'}
+                            ? t("Enregistrer mon mot de passe")
+                            : t("Envoyer le lien")}
                         </span>
                       )}
                     </button>

@@ -66,6 +66,7 @@ import { faWhatsapp } from '@fortawesome/free-brands-svg-icons';
 import { useAuth, DEMO_USERS } from '../context/AuthContext';
 import { formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings, suspendOwnerListings } from '../services/listingService';
+import { getOpenListingReports, closeListingReport, REPORT_REASONS } from '../services/reportService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
 import { getReviews, deleteReview, updateReviewStatus } from '../services/reviewService';
 import { getPacks, addPack, deletePack } from '../services/packService';
@@ -80,7 +81,7 @@ import { uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
-import { BrandIcon, BrandLogo } from '../components/BrandLogo';
+import { BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
@@ -222,6 +223,17 @@ export function AdminDashboardPage() {
 
   // Data states (Chargement instantané 0ms depuis le cache + rafraîchissement Supabase en tâche de fond)
   const [listings, setListings] = useState(() => getCustomListings());
+  const [listingReports, setListingReports] = useState([]);
+
+  useEffect(() => {
+    getOpenListingReports().then(setListingReports);
+  }, []);
+
+  const handleCloseReport = async (report, suspend) => {
+    if (suspend && report.listing_id) await handleSuspendListing(report.listing_id);
+    const ok = await closeListingReport(report.id, suspend ? 'resolved' : 'dismissed');
+    if (ok) setListingReports((prev) => prev.filter((r) => r.id !== report.id));
+  };
   const [bookings, setBookings] = useState([]);
   const [partners, setPartners] = useState([]);
   const [payouts, setPayouts] = useState([]);
@@ -2171,7 +2183,7 @@ export function AdminDashboardPage() {
     {
       title: 'Catalogue',
       items: [
-        { key: 'moderation', label: 'Modération', icon: faShieldHalved, badge: platformMetrics.pendingListingsCount },
+        { key: 'moderation', label: 'Modération', icon: faShieldHalved, badge: platformMetrics.pendingListingsCount + listingReports.length },
         { key: 'catalog_inventory', label: 'Biens', icon: faHouse },
         { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus },
         { key: 'packs', label: 'Packs', icon: faLayerGroup },
@@ -2483,6 +2495,53 @@ export function AdminDashboardPage() {
           {/* ========================================================================= */}
           {currentSection === 'moderation' && (
             <div className="space-y-6">
+              {listingReports.length > 0 && (
+                <section className="rounded-2xl border border-rose-500/30 bg-card">
+                  <h3 className="border-b border-foreground/10 px-5 py-4 text-sm font-semibold text-rose-600">
+                    Signalements des voyageurs ({listingReports.length})
+                  </h3>
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {listingReports.map((report) => (
+                      <li key={report.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 text-sm">
+                          <p className="truncate font-medium text-foreground">{report.listing_title || report.listing_id}</p>
+                          <p className="text-xs text-foreground/55">
+                            {REPORT_REASONS.find((r) => r.id === report.reason)?.label || report.reason}
+                            {' · '}
+                            {new Date(report.created_at).toLocaleDateString('fr-FR')}
+                            {report.reporter_email ? ` · ${report.reporter_email}` : ''}
+                          </p>
+                          {report.message && <p className="mt-1 text-xs text-foreground/70">« {report.message} »</p>}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Link
+                            to={`/listing/${report.listing_id}`}
+                            target="_blank"
+                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-foreground/60 hover:bg-muted"
+                          >
+                            Voir
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleCloseReport(report, false)}
+                            className="rounded-lg border border-foreground/15 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                          >
+                            Classer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCloseReport(report, true)}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                          >
+                            Suspendre l'annonce
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               <section className="rounded-2xl border border-foreground/10 bg-card">
                 {/* Recherche et filtres */}
                 <div className="space-y-3 border-b border-foreground/10 px-5 py-4">
@@ -3572,7 +3631,7 @@ export function AdminDashboardPage() {
                                       type="button"
                                       onClick={() => handleToggleUserActive(u)}
                                       className="mr-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
-                                      title={isActive ? "Suspendre l'accès de cet utilisateur" : "Réactiver l'accès"}
+                                      title={isActive ? 'Suspendre l\'accès de cet utilisateur' : 'Réactiver l\'accès'}
                                     >
                                       {isActive ? 'Désactiver' : 'Réactiver'}
                                     </button>
@@ -3982,7 +4041,7 @@ export function AdminDashboardPage() {
                     </h3>
                     <p className="mt-0.5 text-xs text-foreground/50">
                       {events.length > 3
-                        ? "Carrousel automatique actif sur la page d'accueil."
+                        ? 'Carrousel automatique actif sur la page d\'accueil.'
                         : "Grille statique sur la page d'accueil ; le carrousel s'active au-delà de 3 événements."}
                     </p>
                   </div>
@@ -4244,8 +4303,8 @@ export function AdminDashboardPage() {
                     <h3 className="text-sm font-semibold text-foreground">Publication instantanée</h3>
                     <p className="mt-0.5 text-xs text-foreground/50">
                       {adminInstantPublish
-                        ? "L'annonce sera directement réservable dès l'enregistrement."
-                        : "L'annonce sera enregistrée « En attente » pour un audit ultérieur."}
+                        ? 'L\'annonce sera directement réservable dès l\'enregistrement.'
+                        : 'L\'annonce sera enregistrée « En attente » pour un audit ultérieur.'}
                     </p>
                   </div>
                   <label className="relative inline-flex shrink-0 cursor-pointer items-center">
@@ -4980,7 +5039,7 @@ export function AdminDashboardPage() {
                               <span className={`shrink-0 text-xs font-medium ${
                                 isPending ? 'text-amber-600' : isRejected ? 'text-rose-600' : 'text-emerald-600'
                               }`}>
-                                {isPending ? 'À modérer' : isRejected ? 'Rejeté' : isFeaturedOnHome ? "Publié · en vedette sur l'accueil" : 'Publié'}
+                                {isPending ? 'À modérer' : isRejected ? 'Rejeté' : isFeaturedOnHome ? 'Publié · en vedette sur l\'accueil' : 'Publié'}
                               </span>
                             </div>
 

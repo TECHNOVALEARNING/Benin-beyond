@@ -7,6 +7,7 @@ import {
   faCircleCheck,
   faXmark
 } from '@fortawesome/free-solid-svg-icons';
+import { useLanguage } from '../context/LanguageContext';
 
 export function ConfirmModal({
   isOpen,
@@ -20,6 +21,7 @@ export function ConfirmModal({
   onCancel,
   loading = false
 }) {
+  const { t } = useLanguage();
   useEffect(() => {
     if (!isOpen) return;
 
@@ -106,10 +108,10 @@ export function ConfirmModal({
               id="confirm-modal-title"
               className="font-heading text-lg sm:text-xl font-bold text-foreground leading-snug tracking-tight"
             >
-              {title}
+              {t(title)}
             </h3>
             <p className="mt-2 text-sm sm:text-base font-medium text-foreground leading-relaxed">
-              {message}
+              {typeof message === 'string' ? t(message) : message}
             </p>
           </div>
         </div>
@@ -123,7 +125,7 @@ export function ConfirmModal({
               onClick={onCancel}
               className="px-4 py-2.5 rounded-xl border border-foreground/15 text-sm font-medium text-foreground/80 hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
             >
-              {cancelText}
+              {t(cancelText)}
             </button>
           )}
 
@@ -136,7 +138,7 @@ export function ConfirmModal({
             {loading && (
               <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             )}
-            <span>{confirmText}</span>
+            <span>{t(confirmText)}</span>
           </button>
         </div>
       </div>

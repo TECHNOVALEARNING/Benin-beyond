@@ -21,6 +21,7 @@ import {
 import { faWhatsapp } from '@fortawesome/free-brands-svg-icons';
 import { compressImage } from '../utils/imageOptimizer';
 import { addDiscovery } from '../services/discoveryService';
+import { useLanguage } from '../context/LanguageContext';
 
 const SERVICE_SUBCATEGORIES = [
   { id: 'coiffure', label: 'Coiffure & Tresses' },
@@ -32,6 +33,7 @@ const SERVICE_SUBCATEGORIES = [
 ];
 
 export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
+  const { t } = useLanguage();
   const [step, setStep] = useState(1); // 1: formulaire, 3: demande envoyée
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +68,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
       setImage(compressedDataUrl);
     } catch (err) {
       console.error('Erreur compression image:', err);
-      setError('Impossible de traiter l\'image sélectionnée.');
+      setError("Impossible de traiter l'image sélectionnée.");
     } finally {
       setUploadingImage(false);
     }
@@ -77,15 +79,15 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
     setError('');
 
     if (!title.trim()) {
-      setError('Veuillez renseigner le nom de votre établissement ou service.');
+      setError(t("Veuillez renseigner le nom de votre établissement ou service."));
       return;
     }
     if (!description.trim() || description.trim().length < 20) {
-      setError('Veuillez fournir une description d\'au moins 20 caractères pour présenter vos prestations.');
+      setError("Veuillez fournir une description d'au moins 20 caractères pour présenter vos prestations.");
       return;
     }
     if (!phone.trim() || phone.trim() === '+229') {
-      setError('Veuillez indiquer un numéro de téléphone pour que les clients puissent vous joindre.');
+      setError(t("Veuillez indiquer un numéro de téléphone pour que les clients puissent vous joindre."));
       return;
     }
 
@@ -146,7 +148,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
       }
     } catch (err) {
       console.error('Erreur envoi demande de référencement:', err);
-      setError("Une erreur est survenue lors de l'envoi de votre demande. Réessayez dans un instant.");
+      setError(t("Une erreur est survenue lors de l'envoi de votre demande. Réessayez dans un instant."));
     } finally {
       setLoading(false);
     }
@@ -160,7 +162,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
         <button
           onClick={onClose}
           className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-foreground/70 hover:text-foreground hover:bg-muted/80 transition-all"
-          title="Fermer"
+          title={t("Fermer")}
         >
           <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
         </button>
@@ -169,7 +171,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
         <div className="mb-6 pr-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider mb-2">
             <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-            <span>Réseau Partenaires Bénin Beyond</span>
+            <span>{t("Réseau Partenaires Bénin Beyond")}</span>
           </div>
           <h2 className="font-heading text-xl sm:text-2xl font-black text-foreground">
             {step === 1 && "Faire référencer votre service ou restaurant"}
@@ -184,7 +186,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
         {error && (
           <div className="mb-6 rounded-2xl bg-destructive/10 border border-destructive/25 p-3.5 text-xs text-destructive font-medium flex items-center gap-2">
             <span>•</span>
-            <span>{error}</span>
+            <span>{t(error)}</span>
           </div>
         )}
 
@@ -198,11 +200,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 flex items-center gap-1.5">
-                  <span>Sélectionnez votre type d'activité</span>
+                  <span>{t("Sélectionnez votre type d'activité")}</span>
                   <span className="text-primary">*</span>
                 </label>
                 <span className="text-[11px] text-foreground/50 font-medium hidden sm:inline">
-                  Cliquez sur une option ci-dessous
+                  {t("Cliquez sur une option ci-dessous")}
                 </span>
               </div>
 
@@ -236,20 +238,20 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                     </div>
 
                     <h4 className="text-sm font-bold text-foreground">
-                      Gastronomie & Restaurant
+                      {t("Gastronomie & Restaurant")}
                     </h4>
                     <p className="text-xs text-foreground/65 mt-1 leading-relaxed">
-                      Tables d'exception, maquis chics, bars lounge et adresses gourmandes au Bénin.
+                      {t("Tables d'exception, maquis chics, bars lounge et adresses gourmandes au Bénin.")}
                     </p>
                   </div>
 
                   <div className="mt-3.5 pt-3 border-t border-foreground/10 flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-black tracking-wide shadow-sm">
                       <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                      <span>100% GRATUIT · 0 FCFA</span>
+                      <span>{t("100% GRATUIT · 0 FCFA")}</span>
                     </span>
                     <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      Après validation
+                      {t("Après validation")}
                     </span>
                   </div>
                 </button>
@@ -283,20 +285,20 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                     </div>
 
                     <h4 className="text-sm font-bold text-foreground">
-                      Autres Services & À Domicile
+                      {t("Autres Services & À Domicile")}
                     </h4>
                     <p className="text-xs text-foreground/65 mt-1 leading-relaxed">
-                      Coiffure, bien-être, manucure, chef privé, blanchisserie ou prestations en villa VIP.
+                      {t("Coiffure, bien-être, manucure, chef privé, blanchisserie ou prestations en villa VIP.")}
                     </p>
                   </div>
 
                   <div className="mt-3.5 pt-3 border-t border-foreground/10 flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[11px] font-black tracking-wide shadow-sm">
                       <FontAwesomeIcon icon={faTag} className="h-2.5 w-2.5" />
-                      <span>Frais d'Activation : 500 FCFA</span>
+                      <span>{t("Frais d'Activation : 500 FCFA")}</span>
                     </span>
                     <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                      Paiement unique
+                      {t("Paiement unique")}
                     </span>
                   </div>
                 </button>
@@ -308,10 +310,10 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
               <div className="rounded-2xl border border-foreground/15 bg-muted/20 p-4 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold uppercase tracking-wider text-foreground/80">
-                    Spécialité du service *
+                    {t("Spécialité du service *")}
                   </label>
                   <span className="text-[11px] text-accent font-semibold">
-                    Sélection obligatoire
+                    {t("Sélection obligatoire")}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -328,7 +330,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                             : 'border-foreground/15 bg-card text-foreground/80 hover:bg-muted/60 hover:border-foreground/30'
                         }`}
                       >
-                        <span className="truncate">{sub.label}</span>
+                        <span className="truncate">{t(sub.label)}</span>
                         {isSelected && (
                           <FontAwesomeIcon icon={faCheck} className="h-3 w-3 shrink-0" />
                         )}
@@ -343,7 +345,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                  Nom du professionnel ou de l'enseigne *
+                  {t("Nom du professionnel ou de l'enseigne *")}
                 </label>
                 <input
                   type="text"
@@ -357,11 +359,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
 
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                  Slogan ou phrase d'accroche
+                  {t("Slogan ou phrase d'accroche")}
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Soins haute définition chez vous"
+                  placeholder={t("Ex: Soins haute définition chez vous")}
                   value={tagline}
                   onChange={(e) => setTagline(e.target.value)}
                   className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
@@ -378,10 +380,10 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-foreground">
-                      Déplacement en villa ou appartement
+                      {t("Déplacement en villa ou appartement")}
                     </h4>
                     <p className="text-[11px] text-foreground/65">
-                      Indique aux voyageurs qu'ils peuvent vous faire venir directement dans leur logement sans se déplacer.
+                      {t("Indique aux voyageurs qu'ils peuvent vous faire venir directement dans leur logement sans se déplacer.")}
                     </p>
                   </div>
                 </div>
@@ -400,12 +402,12 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
             {/* Description détaillée */}
             <div>
               <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                Description de vos services & savoir-faire *
+                {t("Description de vos services & savoir-faire *")}
               </label>
               <textarea
                 required
                 rows={3}
-                placeholder="Décrivez vos prestations, votre expérience, vos produits (ex: huiles bio, matériel stérilisé, techniques de coupe)..."
+                placeholder={t("Décrivez vos prestations, votre expérience, vos produits (ex: huiles bio, matériel stérilisé, techniques de coupe)...")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
@@ -417,11 +419,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5 flex items-center gap-1.5">
                   <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-primary" />
-                  <span>Zone d'intervention / Ville</span>
+                  <span>{t("Zone d'intervention / Ville")}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Cotonou (Haie Vive, Fidjrossè) & Calavi"
+                  placeholder={t("Ex: Cotonou (Haie Vive, Fidjrossè) & Calavi")}
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
@@ -430,11 +432,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
 
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                  Tarifs indicatifs
+                  {t("Tarifs indicatifs")}
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Pose complète dès 12 000 FCFA"
+                  placeholder={t("Ex: Pose complète dès 12 000 FCFA")}
                   value={pricing}
                   onChange={(e) => setPricing(e.target.value)}
                   className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
@@ -447,7 +449,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5 flex items-center gap-1.5">
                   <FontAwesomeIcon icon={faPhone} className="h-3 w-3 text-primary" />
-                  <span>Téléphone d'appel direct *</span>
+                  <span>{t("Téléphone d'appel direct *")}</span>
                 </label>
                 <input
                   type="tel"
@@ -462,7 +464,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-xs font-semibold text-foreground/80 mb-1.5 flex items-center gap-1.5">
                   <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Numéro WhatsApp pour commandes</span>
+                  <span>{t("Numéro WhatsApp pour commandes")}</span>
                 </label>
                 <input
                   type="tel"
@@ -477,12 +479,12 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
             {/* Photo principale / Portfolio */}
             <div>
               <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                Photo de votre travail ou de votre établissement
+                {t("Photo de votre travail ou de votre établissement")}
               </label>
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 {image && (
                   <div className="relative h-20 w-28 rounded-xl overflow-hidden border border-foreground/15 shrink-0 bg-muted">
-                    <img src={image} alt="Aperçu" className="h-full w-full object-cover" />
+                    <img src={image} alt={t("Aperçu")} className="h-full w-full object-cover" />
                   </div>
                 )}
                 <div className="flex-1 w-full">
@@ -490,12 +492,12 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                     {uploadingImage ? (
                       <>
                         <FontAwesomeIcon icon={faSpinner} className="h-4 w-4 animate-spin text-primary" />
-                        <span>Compression en cours...</span>
+                        <span>{t("Compression en cours...")}</span>
                       </>
                     ) : (
                       <>
                         <FontAwesomeIcon icon={faUpload} className="h-4 w-4 text-primary" />
-                        <span>{image ? "Changer la photo" : "Téléverser une photo (Galerie / Appareil)"}</span>
+                        <span>{image ? t("Changer la photo") : t("Téléverser une photo (Galerie / Appareil)")}</span>
                       </>
                     )}
                     <input
@@ -513,11 +515,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
             {/* Points forts / Prestations */}
             <div>
               <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                Points forts (1 par ligne)
+                {t("Points forts (1 par ligne)")}
               </label>
               <textarea
                 rows={2}
-                placeholder="Déplacement avec matériel complet&#10;Produits de haute qualité certifiés&#10;Disponibilité 7j/7 de 08h à 20h"
+                placeholder={t('Déplacement avec matériel complet\nProduits de haute qualité certifiés\nDisponibilité 7j/7 de 08h à 20h')}
                 value={highlightsInput}
                 onChange={(e) => setHighlightsInput(e.target.value)}
                 className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
@@ -538,18 +540,18 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                 {loading ? (
                   <>
                     <FontAwesomeIcon icon={faSpinner} className="h-4 w-4 animate-spin" />
-                    <span>Traitement en cours...</span>
+                    <span>{t("Traitement en cours...")}</span>
                   </>
                 ) : category === 'restaurants' ? (
                   <>
                     <FontAwesomeIcon icon={faUtensils} className="h-4 w-4" />
-                    <span>Envoyer ma demande (gratuit)</span>
+                    <span>{t("Envoyer ma demande (gratuit)")}</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 ml-1 opacity-80" />
                   </>
                 ) : (
                   <>
                     <FontAwesomeIcon icon={faCreditCard} className="h-4 w-4" />
-                    <span>Envoyer ma demande (500 FCFA)</span>
+                    <span>{t("Envoyer ma demande (500 FCFA)")}</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 ml-1 opacity-80" />
                   </>
                 )}
@@ -564,21 +566,21 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
         {step === 3 && submittedDiscovery && (
           <div className="space-y-5 py-4 text-center">
             <div>
-              <h3 className="font-heading text-lg font-semibold text-foreground">Demande envoyée</h3>
+              <h3 className="font-heading text-lg font-semibold text-foreground">{t("Demande envoyée")}</h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-foreground/60">
-                La fiche <strong className="font-medium text-foreground">{title}</strong> est enregistrée. L'équipe Bénin Beyond la vérifie avant de la publier dans l'espace Découvertes.
+                {t("La fiche")} <strong className="font-medium text-foreground">{title}</strong> {t("est enregistrée. L'équipe Bénin Beyond la vérifie avant de la publier dans l'espace Découvertes.")}
               </p>
             </div>
 
             <div className="mx-auto max-w-md divide-y divide-foreground/[0.07] rounded-xl border border-foreground/10 text-left text-sm">
               <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-foreground/60">Statut</span>
-                <span className="font-medium text-amber-600">En attente de validation</span>
+                <span className="text-foreground/60">{t("Statut")}</span>
+                <span className="font-medium text-amber-600">{t("En attente de validation")}</span>
               </div>
               <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="text-foreground/60">Frais de référencement</span>
+                <span className="text-foreground/60">{t("Frais de référencement")}</span>
                 <span className="font-medium text-foreground">
-                  {category === 'restaurants' ? 'Gratuit' : '500 FCFA'}
+                  {category === 'restaurants' ? t("Gratuit") : '500 FCFA'}
                 </span>
               </div>
             </div>
@@ -594,7 +596,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
               onClick={onClose}
               className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              Fermer
+              {t("Fermer")}
             </button>
           </div>
         )}

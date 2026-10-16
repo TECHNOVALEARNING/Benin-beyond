@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { SYNC_ERROR_EVENT } from '../supabase/supabaseClient';
+import { useLanguage } from '../context/LanguageContext';
 
 /**
  * Affiche les écritures refusées par le serveur (Supabase) au lieu de les laisser passer en silence.
  */
 export function SyncErrorToast() {
+  const { t } = useLanguage();
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function SyncErrorToast() {
       className="fixed bottom-4 left-1/2 z-[100] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-start gap-3 rounded-xl border border-rose-500/30 bg-card px-4 py-3 text-sm text-foreground shadow-lg"
     >
       <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />
-      <p className="flex-1 leading-snug">{message}</p>
+      <p className="flex-1 leading-snug">{t(message)}</p>
       <button
         type="button"
         onClick={() => setMessage('')}

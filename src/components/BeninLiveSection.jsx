@@ -21,6 +21,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
 import { getEvents, INITIAL_CULTURAL_EVENTS } from '../services/eventService';
+import { useLanguage } from '../context/LanguageContext';
 
 const BENIN_CITIES = [
   { id: 'cotonou', name: 'Cotonou', region: 'Littoral', lat: 6.3654, lon: 2.4186 },
@@ -73,6 +74,7 @@ function getWeatherInfo(code, isDay) {
 }
 
 export function BeninLiveSection({ showWeather = true, showEvents = true, className = '' }) {
+  const { t } = useLanguage();
   const [events, setEvents] = useState(INITIAL_CULTURAL_EVENTS || []);
   const [activeEventIndex, setActiveEventIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -222,10 +224,10 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
                 </span>
 
                 <span className="text-[11px] text-primary font-bold hidden sm:inline-flex items-center gap-1">
-                  • En direct
+                  {t("• En direct")}
                 </span>
               </div>
-              <p className="text-[11px] text-foreground/60">Fuseau officiel · République du Bénin</p>
+              <p className="text-[11px] text-foreground/60">{t("Fuseau officiel · République du Bénin")}</p>
             </div>
           </div>
 
@@ -249,17 +251,17 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
                   {weatherData.temp}°C
                 </span>
                 <span className="text-xs text-foreground/90 font-semibold">
-                  {weatherInfo.label}
+                  {t(weatherInfo.label)}
                 </span>
               </div>
 
               {/* Indicateurs : Ressenti, Humidité, Vent et Sélecteur */}
               <div className="flex flex-wrap items-center gap-3 text-[11px] text-foreground/65 mt-0.5">
                 <span className="flex items-center gap-1">
-                  <FontAwesomeIcon icon={faTemperatureHalf} className="h-3 w-3 text-primary" /> Ressenti {weatherData.apparentTemp}°C
+                  <FontAwesomeIcon icon={faTemperatureHalf} className="h-3 w-3 text-primary" /> {t('Ressenti')} {weatherData.apparentTemp}°C
                 </span>
                 <span className="flex items-center gap-1">
-                  <FontAwesomeIcon icon={faDroplet} className="h-3 w-3 text-primary" /> {weatherData.humidity}% Humidité
+                  <FontAwesomeIcon icon={faDroplet} className="h-3 w-3 text-primary" /> {weatherData.humidity}% {t('Humidité')}
                 </span>
                 <span className="flex items-center gap-1">
                   <FontAwesomeIcon icon={faWind} className="h-3 w-3 text-primary" /> {weatherData.windSpeed} km/h
@@ -272,7 +274,7 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
                     value={selectedCityId}
                     onChange={(e) => setSelectedCityId(e.target.value)}
                     className="bg-transparent font-semibold text-foreground hover:text-primary cursor-pointer border-none p-0 focus:outline-none focus:ring-0 text-[11px]"
-                    title="Changer de ville pour la météo"
+                    title={t("Changer de ville pour la météo")}
                   >
                     {BENIN_CITIES.map((c) => (
                       <option key={c.id} value={c.id} className="bg-card text-foreground">
@@ -288,7 +290,7 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
           {/* C. Recommandation Saisonnière */}
           <div className="hidden xl:flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-xs text-primary font-medium">
             <FontAwesomeIcon icon={faTowerBroadcast} className="h-3.5 w-3.5 text-primary animate-pulse" />
-            <span>Le Bénin vous accueille toute l'année</span>
+            <span>{t("Le Bénin vous accueille toute l'année")}</span>
           </div>
 
         </div>
@@ -306,10 +308,10 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
             <div>
               <p className="caption text-accent font-semibold tracking-wider flex items-center gap-2">
                 <FontAwesomeIcon icon={faGem} className="h-3.5 w-3.5" />
-                <span>En direct du Bénin</span>
+                <span>{t("En direct du Bénin")}</span>
               </p>
               <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
-                Événements culturels, Histoires & Saison touristique
+                {t("Événements culturels, Histoires & Saison touristique")}
               </h3>
             </div>
 
@@ -323,14 +325,14 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
                   <button
                     onClick={prevEvent}
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
-                    title="Événement précédent"
+                    title={t("Événement précédent")}
                   >
                     <FontAwesomeIcon icon={faChevronLeft} className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={nextEvent}
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
-                    title="Événement suivant"
+                    title={t("Événement suivant")}
                   >
                     <FontAwesomeIcon icon={faChevronRight} className="h-3.5 w-3.5" />
                   </button>
@@ -418,7 +420,7 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
                       ? 'w-6 bg-primary'
                       : 'w-2 bg-foreground/20 hover:bg-foreground/40'
                   }`}
-                  title={`Aller à l'événement ${dotIdx + 1}`}
+                  title={`${t("Aller à l'événement")} ${dotIdx + 1}`}
                 />
               ))}
             </div>

@@ -7,6 +7,8 @@ import { ScrollReveal } from '../components/ScrollReveal';
 import { SectionHeader } from '../components/SectionHeader';
 import { getDiscoveries, INITIAL_DISCOVERIES } from '../services/discoveryService';
 import { ProviderRegistrationModal } from '../components/ProviderRegistrationModal';
+import { useLanguage } from '../context/LanguageContext';
+import { AutoText } from '../services/translationService';
 
 const CATEGORIES = [
   { key: 'all', label: 'Tout' },
@@ -24,6 +26,7 @@ const SERVICE_SUBCATEGORIES = [
 ];
 
 export function TourismPage() {
+  const { t } = useLanguage();
   const [discoveries, setDiscoveries] = useState(INITIAL_DISCOVERIES);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState('all');
@@ -76,7 +79,7 @@ export function TourismPage() {
         <ScrollReveal delay={0} y={20}>
           <SectionHeader
             label="Découvertes"
-            title="Gastronomie et services à domicile"
+            title={t("Gastronomie et services à domicile")}
             action={
               <button
                 type="button"
@@ -84,12 +87,12 @@ export function TourismPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-foreground/15 px-4 py-2 text-sm font-medium text-foreground/75 transition-colors hover:border-foreground/30 hover:text-foreground"
               >
                 <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
-                <span>Référencer mon activité</span>
+                <span>{t("Référencer mon activité")}</span>
               </button>
             }
           />
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-foreground/60">
-            Les meilleures tables du Bénin et des prestataires qui se déplacent dans votre villa : coiffure, onglerie, soins, chefs privés, pressing.
+            {t("Les meilleures tables du Bénin et des prestataires qui se déplacent dans votre villa : coiffure, onglerie, soins, chefs privés, pressing.")}
           </p>
         </ScrollReveal>
 
@@ -110,7 +113,7 @@ export function TourismPage() {
                     : 'border-foreground/15 text-foreground/70 hover:border-foreground/30 hover:text-foreground'
                 }`}
               >
-                {cat.label}
+                {t(cat.label)}
               </button>
             );
           })}
@@ -130,7 +133,7 @@ export function TourismPage() {
                       : 'text-foreground/55 hover:text-foreground'
                   }`}
                 >
-                  {sub.label}
+                  {t(sub.label)}
                 </button>
               );
             })}
@@ -138,20 +141,20 @@ export function TourismPage() {
         )}
 
         <ScrollReveal delay={100} y={15} className="mt-4 text-sm text-foreground/50">
-          {filteredSites.length} résultat(s)
+          {t('{n} résultat(s)', { n: filteredSites.length })}
         </ScrollReveal>
 
         {/* Fiches */}
         <div className="mt-6">
           {filteredSites.length === 0 ? (
             <div className="mx-auto max-w-xl rounded-xl border border-dashed border-foreground/15 p-10 text-center">
-              <p className="text-sm text-foreground/60">Aucun résultat dans cette sélection.</p>
+              <p className="text-sm text-foreground/60">{t("Aucun résultat dans cette sélection.")}</p>
               <button
                 type="button"
                 onClick={() => setIsRegisterModalOpen(true)}
                 className="mt-3 text-sm font-medium text-primary hover:underline"
               >
-                Inscrire mon activité
+                {t("Inscrire mon activité")}
               </button>
             </div>
           ) : (
@@ -176,23 +179,23 @@ export function TourismPage() {
                       />
                       {site.badge && (
                         <span className="absolute left-3 top-3 rounded-full bg-card/90 px-2.5 py-1 text-[11px] font-medium text-foreground">
-                          {site.badge}
+                          <AutoText text={site.badge} />
                         </span>
                       )}
                     </div>
 
                     <div className="flex flex-1 flex-col p-5">
                       <p className="text-xs text-foreground/50">
-                        {[site.location, site.inHomeService ? 'Se déplace en villa' : null, site.pricing].filter(Boolean).join(' · ')}
+                        {[site.location, site.inHomeService ? t("Se déplace en villa") : null, site.pricing].filter(Boolean).join(' · ')}
                       </p>
                       <h2 className="mt-1.5 font-heading text-base font-semibold leading-tight text-foreground">
-                        {site.title}
+                        <AutoText text={site.title} />
                       </h2>
                       {site.tagline && (
-                        <p className="mt-1 text-xs text-foreground/55">{site.tagline}</p>
+                        <p className="mt-1 text-xs text-foreground/55"><AutoText text={site.tagline} /></p>
                       )}
                       <p className="mt-3 text-sm leading-relaxed text-foreground/70">
-                        {site.description}
+                        <AutoText text={site.description} />
                       </p>
 
                       {site.highlights && site.highlights.length > 0 && (
@@ -200,7 +203,7 @@ export function TourismPage() {
                           {site.highlights.map((hl, i) => (
                             <li key={i} className="flex gap-2">
                               <span className="text-foreground/30">–</span>
-                              <span>{hl}</span>
+                              <span><AutoText text={hl} /></span>
                             </li>
                           ))}
                         </ul>
@@ -209,9 +212,9 @@ export function TourismPage() {
                       {site.tips && (
                         <p className="mt-4 text-xs leading-relaxed text-foreground/55">
                           <span className="font-medium text-foreground/70">
-                            {site.category === 'services' ? 'Déplacement : ' : 'Conseil : '}
+                            {site.category === 'services' ? t("Déplacement : ") : t("Conseil : ")}
                           </span>
-                          {site.tips}
+                          <AutoText text={site.tips} />
                         </p>
                       )}
 
@@ -224,7 +227,7 @@ export function TourismPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                            title="Contacter directement sur WhatsApp"
+                            title={t("Contacter directement sur WhatsApp")}
                           >
                             <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5" />
                             <span>WhatsApp</span>
@@ -235,7 +238,7 @@ export function TourismPage() {
                           <a
                             href={`tel:${site.phone.replace(/\s+/g, '')}`}
                             className="inline-flex items-center gap-2 rounded-full border border-foreground/15 px-4 py-2 text-xs font-medium text-foreground/75 hover:border-foreground/30 hover:text-foreground"
-                            title="Appeler directement"
+                            title={t("Appeler directement")}
                           >
                             <FontAwesomeIcon icon={faPhone} className="h-3 w-3" />
                             <span>{site.phone}</span>
@@ -254,38 +257,38 @@ export function TourismPage() {
         <ScrollReveal delay={0} y={20} className="mt-16">
           <SectionHeader
             label="Professionnels"
-            title="Restaurateurs et prestataires"
+            title={t("Restaurateurs et prestataires")}
             action={
               <button
                 type="button"
                 onClick={() => setIsRegisterModalOpen(true)}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Référencer mon activité
+                {t("Référencer mon activité")}
               </button>
             }
           />
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-foreground/60">
-            Rejoignez le répertoire recommandé aux voyageurs hébergés par Bénin Beyond. Inscription gratuite pour les restaurants, 500 FCFA pour les services. Contact direct, sans commission.
+            {t("Rejoignez le répertoire recommandé aux voyageurs hébergés par Bénin Beyond. Inscription gratuite pour les restaurants, 500 FCFA pour les services. Contact direct, sans commission.")}
           </p>
         </ScrollReveal>
 
         {/* Séjour */}
         <ScrollReveal delay={0} y={20} className="mt-16">
-          <SectionHeader label="Votre séjour" title="Où dormir, comment se déplacer" />
+          <SectionHeader label="Votre séjour" title={t("Où dormir, comment se déplacer")} />
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               to="/explore?type=stay"
               className="inline-flex items-center gap-2 rounded-full border border-foreground/15 px-5 py-2.5 text-sm font-medium text-foreground/80 transition-colors hover:border-foreground/30 hover:text-foreground"
             >
-              <span>Explorer les logements</span>
+              <span>{t("Explorer les logements")}</span>
               <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
             </Link>
             <Link
               to="/explore?type=drive"
               className="inline-flex items-center gap-2 rounded-full border border-foreground/15 px-5 py-2.5 text-sm font-medium text-foreground/80 transition-colors hover:border-foreground/30 hover:text-foreground"
             >
-              <span>Voir les véhicules</span>
+              <span>{t("Voir les véhicules")}</span>
               <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
             </Link>
           </div>

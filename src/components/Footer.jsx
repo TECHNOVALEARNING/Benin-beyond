@@ -4,9 +4,13 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPhone, faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
 import { BrandLogo } from './BrandLogo';
+import { useHasPacks } from '../services/packService';
+import { useLanguage } from '../context/LanguageContext';
 
 export function Footer() {
+  const { t } = useLanguage();
   const currentYear = new Date().getFullYear();
+  const hasPacks = useHasPacks();
 
   return (
     <footer className="relative overflow-hidden border-t border-foreground/10 bg-secondary text-secondary-foreground">
@@ -51,7 +55,7 @@ export function Footer() {
           <ScrollReveal delay={0} y={20}>
             <BrandLogo size="md" textColor="text-secondary-foreground" />
             <p className="mt-4 max-w-md text-sm leading-relaxed text-secondary-foreground/70">
-              L'écosystème d'hospitalité et de mobilité curaté à travers le Bénin. Là où l'héritage terrestre rencontre la précision digitale.
+              {t("L'écosystème d'hospitalité et de mobilité curaté à travers le Bénin. Là où l'héritage terrestre rencontre la précision digitale.")}
             </p>
           </ScrollReveal>
         </div>
@@ -59,31 +63,33 @@ export function Footer() {
         {/* Navigation Col */}
         <div className="md:col-span-2 lg:col-span-2">
           <ScrollReveal delay={60} y={20}>
-            <p className="caption text-secondary-foreground/50">Navigation</p>
+            <p className="caption text-secondary-foreground/50">{t("Navigation")}</p>
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <Link to="/explore?type=stay" className="hover:text-accent transition-colors">
-                  Séjourner
+                  {t("Séjourner")}
                 </Link>
               </li>
               <li>
                 <Link to="/explore?type=drive" className="hover:text-accent transition-colors">
-                  Véhicules
+                  {t("Véhicules")}
                 </Link>
               </li>
               <li>
                 <Link to="/decouvertes" className="hover:text-accent transition-colors">
-                  Découvertes
+                  {t("Découvertes")}
                 </Link>
               </li>
-              <li>
-                <Link to="/packs" className="hover:text-accent transition-colors">
-                  Formules & Packs
-                </Link>
-              </li>
+              {hasPacks && (
+                <li>
+                  <Link to="/packs" className="hover:text-accent transition-colors">
+                    {t("Formules & Packs")}
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/panier" className="hover:text-accent transition-colors">
-                  Mon panier
+                  {t("Mon panier")}
                 </Link>
               </li>
             </ul>
@@ -93,16 +99,16 @@ export function Footer() {
         {/* Confidentialité & Légal Col */}
         <div className="md:col-span-2 lg:col-span-3">
           <ScrollReveal delay={120} y={20}>
-            <p className="caption text-secondary-foreground/50">Confidentialité & Légal</p>
+            <p className="caption text-secondary-foreground/50">{t("Confidentialité & Légal")}</p>
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <Link to="/confidentialite" className="hover:text-accent transition-colors">
-                  Politique de Confidentialité
+                  {t("Politique de Confidentialité")}
                 </Link>
               </li>
               <li>
                 <Link to="/cgu" className="hover:text-accent transition-colors">
-                  Conditions d'Utilisation (CGU)
+                  {t("Conditions d'Utilisation (CGU)")}
                 </Link>
               </li>
             </ul>
@@ -112,7 +118,7 @@ export function Footer() {
         {/* Contact Col */}
         <div className="sm:col-span-2 md:col-span-3 lg:col-span-3">
           <ScrollReveal delay={180} y={20}>
-            <p className="caption text-secondary-foreground/50">Conciergerie & Support</p>
+            <p className="caption text-secondary-foreground/50">{t("Conciergerie & Support")}</p>
             <ul className="mt-4 space-y-3 text-sm">
               <li className="flex items-center gap-2">
                 <FontAwesomeIcon icon={faPhone} className="h-3.5 w-3.5 text-accent" />
@@ -123,7 +129,7 @@ export function Footer() {
                 <span>contact@beninbeyond.com</span>
               </li>
               <li className="text-xs text-secondary-foreground/60 pt-2 leading-relaxed max-w-sm">
-                Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.
+                {t("Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.")}
               </li>
             </ul>
           </ScrollReveal>
@@ -136,15 +142,15 @@ export function Footer() {
           <span>© {currentYear} Bénin Beyond. Tous droits réservés.</span>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-secondary-foreground/60">
             <Link to="/confidentialite" className="hover:text-accent transition-colors">
-              Politique de Confidentialité
+              {t("Politique de Confidentialité")}
             </Link>
             <span className="text-secondary-foreground/30">•</span>
             <Link to="/cgu" className="hover:text-accent transition-colors">
-              Conditions d'Utilisation
+              {t("Conditions d'Utilisation")}
             </Link>
             <span className="text-secondary-foreground/30">•</span>
             <Link to="/admin" className="hover:text-accent transition-colors text-secondary-foreground/75 font-semibold">
-              Console Administration
+              {t("Console Administration")}
             </Link>
           </div>
         </div>

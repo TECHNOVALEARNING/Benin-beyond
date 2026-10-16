@@ -13,178 +13,63 @@
  * Documentation officielle : https://nyole.com/docs
  */
 
-const NYOLE_PUBLIC_KEY =
-  (import.meta.env?.VITE_NYOLE_PUBLIC_KEY || '').trim() ||
-  'af_live_pub_518c867febff49ff09ec1a83f8ba98a70205cc6d052f8eca';
-
-const NYOLE_BASE_URL =
-  (import.meta.env?.VITE_NYOLE_BASE_URL || '').trim().replace(/\/+$/, '') ||
-  'https://app.nyole.com/api/v1';
+import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 
 export const PENDING_CHECKOUT_STORAGE_KEY = 'benin_beyond_nyole_pending_checkout';
 
-/**
- * Vérifie si la passerelle Nyole est configurée
- */
-export function isNyoleConfigured() {
-  return Boolean(NYOLE_PUBLIC_KEY && NYOLE_PUBLIC_KEY.startsWith('af_'));
-}
+// Les appels à l'API Nyole (clé secrète) sont faits uniquement par les fonctions serveur
+// supabase/functions/benin-beyond : aucune clé Nyole dans le navigateur.
 
 /**
- * Récupère la clé publique / token d'autorisation
- */
-export function getNyolePublicKey() {
-  return NYOLE_PUBLIC_KEY;
-}
-
-/**
- * Crée une session de paiement hébergée Nyole
+ * Démarre le paiement côté serveur (fonction Supabase « benin-beyond », route nyole-checkout) :
+ * la réservation est enregistrée en attente de paiement, puis la session Nyole
+ * est créée avec la clé secrète. Le site n'a plus qu'à rediriger vers `url`.
  *
- * @param {Object} params
- * @param {number} params.amount - Montant en FCFA (XOF)
- * @param {string} params.bookingRef - Référence unique de réservation (ex: BB-123456)
- * @param {string} params.customerName - Nom complet du client
- * @param {string} params.customerEmail - Email du client
- * @param {string} params.customerPhone - Téléphone avec indicatif (+229...)
- * @param {string} [params.description] - Libellé affiché au client
- * @param {string} [params.successUrl] - URL de redirection après paiement réussi
- * @param {string} [params.cancelUrl] - URL de redirection en cas d'annulation
- * @param {Object} [params.metadata] - Données additionnelles
- * @returns {Promise<{success: boolean, session?: Object, error?: string}>}
+ * @param {Object} booking - Détails de la réservation (client, articles, montants)
+ * @returns {Promise<{success: boolean, bookingRef?: string, sessionId?: string, url?: string, error?: string}>}
  */
-export async function createNyoleCheckoutSession({
-  amount,
-  bookingRef,
-  customerName,
-  customerEmail,
-  customerPhone,
-  description,
-  successUrl,
-  cancelUrl,
-  metadata = {}
-}) {
+export async function startNyoleCheckout(booking) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Service de réservation indisponible (Supabase non configuré).' };
+  }
   try {
-    if (!NYOLE_PUBLIC_KEY) {
-      throw new Error("Clé d'API Nyole non configurée. Veuillez renseigner VITE_NYOLE_PUBLIC_KEY.");
+    const { data, error } = await supabase.functions.invoke('benin-beyond/nyole-checkout', { body: { booking } });
+    if (error || !data?.url) {
+      const serverMessage = await error?.context?.json?.().then((d) => d?.error).catch(() => null);
+      return {
+        success: false,
+        error: serverMessage || data?.error || 'Impossible de contacter le service de paiement Nyole.'
+      };
     }
-
-    const cleanAmount = Math.round(Number(amount));
-    if (!cleanAmount || cleanAmount <= 0) {
-      throw new Error('Le montant de la transaction doit être supérieur à 0.');
-    }
-
-    const currentOrigin =
-      typeof window !== 'undefined' && window.location?.origin
-        ? window.location.origin
-        : 'http://localhost:5173';
-
-    const defaultSuccessUrl = `${currentOrigin}/checkout?payment_status=success&session_id={id}&booking_ref=${encodeURIComponent(
-      bookingRef || ''
-    )}`;
-    const defaultCancelUrl = `${currentOrigin}/checkout?payment_status=cancelled&booking_ref=${encodeURIComponent(
-      bookingRef || ''
-    )}`;
-
-    const payload = {
-      amount: cleanAmount,
-      currency: 'XOF',
-      customer_name: (customerName || '').trim(),
-      customer_email: (customerEmail || '').trim().toLowerCase(),
-      customer_phone: (customerPhone || '').trim(),
-      description: description || `Réservation Bénin Beyond #${bookingRef}`,
-      merchant_name: 'Bénin Beyond',
-      success_url: successUrl || defaultSuccessUrl,
-      cancel_url: cancelUrl || defaultCancelUrl,
-      metadata: {
-        booking_ref: bookingRef,
-        source: 'benin_beyond_web',
-        ...metadata
-      }
-    };
-
-    const response = await fetch(`${NYOLE_BASE_URL}/checkout/sessions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${NYOLE_PUBLIC_KEY}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      const errorMsg =
-        data?.message ||
-        data?.error ||
-        `Échec de création de la session Nyole (HTTP ${response.status})`;
-      console.error('[Nyole] Erreur API:', errorMsg, data);
-      return { success: false, error: errorMsg };
-    }
-
-    return {
-      success: true,
-      session: data
-    };
+    return { success: true, bookingRef: data.booking_ref, sessionId: data.session_id, url: data.url };
   } catch (err) {
-    console.error('[Nyole] Erreur réseau ou configuration:', err);
-    return {
-      success: false,
-      error: err?.message || 'Impossible de contacter le service de paiement Nyole.'
-    };
+    console.error('[Nyole] Erreur démarrage paiement:', err);
+    return { success: false, error: err?.message || 'Impossible de contacter le service de paiement Nyole.' };
   }
 }
 
 /**
- * Vérifie le statut d'une session de paiement Nyole
+ * Demande au serveur (fonction « benin-beyond », route nyole-webhook) de vérifier auprès de Nyole
+ * le paiement d'une réservation et renvoie la réservation à jour.
  *
- * @param {string} sessionId - L'identifiant de la session Nyole
- * @returns {Promise<{success: boolean, paid?: boolean, status?: string, data?: Object, error?: string}>}
+ * @param {string} bookingRef
+ * @returns {Promise<{success: boolean, booking?: Object, nyoleStatus?: string|null, error?: string}>}
  */
-export async function checkNyoleSessionStatus(sessionId) {
+export async function verifyNyolePayment(bookingRef) {
+  if (!bookingRef || !isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Référence de réservation manquante' };
+  }
   try {
-    if (!sessionId || sessionId === '{id}') {
-      return { success: false, error: 'Identifiant de session invalide' };
+    const { data, error } = await supabase.functions.invoke('benin-beyond/nyole-webhook', {
+      body: { action: 'verify', booking_ref: bookingRef }
+    });
+    if (error || !data?.booking) {
+      return { success: false, error: data?.error || error?.message || 'Vérification impossible' };
     }
-
-    const response = await fetch(
-      `${NYOLE_BASE_URL}/checkout/sessions/${encodeURIComponent(sessionId)}/status`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${NYOLE_PUBLIC_KEY}`
-        }
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      const errorMsg =
-        data?.message ||
-        data?.error ||
-        `Erreur lors de la vérification de session (HTTP ${response.status})`;
-      return { success: false, error: errorMsg };
-    }
-
-    const rawStatus = String(data?.status || '').toUpperCase();
-    const isPaid = Boolean(
-      data?.paid === true ||
-      ['SUCCESS', 'SUCCEEDED', 'SUCCESSFUL', 'COMPLETED', 'PAID', 'APPROVED'].includes(rawStatus)
-    );
-
-    return {
-      success: true,
-      paid: isPaid,
-      status: data?.status || (isPaid ? 'SUCCESS' : 'PENDING'),
-      data
-    };
+    return { success: true, booking: data.booking, nyoleStatus: data.nyole_status || null };
   } catch (err) {
-    console.error('[Nyole] Erreur vérification statut:', err);
-    return {
-      success: false,
-      error: err?.message || 'Erreur lors de la communication avec Nyole'
-    };
+    console.error('[Nyole] Erreur vérification paiement:', err);
+    return { success: false, error: err?.message || 'Vérification impossible' };
   }
 }
 

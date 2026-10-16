@@ -62,12 +62,13 @@ import { addListing, updateListing, deleteListing, getListings, getCustomListing
 import { getBookings, updateBookingStatus, deleteBooking, blockListingDates, unblockListingDates } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { compressImage, compressImageToBlob } from '../utils/imageOptimizer';
+import { checkListingQuality, LISTING_RULES } from '../utils/listingQuality';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { saveMediaBlob, uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
-import { BrandIcon, BrandLogo } from '../components/BrandLogo';
+import { BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 import { getVerificationApplication, getLocalVerificationApplication } from '../services/ownerVerificationService';
@@ -133,22 +134,6 @@ export function PartnerDashboardPage() {
       isMounted = false;
     };
   }, [user]);
-
-  // Redirection obligatoire vers l'onboarding UNIQUEMENT après confirmation que le KYC n'a pas été soumis
-  useEffect(() => {
-    if (loadingVerification) return; // ATTENDRE impérativement la fin de la vérification !
-
-    if (user && user.role !== 'admin' && user.role !== 'subadmin') {
-      const certified = Boolean(user.verified || user.kyc_status === 'verified');
-      const hasCompletedOnboarding = Boolean(
-        verificationApp &&
-        ['submitted', 'under_review', 'approved', 'additional_info_required'].includes(verificationApp.status)
-      );
-      if (!certified && !hasCompletedOnboarding) {
-        navigate('/onboarding/partner', { replace: true });
-      }
-    }
-  }, [user, verificationApp, loadingVerification, navigate]);
 
   const verifStatus = verificationApp?.status || (user?.kyc_status === 'verified' ? 'approved' : (user?.kyc_status || 'draft'));
   const isPartnerCertified = Boolean(user?.role === 'admin' || user?.role === 'subadmin' || user?.verified || user?.kyc_status === 'verified' || verifStatus === 'approved');
@@ -221,6 +206,8 @@ export function PartnerDashboardPage() {
   const [featuredPhotoIndex, setFeaturedPhotoIndex] = useState(0);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
   const [photoError, setPhotoError] = useState('');
+  const [publishErrors, setPublishErrors] = useState([]);
+  const [isCheckingListing, setIsCheckingListing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState('');
   const [selectedRejectionModal, setSelectedRejectionModal] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -982,15 +969,24 @@ export function PartnerDashboardPage() {
   const handlePublishSubmit = async (e) => {
     e.preventDefault();
     setPhotoError('');
-
-    if (uploadedPhotos.length === 0) {
-      setPhotoError("Vous devez ajouter au moins une photo en haute résolution de votre bien.");
-      return;
-    }
+    setPublishErrors([]);
 
     const rawPublishPrice = parseInt(formPrice, 10);
-    if (!formPrice || isNaN(rawPublishPrice) || rawPublishPrice < 1000) {
-      setPhotoError("Le tarif minimum autorisé pour les propriétaires est de 1 000 FCFA.");
+
+    // Contrôles qualité automatiques : une annonce conforme est publiée immédiatement
+    setIsCheckingListing(true);
+    const qualityErrors = await checkListingQuality({
+      type: formType,
+      title: formTitle,
+      description: formDescription,
+      location: formLocation,
+      price: rawPublishPrice,
+      isSale: formPurpose === 'vente',
+      photos: uploadedPhotos
+    });
+    setIsCheckingListing(false);
+    if (qualityErrors.length > 0) {
+      setPublishErrors(qualityErrors);
       return;
     }
 
@@ -1013,7 +1009,7 @@ export function PartnerDashboardPage() {
     const seatsNum = isVeh ? (parseInt(seatsCount, 10) || 5) : 0;
 
     const newListing = await addListing({
-      title: formTitle || (formType === 'stay' ? (formSubcategory === 'hotel' ? 'Chambre d’Hôtel de Standing' : 'Résidence de Standing') : 'Véhicule de Prestige'),
+      title: formTitle.trim(),
       type: formType,
       subcategory: formType === 'stay' ? formSubcategory : 'car',
       location: formLocation,
@@ -1024,16 +1020,16 @@ export function PartnerDashboardPage() {
       transmission: isVeh ? transmission : null,
       fuel_type: isVeh ? fuelType : null,
       with_driver: isVeh ? withDriver : false,
-      description: formDescription || (isVeh ? 'Véhicule haut de gamme de prestige.' : 'Hébergement haut de gamme de prestige.'),
+      description: formDescription.trim(),
       badge: isVeh
         ? `${seatsNum} places · ${transmission === 'automatique' ? 'Auto' : 'Manuelle'}`
         : (formSubcategory === 'hotel'
           ? `${roomsNum} chambre(s) dispo`
-          : (isPartnerCertified ? 'Certifié' : 'En attente de certification KYC')),
+          : 'Vérifié'),
       specs: specsArray.length > 0 ? specsArray : (isVeh ? ['Climatisation', `${seatsNum} places`, transmission === 'automatique' ? 'Boîte Automatique' : 'Boîte Manuelle'] : ['Climatisation', 'Sécurité 24/7', 'Standing']),
       gallery: finalGallery,
       video_url: null,
-      status: isPartnerCertified ? 'active' : 'pending', // Les hôtes certifiés sont publiés directement en ligne
+      status: 'active', // Contrôles qualité réussis : mise en ligne immédiate (l'admin peut suspendre après coup)
       owner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : (user?.id || null),
       owner_name: user?.name || (isPartnerCertified ? 'Propriétaire Certifié' : 'Partenaire Hôte'),
       owner_email: user?.email || '',
@@ -1052,11 +1048,7 @@ export function PartnerDashboardPage() {
 
     setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
     
-    if (isPartnerCertified) {
-      setPublishSuccess(`Félicitations ! L'annonce "${newListing.title}" a été publiée avec succès et est immédiatement en ligne sur le site.`);
-    } else {
-      setPublishSuccess(`L'annonce "${newListing.title}" a été enregistrée avec succès ! Elle sera automatiquement mise en ligne dès la validation de votre profil hôte (KYC).`);
-    }
+    setPublishSuccess(`Félicitations ! L'annonce "${newListing.title}" a passé les contrôles qualité et est en ligne sur le site.`);
 
     // Reset form
     setFormTitle('');
@@ -1282,42 +1274,6 @@ export function PartnerDashboardPage() {
           {/* ========================================================================= */}
           {currentSection === 'overview' && (
             <div className="space-y-6">
-              {/* Vérification du compte (si non certifié) */}
-              {!isPartnerCertified && (
-                <section className="flex flex-col gap-3 rounded-2xl border border-foreground/10 bg-card px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className={`text-sm font-semibold ${
-                      verifStatus === 'additional_info_required'
-                        ? 'text-amber-600'
-                        : verifStatus === 'rejected'
-                        ? 'text-rose-600'
-                        : 'text-foreground'
-                    }`}>
-                      {verifStatus === 'additional_info_required'
-                        ? 'Des pièces justificatives doivent être corrigées'
-                        : verifStatus === 'rejected'
-                        ? 'Dossier de vérification refusé'
-                        : verifStatus === 'submitted' || verifStatus === 'under_review'
-                        ? 'Dossier en cours d’examen'
-                        : 'Finalisez votre vérification'}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-foreground/50">
-                      {verifStatus === 'additional_info_required'
-                        ? `« ${verificationApp?.admin_feedback || 'Veuillez vérifier les pièces signalées'} » — vos annonces restent en attente jusqu’à régularisation.`
-                        : verifStatus === 'rejected'
-                        ? `Motif : « ${user?.rejection_reason || verificationApp?.rejection_reason || 'Dossier non conforme'} ».`
-                        : 'Vous pouvez déjà créer vos annonces : elles seront mises en ligne dès la validation de votre dossier.'}
-                    </p>
-                  </div>
-                  <Link
-                    to="/onboarding/partner"
-                    className="shrink-0 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
-                  >
-                    Gérer ma vérification
-                  </Link>
-                </section>
-              )}
-
               {/* Chiffres clés */}
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
                 {[
@@ -1346,29 +1302,6 @@ export function PartnerDashboardPage() {
                 <section className="rounded-2xl border border-foreground/10 bg-card lg:col-span-2">
                   <h3 className="border-b border-foreground/10 px-5 py-4 text-sm font-semibold text-foreground">Mon compte</h3>
                   <ul className="divide-y divide-foreground/[0.07] text-sm">
-                    <li className="flex items-center justify-between gap-3 px-5 py-3.5">
-                      <span className="text-foreground/75">Vérification</span>
-                      <Link
-                        to="/onboarding/partner"
-                        className={`text-xs font-medium hover:underline ${
-                          isPartnerCertified
-                            ? 'text-emerald-600'
-                            : verifStatus === 'rejected'
-                            ? 'text-rose-600'
-                            : 'text-amber-600'
-                        }`}
-                      >
-                        {isPartnerCertified
-                          ? 'Certifié'
-                          : verifStatus === 'additional_info_required'
-                          ? 'Complément requis'
-                          : verifStatus === 'rejected'
-                          ? 'Refusé'
-                          : verifStatus === 'submitted' || verifStatus === 'under_review'
-                          ? 'En cours d’examen'
-                          : 'Non finalisé'}
-                      </Link>
-                    </li>
                     <li className="flex items-center justify-between gap-3 px-5 py-3.5">
                       <span className="text-foreground/75">Hébergements</span>
                       <span className="tabular-nums text-foreground">{listings.filter((l) => l.type === 'stay').length}</span>
@@ -1822,7 +1755,7 @@ export function PartnerDashboardPage() {
                             <span className="text-xs font-normal text-foreground/45"> / {item.price_unit || 'nuit'}</span>
                           </p>
                           {item.status === 'pending' ? (
-                            <p className="text-xs text-amber-600">{isPartnerCertified ? 'Publication en cours' : 'En attente de vérification'}</p>
+                            <p className="text-xs text-amber-600">{isPartnerCertified ? 'Publication en cours' : 'En attente de validation'}</p>
                           ) : item.status === 'refused' ? (
                             <button
                               type="button"
@@ -1883,21 +1816,20 @@ export function PartnerDashboardPage() {
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
             <div className="mx-auto max-w-3xl space-y-6">
-              {/* Statut de publication */}
+              {/* Charte de publication : contrôles qualité automatiques */}
               <section className="rounded-2xl border border-foreground/10 bg-card">
                 <div className="px-5 py-4">
-                  <h3 className={`text-sm font-semibold ${isPartnerCertified ? 'text-foreground' : 'text-amber-600'}`}>
-                    {isPartnerCertified ? 'Publication immédiate' : 'Publication dès la validation de votre profil'}
-                  </h3>
+                  <h3 className="text-sm font-semibold text-foreground">Publication immédiate si l'annonce respecte la charte</h3>
                   <p className="mt-0.5 text-xs leading-relaxed text-foreground/50">
-                    {isPartnerCertified
-                      ? 'Votre compte est certifié : vos annonces sont visibles par les voyageurs dès leur enregistrement.'
-                      : 'Vous pouvez déjà enregistrer vos annonces : elles seront mises en ligne automatiquement après la certification de votre dossier.'}
+                    Les contrôles sont automatiques. Notre équipe peut suspendre à tout moment une annonce non conforme ou signalée.
                   </p>
                 </div>
-                <div className="border-t border-foreground/10 px-5 py-3 text-xs text-foreground/50">
-                  Photos nettes et horizontales (1080p, en plein jour) · la visite vidéo est ajoutée par l’équipe Bénin Beyond lors de la certification.
-                </div>
+                <ul className="list-disc space-y-1 border-t border-foreground/10 py-3 pl-9 pr-5 text-xs text-foreground/60">
+                  <li>Au moins {LISTING_RULES.minPhotos.stay} photos (logement) ou {LISTING_RULES.minPhotos.drive} (véhicule), nettes, {LISTING_RULES.minPhotoSide} px minimum</li>
+                  <li>Un titre de {LISTING_RULES.titleLength[0]} à {LISTING_RULES.titleLength[1]} caractères et une description d'au moins {LISTING_RULES.minDescriptionLength} caractères</li>
+                  <li>Un tarif réaliste, à partir de {LISTING_RULES.priceMin.toLocaleString('fr-FR')} FCFA, et la ville ou le quartier</li>
+                  <li>Aucun numéro, e-mail ou lien dans le texte</li>
+                </ul>
               </section>
 
               {publishSuccess && (
@@ -2312,6 +2244,17 @@ export function PartnerDashboardPage() {
                   )}
                 </div>
 
+                {publishErrors.length > 0 && (
+                  <div className="mx-5 mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300">
+                    <p className="font-semibold">Votre annonce n'est pas encore publiable. À corriger :</p>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-5">
+                      {publishErrors.map((err) => (
+                        <li key={err}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Validation */}
                 <div className="flex flex-col-reverse gap-2 border-t border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
                   <button
@@ -2324,9 +2267,10 @@ export function PartnerDashboardPage() {
 
                   <button
                     type="submit"
-                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                    disabled={isCheckingListing}
+                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                   >
-                    {isPartnerCertified ? 'Publier l’annonce' : 'Enregistrer pour certification'}
+                    {isCheckingListing ? 'Vérification de la qualité…' : 'Publier l’annonce'}
                   </button>
                 </div>
               </form>
@@ -3015,7 +2959,7 @@ export function PartnerDashboardPage() {
                     </span>
                     {previewListingModal.status === 'pending' ? (
                       <span className="rounded-full bg-amber-500/90 text-white px-3 py-1 text-[11px] font-bold shadow">
-                        {isPartnerCertified ? 'En cours de publication' : 'En attente de certification KYC'}
+                        {isPartnerCertified ? 'En cours de publication' : 'En attente de validation'}
                       </span>
                     ) : previewListingModal.status === 'refused' ? (
                       <span className="rounded-full bg-rose-600 text-white px-3 py-1 text-[11px] font-bold shadow">

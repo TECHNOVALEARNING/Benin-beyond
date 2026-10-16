@@ -344,7 +344,7 @@ export async function deleteBooking(bookingId, bookingRef = null) {
 }
 
 /**
- * Envoie une réservation (et son encaissement) vers Supabase à partir de l'enregistrement normalisé.
+ * Envoie une réservation (non payée) vers Supabase à partir de l'enregistrement normalisé.
  * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
  */
 async function pushBookingToSupabase(record, { clientId = null } = {}) {
@@ -364,7 +364,8 @@ async function pushBookingToSupabase(record, { clientId = null } = {}) {
       commission_amount: toAmount(record.commission_amount),
       partner_payout_amount: toAmount(record.partner_payout_amount),
       status,
-      payment_status: ['unpaid', 'paid', 'refunded'].includes(record.payment_status) ? record.payment_status : 'paid',
+      // « payé » n'est jamais écrit depuis le navigateur (voir supabase/functions/benin-beyond)
+      payment_status: 'unpaid',
       check_in: toDateOrNull(record.check_in),
       check_out: toDateOrNull(record.check_out),
       guests_count: parseInt(record.guests, 10) || 1,
@@ -404,35 +405,7 @@ async function pushBookingToSupabase(record, { clientId = null } = {}) {
       return { ok: false, error: error?.message || 'Réponse vide du serveur' };
     }
 
-    // Enregistrement de l'encaissement client (pas pour un blocage manuel du propriétaire)
-    if (!record.is_manual_block && corePayload.total_amount > 0 && corePayload.payment_status === 'paid') {
-      const methodLower = (record.payment_method || '').toLowerCase();
-      const cleanMethod = methodLower.includes('moov')
-        ? 'moov_money'
-        : (methodLower.includes('celtiis')
-          ? 'celtiis'
-          : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo'));
-
-      const { error: payError } = await supabase.from('payments').insert([{
-        booking_id: data.id,
-        transaction_ref: `TXN-${record.booking_ref}`,
-        customer_email: record.customer_email,
-        amount: corePayload.total_amount,
-        currency: 'XOF',
-        payment_method: cleanMethod,
-        payment_provider: 'nyole',
-        provider_tx_id: record.nyole_session_id || record.nyole_order_id || null,
-        status: 'completed',
-        paid_at: record.created_at,
-        metadata: {
-          nyole_session_id: record.nyole_session_id || null,
-          nyole_order_id: record.nyole_order_id || null,
-          nyole_provider: record.nyole_provider || null
-        }
-      }]);
-      if (payError) console.warn('[Bookings] Transaction de paiement non enregistrée :', payError.message);
-    }
-
+    // Les encaissements (table payments) sont enregistrés uniquement par la fonction serveur benin-beyond (route nyole-webhook)
     return { ok: true, id: data.id };
   } catch (err) {
     console.error('[Bookings] Erreur réseau envoi réservation :', err?.message || err);
@@ -500,7 +473,7 @@ export async function createBooking(bookingPayload) {
     partner_payout_amount: netAmount,
     status: bookingPayload.status || 'confirmed',
     payment_method: bookingPayload.payment_method || 'Mobile Money / Carte',
-    payment_status: bookingPayload.payment_status || 'paid',
+    payment_status: 'unpaid',
     created_at: new Date().toISOString()
   };
 
@@ -579,6 +552,15 @@ export function extractBookingDates(booking) {
   return null;
 }
 
+// Réservation créée avant la redirection Nyole mais jamais payée : libère les dates après ce délai
+const PENDING_PAYMENT_HOLD_MS = 60 * 60 * 1000;
+
+function isExpiredPendingBooking(b) {
+  if (b.status !== 'pending' || b.payment_status !== 'unpaid') return false;
+  const created = new Date(b.created_at).getTime();
+  return Number.isFinite(created) && Date.now() - created > PENDING_PAYMENT_HOLD_MS;
+}
+
 /**
  * Récupère toutes les réservations actives/confirmées pour un bien donné
  */
@@ -592,6 +574,7 @@ export async function getBookingsForListing(listingId) {
     const bRef = String(b.booking_ref || '');
     if (deletedIds.has(bId) || deletedIds.has(bRef)) return false;
     if (b.status === 'cancelled' || b.status === 'refunded') return false;
+    if (isExpiredPendingBooking(b)) return false;
 
     // Correspondance exacte ou partielle de l'identifiant du bien
     const target = String(listingId);
@@ -605,6 +588,37 @@ export async function getBookingsForListing(listingId) {
 
     return directMatch || itemsMatch;
   });
+}
+
+/**
+ * Périodes occupées de tous les biens, en un seul chargement (filtres de recherche du catalogue).
+ * @returns {Promise<Map<string, Array<{start: string, end: string}>>>} identifiant du bien -> périodes
+ */
+export async function getBookedRangesByListing() {
+  const allBookings = await getBookings();
+  const deletedIds = getDeletedBookingIds();
+  const ranges = new Map();
+
+  allBookings.forEach((b) => {
+    if (deletedIds.has(String(b.id || '')) || deletedIds.has(String(b.booking_ref || ''))) return;
+    if (b.status === 'cancelled' || b.status === 'refunded') return;
+    if (isExpiredPendingBooking(b)) return;
+    const range = extractBookingDates(b);
+    if (!range) return;
+
+    const ids = new Set();
+    if (b.listing_id) ids.add(String(b.listing_id));
+    (Array.isArray(b.items) ? b.items : []).forEach((it) => {
+      const id = it.listing_id || it.listingId || it.id;
+      if (id) ids.add(String(id));
+    });
+    ids.forEach((id) => {
+      if (!ranges.has(id)) ranges.set(id, []);
+      ranges.get(id).push(range);
+    });
+  });
+
+  return ranges;
 }
 
 /**
@@ -766,7 +780,7 @@ export async function blockListingDates({
     block_reason: reason || 'Réservation physique / Client direct',
     notes: notes || '',
     payment_method: 'Réservation physique directe (En main propre)',
-    payment_status: 'paid',
+    payment_status: 'unpaid',
     total_amount: 0,
     gross_amount: 0,
     commission_amount: 0,

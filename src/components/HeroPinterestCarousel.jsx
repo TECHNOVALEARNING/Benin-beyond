@@ -12,6 +12,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
+import { LanguageToggle } from './LanguageToggle';
+import { useLanguage } from '../context/LanguageContext';
 
 const DESTINATIONS = [
   {
@@ -57,6 +59,7 @@ const DESTINATIONS = [
 ];
 
 export function HeroPinterestCarousel() {
+  const { t } = useLanguage();
   const { user, role, logout } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [prevIndex, setPrevIndex] = useState(0);
@@ -161,16 +164,17 @@ export function HeroPinterestCarousel() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <LanguageToggle variant="light" />
             {/* Espace Propriétaire / Hôte */}
             {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
               <Link
                 to="/register"
                 className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md px-3.5 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
-                title="Devenir Hôte Bénin Beyond"
-                aria-label="Devenir Hôte"
+                title={t("Devenir Hôte Bénin Beyond")}
+                aria-label={t("Devenir Hôte")}
               >
                 <FontAwesomeIcon icon={faBuilding} className="h-3.5 w-3.5 text-accent transition-transform group-hover:scale-110" />
-                <span>Devenir Hôte</span>
+                <span>{t("Devenir Hôte")}</span>
               </Link>
             )}
 
@@ -187,28 +191,28 @@ export function HeroPinterestCarousel() {
                   className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-2 rounded-full bg-accent p-0 sm:px-4 sm:py-1.5 text-xs font-bold text-black shadow-lg hover:bg-white transition-all active:scale-95 group"
                   title={
                     role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
-                      ? 'Cockpit Admin'
+                      ? t("Cockpit Admin")
                       : role === 'partner' || user?.role === 'partner'
-                      ? 'Dashboard Hôte'
-                      : 'Mon Espace'
+                      ? t("Dashboard Hôte")
+                      : t("Mon Espace")
                   }
-                  aria-label="Accéder à votre espace"
+                  aria-label={t("Accéder à votre espace")}
                 >
                   <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
                   <span className="hidden sm:inline">
                     {role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
-                      ? 'Cockpit Admin'
+                      ? t("Cockpit Admin")
                       : role === 'partner' || user?.role === 'partner'
-                      ? 'Dashboard Hôte'
-                      : 'Mon Espace'}
+                      ? t("Dashboard Hôte")
+                      : t("Mon Espace")}
                   </span>
                 </Link>
 
                 <button
                   type="button"
                   onClick={() => logout()}
-                  title="Se déconnecter"
-                  aria-label="Se déconnecter"
+                  title={t("Se déconnecter")}
+                  aria-label={t("Se déconnecter")}
                   className="h-9 w-9 rounded-full bg-white/10 hover:bg-rose-500/20 text-white/80 hover:text-rose-300 border border-white/20 flex items-center justify-center transition-all active:scale-95"
                 >
                   <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
@@ -219,11 +223,11 @@ export function HeroPinterestCarousel() {
                 <Link
                   to="/login"
                   className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 backdrop-blur-md p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-white transition-all active:scale-95 shadow-sm group"
-                  title="Se connecter"
-                  aria-label="Connexion"
+                  title={t("Se connecter")}
+                  aria-label={t("Connexion")}
                 >
                   <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 text-white/80 transition-transform group-hover:scale-110" />
-                  <span className="hidden sm:inline">Connexion</span>
+                  <span className="hidden sm:inline">{t("Connexion")}</span>
                 </Link>
               </div>
             )}
@@ -234,21 +238,21 @@ export function HeroPinterestCarousel() {
       {/* 3. Main Hero Content (Clean, cinematic, without floating cards) */}
       <div className="relative z-20 mx-auto flex h-full max-w-8xl flex-col justify-end px-6 pb-16 pt-24 md:px-12 lg:pb-20">
         
-        <div className="w-full max-w-2xl text-white">
+        <div className="w-full max-w-xl text-white">
           <div className="overflow-visible">
-            <h1 className="font-heading text-4xl sm:text-5xl md:text-6xl font-extrabold uppercase tracking-normal text-white leading-tight drop-shadow-lg">
-              L'Hospitalité & la Mobilité d'Exception
+            <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-tight drop-shadow-lg">
+              {t("Séjours & mobilité d'exception")}
             </h1>
           </div>
 
-          <p className="mt-4 text-sm sm:text-base md:text-lg leading-relaxed text-white/90 max-w-xl drop-shadow">
-            Villas de prestige, résidences de standing et véhicules haut de gamme pour vivre un séjour inoubliable à travers le Bénin.
+          <p className="mt-3 text-sm sm:text-base text-white/85 drop-shadow">
+            {t("Villas, résidences et véhicules au Bénin.")}
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center gap-4">
             <Link to="/explore">
               <button className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white shadow-2xl hover:bg-primary/90 transition-all active:scale-95 border border-white/10">
-                <span>Explorer nos offres</span>
+                <span>{t("Explorer nos offres")}</span>
                 <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </button>
             </Link>
@@ -258,16 +262,16 @@ export function HeroPinterestCarousel() {
               <button
                 onClick={prevSlide}
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md hover:bg-white/20 transition-all active:scale-90 shadow-lg"
-                title="Photo précédente"
-                aria-label="Photo précédente"
+                title={t("Photo précédente")}
+                aria-label={t("Photo précédente")}
               >
                 <FontAwesomeIcon icon={faChevronLeft} className="h-4 w-4" />
               </button>
               <button
                 onClick={nextSlide}
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md hover:bg-white/20 transition-all active:scale-90 shadow-lg"
-                title="Photo suivante"
-                aria-label="Photo suivante"
+                title={t("Photo suivante")}
+                aria-label={t("Photo suivante")}
               >
                 <FontAwesomeIcon icon={faChevronRight} className="h-4 w-4" />
               </button>
@@ -301,7 +305,7 @@ export function HeroPinterestCarousel() {
                         ? 'w-6 bg-accent shadow'
                         : 'w-2 bg-white/40 hover:bg-white/70'
                     }`}
-                    aria-label={`Aller au slide ${idx + 1}`}
+                    aria-label={`${t('Aller au slide')} ${idx + 1}`}
                   />
                 );
               })}

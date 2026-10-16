@@ -1,5 +1,5 @@
 import React, { useEffect, Suspense } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { PublicHeader } from './components/PublicHeader';
@@ -19,6 +19,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthProvider } from './context/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { FrenchOnly } from './context/LanguageContext';
 import { SyncErrorToast } from './components/SyncErrorToast';
 
 // Code-splitting : les dashboards lourds sont chargés à la demande (lazy loading)
@@ -30,9 +31,6 @@ const PartnerDashboardPage = React.lazy(() =>
 );
 const ClientDashboardPage = React.lazy(() =>
   import('./pages/ClientDashboardPage').then(m => ({ default: m.ClientDashboardPage }))
-);
-const OwnerOnboardingPage = React.lazy(() =>
-  import('./pages/OwnerOnboardingPage').then(m => ({ default: m.OwnerOnboardingPage }))
 );
 
 // Fallback de chargement pendant le téléchargement d'un chunk
@@ -105,7 +103,7 @@ export function App() {
                   path="/dashboard/client"
                   element={
                     <ProtectedRoute allowedRoles={['client']}>
-                      <ClientDashboardPage />
+                      <FrenchOnly><ClientDashboardPage /></FrenchOnly>
                     </ProtectedRoute>
                   }
                 />
@@ -113,29 +111,29 @@ export function App() {
                   path="/dashboard/partner"
                   element={
                     <ProtectedRoute allowedRoles={['owner', 'partner']}>
-                      <PartnerDashboardPage />
+                      <FrenchOnly><PartnerDashboardPage /></FrenchOnly>
                     </ProtectedRoute>
                   }
                 />
-                {/* Onboarding & Vérification Propriétaires (KYC / KYB) */}
+                {/* Ancien onboarding propriétaires supprimé : redirection vers le tableau de bord */}
                 <Route
                   path="/onboarding/partner"
-                  element={<OwnerOnboardingPage />}
+                  element={<Navigate to="/dashboard/partner" replace />}
                 />
                 <Route
                   path="/partner/verification"
-                  element={<OwnerOnboardingPage />}
+                  element={<Navigate to="/dashboard/partner" replace />}
                 />
                 <Route
                   path="/partner/onboarding"
-                  element={<OwnerOnboardingPage />}
+                  element={<Navigate to="/dashboard/partner" replace />}
                 />
 
                 <Route
                   path="/admin"
                   element={
                     <ProtectedRoute allowedRoles={['admin', 'subadmin', 'superadmin']} redirectTo="/login">
-                      <AdminDashboardPage />
+                      <FrenchOnly><AdminDashboardPage /></FrenchOnly>
                     </ProtectedRoute>
                   }
                 />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faLayerGroup,
@@ -36,6 +36,11 @@ export function PacksPage() {
     if (filter === 'safari') return p.location?.toLowerCase().includes('pendjari');
     return true;
   });
+
+  // Aucun pack publié : la rubrique est masquée, on renvoie vers le catalogue
+  if (!loading && packs.length === 0) {
+    return <Navigate to="/explore" replace />;
+  }
 
   return (
     <div className="mx-auto max-w-8xl px-6 py-12 md:px-12 md:py-16">

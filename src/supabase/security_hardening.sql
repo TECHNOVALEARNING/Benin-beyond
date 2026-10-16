@@ -238,9 +238,10 @@ SELECT public._bb_drop_policies('bookings');
 CREATE POLICY "bookings_select" ON public.bookings
   FOR SELECT USING (true);
 
--- Le paiement invité (sans compte) doit pouvoir créer sa réservation
+-- Le navigateur ne crée que des réservations non payées : le statut « payé » est écrit
+-- uniquement par la fonction serveur benin-beyond (route nyole-webhook) (voir nyole_2_verrouillage.sql)
 CREATE POLICY "bookings_insert" ON public.bookings
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (public.is_admin() OR payment_status = 'unpaid');
 
 CREATE POLICY "bookings_update" ON public.bookings
   FOR UPDATE USING (public.is_staff() OR owner_id = auth.uid() OR client_id = auth.uid());
@@ -258,8 +259,9 @@ CREATE POLICY "payments_select" ON public.payments
     OR EXISTS (SELECT 1 FROM public.bookings b WHERE b.id = booking_id AND b.owner_id = auth.uid())
   );
 
+-- Paiements enregistrés uniquement par la fonction serveur benin-beyond (route nyole-webhook) (clé service_role)
 CREATE POLICY "payments_insert" ON public.payments
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (public.is_admin());
 
 CREATE POLICY "payments_update_admin" ON public.payments
   FOR UPDATE USING (public.is_admin());

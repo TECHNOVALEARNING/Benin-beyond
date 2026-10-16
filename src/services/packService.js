@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
 import { COMBINED_PACKS } from '../data/packsData';
 
@@ -77,4 +78,26 @@ export async function deletePack(packId) {
     }
   }
   return true;
+}
+
+// Résultat partagé entre les composants : la rubrique Packs n'apparaît que s'il existe au moins un pack
+let hasPacksPromise = null;
+
+export function useHasPacks() {
+  const [hasPacks, setHasPacks] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!hasPacksPromise) {
+      hasPacksPromise = getPacks()
+        .then((list) => Array.isArray(list) && list.length > 0)
+        .catch(() => false);
+    }
+    hasPacksPromise.then((value) => {
+      if (active) setHasPacks(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return hasPacks;
 }

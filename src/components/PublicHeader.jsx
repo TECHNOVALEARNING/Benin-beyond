@@ -9,10 +9,13 @@ import {
   faRightFromBracket
 } from '@fortawesome/free-solid-svg-icons';
 import { BrandLogo } from './BrandLogo';
+import { LanguageToggle } from './LanguageToggle';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export function PublicHeader() {
+  const { t } = useLanguage();
   const { user, role, logout } = useAuth();
   const { count } = useCart();
 
@@ -26,23 +29,24 @@ export function PublicHeader() {
 
         {/* Right CTA & Account */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <LanguageToggle />
           {(!user || (user.role !== 'owner' && user.role !== 'partner' && user.role !== 'admin')) && (
             <Link
               to="/register"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-foreground/20 hover:border-accent/50 px-3 py-1.5 text-xs font-semibold text-foreground/80 hover:text-accent transition-all active:scale-95 group"
-              title="Devenir Hôte Bénin Beyond"
-              aria-label="Devenir Hôte"
+              title={t("Devenir Hôte Bénin Beyond")}
+              aria-label={t("Devenir Hôte")}
             >
               <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent transition-transform group-hover:scale-110" />
-              <span>Devenir Hôte</span>
+              <span>{t("Devenir Hôte")}</span>
             </Link>
           )}
 
           <Link
             to="/panier"
             className="relative flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 text-foreground/80 hover:bg-muted/50 hover:text-foreground transition-all active:scale-95"
-            title="Consulter mon panier"
-            aria-label="Panier"
+            title={t("Consulter mon panier")}
+            aria-label={t("Panier")}
           >
             <FontAwesomeIcon icon={faBagShopping} className="h-3.5 w-3.5" />
             {count > 0 && (
@@ -65,28 +69,28 @@ export function PublicHeader() {
                 className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full bg-primary p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all active:scale-95 group"
                 title={
                   role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
-                    ? 'Cockpit Admin'
+                    ? t("Cockpit Admin")
                     : role === 'partner' || user?.role === 'partner'
-                    ? 'Dashboard Hôte'
-                    : 'Mon Espace'
+                    ? t("Dashboard Hôte")
+                    : t("Mon Espace")
                 }
-                aria-label="Accéder à votre espace"
+                aria-label={t("Accéder à votre espace")}
               >
                 <FontAwesomeIcon icon={faGaugeHigh} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
                 <span className="hidden sm:inline">
                   {role === 'admin' || role === 'subadmin' || user?.role === 'admin' || user?.role === 'subadmin'
-                    ? 'Cockpit Admin'
+                    ? t("Cockpit Admin")
                     : role === 'partner' || user?.role === 'partner'
-                    ? 'Dashboard Hôte'
-                    : 'Mon Espace'}
+                    ? t("Dashboard Hôte")
+                    : t("Mon Espace")}
                 </span>
               </Link>
 
               <button
                 type="button"
                 onClick={() => logout()}
-                title="Déconnexion"
-                aria-label="Déconnexion"
+                title={t("Déconnexion")}
+                aria-label={t("Déconnexion")}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors active:scale-95"
               >
                 <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
@@ -97,11 +101,11 @@ export function PublicHeader() {
               <Link
                 to="/login"
                 className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full border border-foreground/20 p-0 sm:px-3.5 sm:py-1.5 text-xs font-semibold text-foreground/80 hover:bg-muted/50 hover:text-foreground transition-all active:scale-95 group"
-                title="Se connecter à votre compte"
-                aria-label="Connexion"
+                title={t("Se connecter à votre compte")}
+                aria-label={t("Connexion")}
               >
                 <FontAwesomeIcon icon={faUser} className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
-                <span className="hidden sm:inline">Connexion</span>
+                <span className="hidden sm:inline">{t("Connexion")}</span>
               </Link>
             </div>
           )}

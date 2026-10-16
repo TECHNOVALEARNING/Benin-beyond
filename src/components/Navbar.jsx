@@ -10,6 +10,8 @@ import {
   faBagShopping
 } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
+import { useHasPacks } from '../services/packService';
+import { useLanguage } from '../context/LanguageContext';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Accueil', faIcon: faHouse },
@@ -21,7 +23,9 @@ const NAV_ITEMS = [
 ];
 
 export function Navbar() {
+  const { t } = useLanguage();
   const { count } = useCart();
+  const hasPacks = useHasPacks();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const currentType = searchParams.get('type');
@@ -29,7 +33,7 @@ export function Navbar() {
   return (
     <nav className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-2 w-[calc(100%-1rem)] max-w-xl transform-gpu will-change-transform pb-[env(safe-area-inset-bottom,0px)]">
       <div className="glass-bar flex items-center justify-between rounded-full border border-foreground/10 px-2 py-2 shadow-2xl shadow-foreground/10">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.isPack || hasPacks).map((item) => {
           const isActive = item.isPack
             ? location.pathname === '/packs' || location.pathname.startsWith('/pack/')
             : item.isDecouvertes
@@ -49,7 +53,7 @@ export function Navbar() {
               }`}
             >
               <FontAwesomeIcon icon={item.faIcon} className="h-4 w-4 mb-0.5" />
-              <span className="hidden sm:block">{item.label}</span>
+              <span className="hidden sm:block">{t(item.label)}</span>
               {item.cart && count > 0 && (
                 <span
                   key={count}
