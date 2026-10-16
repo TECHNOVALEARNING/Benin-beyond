@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, notifySyncError } from '../supabase/supabaseClient';
 
 const LOCAL_STORAGE_BOOKINGS_KEY = 'benin_beyond_bookings';
 const DELETED_BOOKINGS_KEY = 'benin_beyond_deleted_bookings';
@@ -94,6 +94,27 @@ async function insertRemoteBooking(corePayload, extendedPayload) {
   return supabase.from('bookings').insert([corePayload]).select().single();
 }
 
+let resyncInFlight = false;
+async function resyncPendingBookings(pending) {
+  if (resyncInFlight || !isSupabaseConfigured || !supabase) return;
+  resyncInFlight = true;
+  try {
+    for (const record of pending) {
+      const remote = await pushBookingToSupabase(record);
+      if (!remote.ok) continue;
+      try {
+        const list = JSON.parse(localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY) || '[]');
+        const updated = list.map((b) =>
+          b.booking_ref === record.booking_ref ? { ...b, id: remote.id, needs_sync: false, sync_error: null } : b
+        );
+        localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(updated));
+      } catch {}
+    }
+  } finally {
+    resyncInFlight = false;
+  }
+}
+
 export async function getBookings() {
   try {
     const deletedIds = getDeletedBookingIds();
@@ -101,6 +122,7 @@ export async function getBookings() {
     const localBookings = raw ? JSON.parse(raw) : [];
 
     let remoteBookings = [];
+    let remoteOk = false;
     if (isSupabaseConfigured && supabase) {
       try {
         const queryPromise = supabase
@@ -108,18 +130,32 @@ export async function getBookings() {
           .select('*')
           .order('created_at', { ascending: false });
 
-        const { data, error } = await withTimeout(queryPromise, 3000);
-        if (!error && data && data.length > 0) {
+        const { data, error } = await withTimeout(queryPromise, 6000);
+        if (!error && Array.isArray(data)) {
           remoteBookings = data;
+          remoteOk = true;
+        } else if (error) {
+          console.error('[Bookings] Lecture Supabase impossible, cache local utilisé :', error.message);
         }
       } catch (e) {
         console.warn('Booking fetch timeout/error, using local fallback:', e?.message || e);
       }
     }
 
+    // Supabase a répondu : il fait foi. Seules les réservations locales jamais envoyées sont conservées
+    // (et renvoyées en arrière-plan) ; le reste du cache local est écarté.
+    let baseLocal = localBookings;
+    if (remoteOk) {
+      const remoteRefs = new Set(remoteBookings.map((b) => b.booking_ref));
+      baseLocal = localBookings.filter((b) => b.needs_sync && !remoteRefs.has(b.booking_ref));
+      if (baseLocal.length > 0) {
+        resyncPendingBookings(baseLocal).catch(() => {});
+      }
+    }
+
     // Fusion sans doublons par booking_ref ou id
     const combinedMap = new Map();
-    [...localBookings, ...remoteBookings].forEach((b) => {
+    [...baseLocal, ...remoteBookings].forEach((b) => {
       const key = b.booking_ref || b.id;
       if (key) {
         const bId = String(b.id || '');
@@ -242,6 +278,7 @@ export async function updateBookingStatus(bookingId, newStatus) {
           .eq(column, bookingId);
         if (error) {
           console.error('[Bookings] Échec mise à jour du statut :', error.message);
+          notifySyncError('Le statut de la réservation n’a pas pu être enregistré sur le serveur.');
           return false;
         }
       } catch (err) {
@@ -283,7 +320,10 @@ export async function deleteBooking(bookingId, bookingRef = null) {
         // Les paiements liés sont supprimés en cascade (payments.booking_id ON DELETE CASCADE)
         if (isUuid(bookingId)) {
           const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
-          if (error) console.error('[Bookings] Échec suppression par id :', error.message);
+          if (error) {
+            console.error('[Bookings] Échec suppression par id :', error.message);
+            notifySyncError('La suppression n’a pas pu être enregistrée sur le serveur.');
+          }
         }
 
         const refToDelete = bookingRef || (!isUuid(bookingId) ? bookingId : null);
@@ -300,6 +340,103 @@ export async function deleteBooking(bookingId, bookingRef = null) {
   } catch (err) {
     console.error('Erreur suppression réservation:', err);
     return false;
+  }
+}
+
+/**
+ * Envoie une réservation (et son encaissement) vers Supabase à partir de l'enregistrement normalisé.
+ * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
+ */
+async function pushBookingToSupabase(record, { clientId = null } = {}) {
+  try {
+    const status = ALLOWED_BOOKING_STATUSES.includes(record.status) ? record.status : 'confirmed';
+    const corePayload = {
+      booking_ref: record.booking_ref,
+      customer_name: record.customer_name,
+      customer_email: record.customer_email,
+      customer_phone: record.customer_phone || '',
+      items: record.items || [],
+      protection_options: record.protection_options || {},
+      subtotal: toAmount(record.subtotal, record.total_amount),
+      options_total: toAmount(record.options_total),
+      total_amount: toAmount(record.total_amount),
+      commission_rate: record.commission_rate ?? 0.10,
+      commission_amount: toAmount(record.commission_amount),
+      partner_payout_amount: toAmount(record.partner_payout_amount),
+      status,
+      payment_status: ['unpaid', 'paid', 'refunded'].includes(record.payment_status) ? record.payment_status : 'paid',
+      check_in: toDateOrNull(record.check_in),
+      check_out: toDateOrNull(record.check_out),
+      guests_count: parseInt(record.guests, 10) || 1,
+      special_requests: record.notes || record.special_requests || null,
+      created_at: record.created_at
+    };
+
+    // Colonnes ajoutées par les migrations (bien, propriétaire, type de location)
+    const extendedPayload = {
+      rental_type: record.rental_type,
+      duration_days: record.duration_days,
+      rooms_count: record.rooms_count,
+      listing_id: record.listing_id ? String(record.listing_id) : null,
+      listing_title: record.listing_title,
+      listing_image: record.listing_image,
+      location: record.location,
+      dates: record.dates,
+      guests: record.guests,
+      owner_email: record.owner_email,
+      gross_amount: toAmount(record.gross_amount),
+      net_amount: toAmount(record.net_amount),
+      payment_method: record.payment_method
+    };
+    if (isUuid(record.owner_id)) extendedPayload.owner_id = record.owner_id;
+    if (isUuid(clientId)) extendedPayload.client_id = clientId;
+
+    let { data, error } = await insertRemoteBooking(corePayload, extendedPayload);
+
+    // Déjà envoyée lors d'un essai précédent (référence unique) : récupérer la ligne existante
+    if (error && error.code === '23505') {
+      const existing = await supabase.from('bookings').select('id').eq('booking_ref', record.booking_ref).maybeSingle();
+      if (existing.data?.id) return { ok: true, id: existing.data.id };
+    }
+
+    if (error || !data) {
+      console.error('[Bookings] Réservation non enregistrée dans Supabase :', error?.message);
+      return { ok: false, error: error?.message || 'Réponse vide du serveur' };
+    }
+
+    // Enregistrement de l'encaissement client (pas pour un blocage manuel du propriétaire)
+    if (!record.is_manual_block && corePayload.total_amount > 0 && corePayload.payment_status === 'paid') {
+      const methodLower = (record.payment_method || '').toLowerCase();
+      const cleanMethod = methodLower.includes('moov')
+        ? 'moov_money'
+        : (methodLower.includes('celtiis')
+          ? 'celtiis'
+          : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo'));
+
+      const { error: payError } = await supabase.from('payments').insert([{
+        booking_id: data.id,
+        transaction_ref: `TXN-${record.booking_ref}`,
+        customer_email: record.customer_email,
+        amount: corePayload.total_amount,
+        currency: 'XOF',
+        payment_method: cleanMethod,
+        payment_provider: 'nyole',
+        provider_tx_id: record.nyole_session_id || record.nyole_order_id || null,
+        status: 'completed',
+        paid_at: record.created_at,
+        metadata: {
+          nyole_session_id: record.nyole_session_id || null,
+          nyole_order_id: record.nyole_order_id || null,
+          nyole_provider: record.nyole_provider || null
+        }
+      }]);
+      if (payError) console.warn('[Bookings] Transaction de paiement non enregistrée :', payError.message);
+    }
+
+    return { ok: true, id: data.id };
+  } catch (err) {
+    console.error('[Bookings] Erreur réseau envoi réservation :', err?.message || err);
+    return { ok: false, error: err?.message || 'Erreur réseau' };
   }
 }
 
@@ -367,92 +504,15 @@ export async function createBooking(bookingPayload) {
     created_at: new Date().toISOString()
   };
 
-  // Insertion sécurisée dans Supabase (ne passe que les colonnes valides de la table bookings)
   if (isSupabaseConfigured && supabase) {
-    try {
-      const status = ALLOWED_BOOKING_STATUSES.includes(record.status) ? record.status : 'confirmed';
-      const corePayload = {
-        booking_ref: bookingRef,
-        customer_name: record.customer_name,
-        customer_email: record.customer_email,
-        customer_phone: record.customer_phone || '',
-        items: record.items,
-        protection_options: record.protection_options || {},
-        subtotal: record.subtotal,
-        options_total: record.options_total,
-        total_amount: record.total_amount,
-        commission_rate: record.commission_rate,
-        commission_amount: record.commission_amount,
-        partner_payout_amount: record.partner_payout_amount,
-        status,
-        payment_status: ['unpaid', 'paid', 'refunded'].includes(record.payment_status) ? record.payment_status : 'paid',
-        check_in: toDateOrNull(record.check_in),
-        check_out: toDateOrNull(record.check_out),
-        guests_count: parseInt(record.guests, 10) || 1,
-        special_requests: record.notes || record.special_requests || null,
-        created_at: record.created_at
-      };
-
-      // Colonnes ajoutées par les migrations (bien, propriétaire, type de location)
-      const extendedPayload = {
-        rental_type: rentalType,
-        duration_days: durationDays,
-        rooms_count: roomsCount,
-        listing_id: listingId ? String(listingId) : null,
-        listing_title: listingTitle,
-        listing_image: listingImage,
-        location,
-        dates,
-        guests,
-        owner_email: ownerEmail,
-        gross_amount: gross,
-        net_amount: netAmount,
-        payment_method: record.payment_method
-      };
-      if (isUuid(ownerId)) extendedPayload.owner_id = ownerId;
-      if (isUuid(bookingPayload.client_id)) extendedPayload.client_id = bookingPayload.client_id;
-
-      const { data, error } = await insertRemoteBooking(corePayload, extendedPayload);
-
-      if (!error && data) {
-        record.id = data.id;
-
-        // Enregistrement de l'encaissement client (pas pour un blocage manuel du propriétaire)
-        if (!isManualBlock && record.total_amount > 0) try {
-          const methodLower = (record.payment_method || '').toLowerCase();
-          const cleanMethod = methodLower.includes('moov')
-            ? 'moov_money'
-            : (methodLower.includes('celtiis')
-              ? 'celtiis'
-              : (methodLower.includes('card') || methodLower.includes('carte') ? 'card' : 'mtn_momo'));
-
-          const { error: payError } = await supabase.from('payments').insert([{
-            booking_id: data.id,
-            transaction_ref: `TXN-${bookingRef}`,
-            customer_email: record.customer_email,
-            amount: record.total_amount,
-            currency: 'XOF',
-            payment_method: cleanMethod,
-            payment_provider: 'nyole',
-            provider_tx_id: record.nyole_session_id || record.nyole_order_id || null,
-            status: 'completed',
-            paid_at: record.created_at,
-            metadata: {
-              nyole_session_id: record.nyole_session_id || null,
-              nyole_order_id: record.nyole_order_id || null,
-              nyole_provider: record.nyole_provider || null
-            }
-          }]);
-          if (payError) console.warn('[Bookings] Transaction de paiement non enregistrée :', payError.message);
-        } catch (payErr) {
-          console.warn('Notice insertion transaction payment:', payErr?.message || payErr);
-        }
-      } else if (error) {
-        console.error('[Bookings] Réservation non enregistrée dans Supabase :', error.message);
-        record.sync_error = error.message;
-      }
-    } catch (err) {
-      console.warn('Supabase booking insert error:', err);
+    const remote = await pushBookingToSupabase(record, { clientId: bookingPayload.client_id });
+    if (remote.ok) {
+      record.id = remote.id;
+    } else {
+      // Conservée localement et renvoyée automatiquement au prochain chargement
+      record.needs_sync = true;
+      record.sync_error = remote.error;
+      notifySyncError('La réservation n’a pas encore pu être enregistrée sur le serveur. Nouvel essai automatique en cours.');
     }
   }
 

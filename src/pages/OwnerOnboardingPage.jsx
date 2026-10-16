@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faShieldHalved,
@@ -66,11 +66,7 @@ export function OwnerOnboardingPage() {
     } catch (e) {
       console.warn('Erreur déconnexion:', e);
     }
-    try {
-      localStorage.removeItem('benin_beyond_user');
-      localStorage.removeItem('benin_beyond_partner_section');
-    } catch {}
-    window.location.href = '/login';
+    navigate('/login', { replace: true });
   };
 
   // Étape courante (1 à 7)
@@ -409,27 +405,6 @@ export function OwnerOnboardingPage() {
     }
   };
 
-  // Remplissage rapide de pièces types pour faciliter l'audit & la démonstration
-  const handleAttachDemoDocuments = () => {
-    const demoDocs = { ...uploadedDocuments };
-    requiredDocsData.allRules.forEach((rule) => {
-      if (!demoDocs[rule.id]) {
-        demoDocs[rule.id] = {
-          ruleId: rule.id,
-          name: `${rule.shortName || rule.name}_officiel.pdf`,
-          fileType: 'application/pdf',
-          fileSize: 254800,
-          fileUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-          uploadedAt: new Date().toISOString(),
-          status: 'pending'
-        };
-      }
-    });
-    setUploadedDocuments(demoDocs);
-    setSaveFeedback('Pièces types de démonstration chargées pour l\'audit !');
-    setTimeout(() => setSaveFeedback(''), 4000);
-  };
-
   const handlePrevStep = () => {
     setErrorMessage('');
     if (currentStep > 1) {
@@ -583,37 +558,9 @@ export function OwnerOnboardingPage() {
     );
   }
 
-  // Si l'utilisateur n'est pas connecté
-  if (!user && !loadingInitial && !isResolvingAuth) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-        <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-3xl bg-primary/10 text-primary mb-4">
-          <FontAwesomeIcon icon={faLock} className="h-8 w-8" />
-        </div>
-        <h2 className="font-heading text-2xl font-bold text-foreground">
-          Connexion requise
-        </h2>
-        <p className="text-xs text-foreground/70 mt-2 mb-6">
-          Veuillez vous connecter avec votre compte Propriétaire ou Partenaire pour accéder à l'espace de vérification officielle.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            to="/register?type=owner"
-            className="rounded-2xl bg-primary px-6 py-3 text-xs font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all inline-flex items-center gap-2"
-          >
-            Créer un compte Partenaire
-            <FontAwesomeIcon icon={faArrowRight} />
-          </Link>
-          <Link
-            to="/login"
-            state={{ from: { pathname: '/onboarding/partner' } }}
-            className="rounded-2xl border border-foreground/20 px-6 py-3 text-xs font-semibold text-foreground/80 hover:bg-muted/50 transition-all inline-flex items-center gap-2"
-          >
-            Se connecter
-          </Link>
-        </div>
-      </div>
-    );
+  // Non connecté (session expirée ou déconnexion) : retour direct à la connexion
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: { pathname: location.pathname } }} />;
   }
 
   // Définition des libellés des étapes
@@ -678,14 +625,8 @@ export function OwnerOnboardingPage() {
               </p>
             </div>
 
-            {/* Séparation Abonnement vs Vérification */}
+            {/* Statut de vérification */}
             <div className="flex flex-col items-start md:items-end gap-1.5 bg-card/80 p-3.5 rounded-2xl border border-foreground/10 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold text-foreground">
-                  Abonnement Propriétaire : <strong className="text-emerald-700 dark:text-emerald-400">Actif</strong>
-                </span>
-              </div>
               <div className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${
                   applicationStatus === 'approved'
@@ -890,18 +831,6 @@ export function OwnerOnboardingPage() {
                 </div>
               </div>
 
-              {/* Rappel important : Indépendance Abonnement / Vérification */}
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
-                <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <div className="text-xs text-foreground/80 space-y-1">
-                  <p className="font-bold text-foreground">
-                    Important — Principe de dissociation :
-                  </p>
-                  <p className="text-foreground/70 leading-relaxed">
-                    Le règlement de votre abonnement partenaire active vos accès outils de gestion, mais <strong>ne vaut pas certification automatique</strong> de vos biens. Pour protéger nos voyageurs, la mise en ligne publique de vos annonces s’effectue dès approbation de votre dossier.
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1354,15 +1283,6 @@ export function OwnerOnboardingPage() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAttachDemoDocuments}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary text-[11px] font-bold hover:bg-primary/20 transition-all shrink-0 self-start sm:self-auto shadow-xs"
-                  title="Charger des spécimens types certifiés pour accélérer l'évaluation"
-                >
-                  <FontAwesomeIcon icon={faFileContract} />
-                  <span>Insérer pièces spécimens (Audit / Démo)</span>
-                </button>
               </div>
 
               {/* Information de sécurité */}
@@ -1586,10 +1506,6 @@ export function OwnerOnboardingPage() {
 
                   {/* Carte d'information sur les statuts */}
                   <div className="max-w-md mx-auto rounded-2xl border border-foreground/10 bg-muted/20 p-4 text-left space-y-2 text-xs">
-                    <div className="flex items-center justify-between border-b border-foreground/10 pb-2">
-                      <span className="text-foreground/60">Abonnement Propriétaire :</span>
-                      <span className="font-bold text-emerald-700 dark:text-emerald-400">✓ Actif</span>
-                    </div>
                     <div className="flex items-center justify-between border-b border-foreground/10 pb-2">
                       <span className="text-foreground/60">Vérification KYC / KYB :</span>
                       <span className="font-bold text-amber-600">⏳ En cours d'analyse</span>

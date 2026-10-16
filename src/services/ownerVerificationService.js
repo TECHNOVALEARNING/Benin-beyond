@@ -373,6 +373,32 @@ export function getLocalVerificationApplication(userId, userEmail = '') {
 /**
  * Récupère la demande de vérification d'un utilisateur par son ID ou son email
  */
+// Un dossier soumis ne doit jamais être masqué par un ancien brouillon
+const APPLICATION_STATUS_RANK = {
+  draft: 0,
+  additional_info_required: 1,
+  submitted: 2,
+  under_review: 3,
+  rejected: 3,
+  approved: 4
+};
+
+function pickMostAdvancedApplication(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const rankA = APPLICATION_STATUS_RANK[a.status] ?? 0;
+  const rankB = APPLICATION_STATUS_RANK[b.status] ?? 0;
+  if (rankA !== rankB) {
+    // Une décision de l'administration (en base) prime sur une copie locale plus ancienne
+    const timeA = new Date(a.updated_at || 0).getTime();
+    const timeB = new Date(b.updated_at || 0).getTime();
+    if (a.status === 'additional_info_required' && timeA >= timeB) return a;
+    if (b.status === 'additional_info_required' && timeB >= timeA) return b;
+    return rankA > rankB ? a : b;
+  }
+  return new Date(a.updated_at || 0) >= new Date(b.updated_at || 0) ? a : b;
+}
+
 export async function getVerificationApplication(userId, userEmail = '') {
   const cleanEmail = (userEmail || '').trim().toLowerCase();
   let application = null;
@@ -395,17 +421,15 @@ export async function getVerificationApplication(userId, userEmail = '') {
     }
   }
 
-  // 2. Repli vers le stockage local si non trouvé ou Supabase hors-ligne
-  if (!application) {
-    const localList = getLocalApplications();
-    application = localList.find((app) => {
-      const matchId = userId && String(app.user_id) === String(userId);
-      const matchEmail = cleanEmail && app.owner_email && app.owner_email.toLowerCase() === cleanEmail;
-      return matchId || matchEmail;
-    }) || null;
-  }
+  // 2. Copie locale : peut être plus récente que la base (soumission hors-ligne ou refusée par RLS)
+  const localList = getLocalApplications();
+  const localApp = localList.find((app) => {
+    const matchId = userId && String(app.user_id) === String(userId);
+    const matchEmail = cleanEmail && app.owner_email && app.owner_email.toLowerCase() === cleanEmail;
+    return matchId || matchEmail;
+  }) || null;
 
-  return application;
+  return pickMostAdvancedApplication(application, localApp);
 }
 
 /**
@@ -562,6 +586,7 @@ export async function resubmitCorrectedDocuments(userId, userEmail, updatedDocs 
  */
 export async function getAllVerificationApplications(filters = {}) {
   let list = [];
+  let remoteOk = false;
 
   // 1. Supabase
   if (isSupabaseConfigured && supabase) {
@@ -571,14 +596,17 @@ export async function getAllVerificationApplications(filters = {}) {
         .select('*')
         .order('updated_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         list = data;
+        remoteOk = true;
+      } else if (error) {
+        console.error('[Vérifications] Lecture Supabase impossible :', error.message);
       }
     } catch {}
   }
 
-  // 2. Fusion avec le cache local
-  const localList = getLocalApplications();
+  // 2. Cache local : uniquement hors-ligne (l'administration ne voit que les dossiers réellement en base)
+  const localList = remoteOk ? [] : getLocalApplications();
   const map = new Map();
 
   // Priorité aux données les plus fraîches

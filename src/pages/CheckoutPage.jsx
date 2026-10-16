@@ -46,6 +46,8 @@ const PROTECTION_OPTIONS = [
 ];
 
 
+const processedNyoleCallbacks = new Set();
+
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
@@ -85,6 +87,11 @@ export function CheckoutPage() {
   // Handle Nyole Return Callback (?payment_status=success / cancelled)
   useEffect(() => {
     const handleNyoleCallback = async () => {
+      // Un même retour de paiement ne doit être traité qu'une fois (StrictMode, double rendu, F5)
+      const callbackKey = window.location.search;
+      if (processedNyoleCallbacks.has(callbackKey)) return;
+      processedNyoleCallbacks.add(callbackKey);
+
       const searchParams = new URLSearchParams(window.location.search);
       const paymentStatus = searchParams.get('payment_status');
       const rawSessionId = searchParams.get('session_id');
@@ -159,8 +166,11 @@ export function CheckoutPage() {
             return;
           }
 
-          // Dans tous les autres cas (succès direct OU retour légitime de la passerelle de paiement) :
-          // L'utilisateur a complété la procédure sur la passerelle Nyole avec succès.
+          // Seul un statut payé renvoyé par Nyole confirme la réservation. Sinon (en attente,
+          // serveur injoignable) elle est enregistrée "en attente / non payée" pour vérification.
+          const paymentConfirmed = Boolean(statusRes.success && statusRes.paid);
+          const bookingStatus = paymentConfirmed ? 'confirmed' : 'pending';
+          const bookingPaymentStatus = paymentConfirmed ? 'paid' : 'unpaid';
           const providerName = statusRes.data?.provider || 'Mobile Money / Carte';
           let payloadToConfirm = pending?.payload;
 
@@ -200,8 +210,8 @@ export function CheckoutPage() {
           if (payloadToConfirm) {
             const enrichedPayload = {
               ...payloadToConfirm,
-              status: 'confirmed',
-              payment_status: 'paid',
+              status: bookingStatus,
+              payment_status: bookingPaymentStatus,
               payment_method: `Nyole (${providerName})`,
               nyole_session_id: sessionId,
               nyole_order_id: statusRes.data?.order_id || null,
@@ -209,7 +219,12 @@ export function CheckoutPage() {
             };
 
             const createRes = await createBooking(enrichedPayload);
-            if (createRes.success) {
+            if (createRes.success && !paymentConfirmed) {
+              clearPendingCheckout();
+              setPaymentVerificationError(
+                `Votre paiement n'a pas encore été confirmé par Nyole. La réservation ${createRes.booking.booking_ref} est enregistrée en attente et sera validée dès réception du paiement. Si vous avez été débité, contactez le support avec cette référence.`
+              );
+            } else if (createRes.success) {
               setConfirmedBooking(createRes.booking);
               clearCart();
               clearPendingCheckout();
@@ -248,15 +263,20 @@ export function CheckoutPage() {
                 customer_name: user?.name || customer.name || 'Voyageur Bénin Beyond',
                 customer_email: (user?.email || customer.email || 'voyageur@beninbeyond.com').trim().toLowerCase(),
                 customer_phone: user?.phone || customer.phone || '',
-                status: 'confirmed',
-                payment_status: 'paid',
+                status: bookingStatus,
+                payment_status: bookingPaymentStatus,
                 payment_method: `Nyole (${providerName})`,
                 nyole_session_id: sessionId,
                 items: [],
                 total_amount: Number(statusRes.data?.amount || finalTotal || 0)
               };
               const createRes = await createBooking(directBooking);
-              if (createRes.success) {
+              if (createRes.success && !paymentConfirmed) {
+                clearPendingCheckout();
+                setPaymentVerificationError(
+                  `Votre paiement n'a pas encore été confirmé par Nyole. La réservation ${createRes.booking.booking_ref} est enregistrée en attente. Si vous avez été débité, contactez le support avec cette référence.`
+                );
+              } else if (createRes.success) {
                 setConfirmedBooking(createRes.booking);
                 clearCart();
                 clearPendingCheckout();
@@ -267,18 +287,20 @@ export function CheckoutPage() {
           console.error('[Nyole Callback Error]:', err);
           const pending = getPendingCheckout();
           if (pending?.payload) {
+            // Paiement non vérifiable : on garde la réservation, mais en attente de confirmation
             const enriched = {
               ...pending.payload,
-              status: 'confirmed',
-              payment_status: 'paid',
-              payment_method: 'Nyole Pay',
+              status: 'pending',
+              payment_status: 'unpaid',
+              payment_method: 'Nyole Pay (à vérifier)',
               nyole_session_id: sessionId
             };
             const fallbackCreate = await createBooking(enriched);
             if (fallbackCreate.success) {
-              setConfirmedBooking(fallbackCreate.booking);
-              clearCart();
               clearPendingCheckout();
+              setPaymentVerificationError(
+                `Le serveur de paiement Nyole est momentanément injoignable. La réservation ${fallbackCreate.booking.booking_ref} est enregistrée en attente de vérification. Si vous avez été débité, contactez le support avec cette référence.`
+              );
               return;
             }
           }

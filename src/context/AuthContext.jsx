@@ -41,8 +41,9 @@ export function resolveUserRole(email, rawRole = null) {
     return 'admin';
   }
 
-  // 1. PRIORITÉ ABSOLUE : Vérification d'un override explicite par le Super-Administrateur
-  try {
+  // 1. Mode local uniquement : override explicite enregistré par le Super-Administrateur.
+  //    Avec Supabase, le rôle provient exclusivement de la table profiles.
+  if (!isSupabaseConfigured) try {
     const overridesRaw =
       localStorage.getItem('benin_beyond_user_admin_overrides') ||
       localStorage.getItem('benin_beyond_admin_user_overrides');
@@ -62,8 +63,8 @@ export function resolveUserRole(email, rawRole = null) {
     return 'owner';
   }
 
-  // 4. Si l'utilisateur est déjà enregistré localement avec un rôle
-  try {
+  // 4. Rôle mémorisé localement : seulement si aucun rôle n'a été fourni par le serveur
+  if (!rawRole || !isSupabaseConfigured) try {
     const raw = localStorage.getItem(REGISTERED_USERS_KEY);
     const list = raw ? JSON.parse(raw) : [];
     const found = list.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
@@ -82,6 +83,69 @@ export function resolveUserRole(email, rawRole = null) {
 
   return rawRole === 'admin' ? 'admin' : (rawRole === 'subadmin' ? 'subadmin' : (rawRole || 'client'));
 }
+
+/**
+ * Destination après connexion selon le rôle.
+ * Un propriétaire va toujours sur son tableau de bord : c'est ce dernier qui renvoie
+ * vers l'onboarding uniquement si le dossier de vérification n'a jamais été soumis.
+ */
+export function getPostLoginPath(user) {
+  if (!user) return '/login';
+  if (user.role === 'admin' || user.role === 'subadmin' || user.role === 'superadmin') return '/admin';
+  if (user.role === 'owner' || user.role === 'partner') return '/dashboard/partner';
+  return '/dashboard/client';
+}
+
+// Clés temporaires du parcours OAuth / inscription, à purger à la déconnexion
+const TRANSIENT_AUTH_KEYS = [
+  'benin_beyond_oauth_in_progress',
+  'benin_beyond_oauth_redirect_path',
+  'benin_beyond_oauth_intended_role',
+  'benin_beyond_oauth_intended_company',
+  'benin_beyond_partner_section'
+];
+
+/**
+ * Empreinte SHA-256 d'un mot de passe (mode local hors Supabase uniquement).
+ * Aucun mot de passe n'est jamais conservé en clair dans le navigateur.
+ */
+async function hashPassword(email, password) {
+  const input = `benin-beyond:${(email || '').trim().toLowerCase()}:${password || ''}`;
+  if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Rôles qui ne peuvent jamais être attribués par une session automatique (paiement invité)
+const PRIVILEGED_ROLES = ['admin', 'subadmin', 'superadmin', 'owner', 'partner'];
+
+/**
+ * Purge des anciens mots de passe stockés en clair (versions précédentes de l'application).
+ */
+function purgeStoredPasswords() {
+  try {
+    localStorage.removeItem('benin_beyond_admin_custom_password');
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.some((u) => u && 'password' in u)) {
+        localStorage.setItem(
+          REGISTERED_USERS_KEY,
+          JSON.stringify(list.map(({ password, ...rest }) => rest))
+        );
+      }
+    }
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current) {
+      const parsed = JSON.parse(current);
+      if (parsed && 'password' in parsed) {
+        delete parsed.password;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch {}
+}
+purgeStoredPasswords();
 
 function getRegisteredUsers() {
   try {
@@ -104,9 +168,11 @@ function saveRegisteredUser(newUser) {
     const cleanEmail = (newUser.email || '').trim().toLowerCase();
     const existing = list.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
     const sanitizedRole = resolveUserRole(cleanEmail, newUser.role || existing?.role);
+    const { password: _plain, ...newUserWithoutPassword } = newUser;
+    const { password: _oldPlain, ...existingWithoutPassword } = existing || {};
     const sanitizedUser = {
-      ...(existing || {}),
-      ...newUser,
+      ...existingWithoutPassword,
+      ...newUserWithoutPassword,
       email: cleanEmail,
       role: sanitizedRole,
       name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : (newUser.name || existing?.name || cleanEmail.split('@')[0])
@@ -142,6 +208,11 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // Retour du lien "Mot de passe oublié" : l'utilisateur doit choisir un nouveau mot de passe
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
+    () => typeof window !== 'undefined' && (window.location.hash || '').includes('type=recovery')
+  );
+
   const [isDemoMode, setIsDemoMode] = useState(() => {
     return Boolean(user && user.email?.includes('beninbeyond.bj'));
   });
@@ -171,13 +242,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (user) {
       const cleanEmail = (user.email || '').trim().toLowerCase();
+      const { password: _ignored, password_hash: _ignoredHash, ...safeUser } = user;
       const sanitizedUser = {
-        ...user,
+        ...safeUser,
         email: cleanEmail,
         role: resolveUserRole(cleanEmail, user.role),
         name: cleanEmail === SUPER_ADMIN_EMAIL ? 'Isidore Toudonou' : user.name
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedUser));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedUser));
+      } catch (e) {
+        console.warn('[Auth] Stockage local saturé ou indisponible :', e?.message || e);
+      }
       setIsDemoMode(Boolean(cleanEmail.includes('beninbeyond.bj')));
     } else {
       localStorage.removeItem(STORAGE_KEY);
@@ -203,10 +279,20 @@ export function AuthProvider({ children }) {
     });
 
     // Écouteur d'évènements Auth Supabase (ex: retour de Google OAuth)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        await syncSupabaseSession(session.user);
-      } else if (event === 'SIGNED_OUT') {
+        // Différé : un appel Supabase attendu dans ce callback bloque le verrou d'authentification
+        setTimeout(() => {
+          syncSupabaseSession(session.user)
+            .catch((err) => console.warn('[Auth] Synchronisation session :', err?.message || err))
+            .finally(() => setLoadingAuth(false));
+        }, 0);
+        return;
+      }
+      if (event === 'SIGNED_OUT') {
         setUser(null);
       }
       setLoadingAuth(false);
@@ -397,6 +483,7 @@ export function AuthProvider({ children }) {
     const isAdmin = cleanEmail === SUPER_ADMIN_EMAIL || cleanEmail === 'admin@beninbeyond.com' || cleanEmail === 'admin@beninbeyond.bj';
 
     // 1. Authentification officielle avec Supabase Auth si configuré
+    let supabaseAuthServerError = null;
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -408,33 +495,55 @@ export function AuthProvider({ children }) {
           const syncedUser = await syncSupabaseSession(data.user);
           return { success: true, user: syncedUser };
         }
+        if (error && (error.status >= 500 || /database error/i.test(error.message || ''))) {
+          console.error('[Auth] Erreur serveur Supabase Auth :', error.message);
+          supabaseAuthServerError = error.message;
+        }
       } catch (err) {
         console.warn('Supabase signInWithPassword:', err);
       }
-    }
 
-    // Les comptes à privilèges (admin / assistant) doivent obligatoirement passer par Supabase Auth
-    // lorsque le backend est configuré : aucun mot de passe local ou "maître" n'est accepté.
-    const privilegedLoginRefused = {
-      success: false,
-      isWrongPassword: true,
-      error: "Identifiants administrateur invalides. Connectez-vous avec Google ou utilisez 'Mot de passe oublié' pour définir votre mot de passe."
-    };
+      // Backend configuré : Supabase Auth est la seule source de vérité, aucun mot de passe local.
+      if (supabaseAuthServerError) {
+        return {
+          success: false,
+          error: "Le serveur d'authentification ne parvient pas à lire ce compte. Exécutez le script src/supabase/fix_admin_auth_account.sql dans Supabase, puis réessayez."
+        };
+      }
 
-    // 2. Vérification de l'existence du compte dans Supabase (table profiles)
-    let supabaseProfile = null;
-    if (isSupabaseConfigured && supabase) {
+      let knownProfile = null;
       try {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('id, email, full_name, role, is_active, verified, company_name')
+          .select('id, is_active')
           .ilike('email', cleanEmail)
           .maybeSingle();
-        supabaseProfile = prof;
-      } catch (err) {
-        console.warn('Erreur vérification profil Supabase:', err);
+        knownProfile = prof;
+      } catch {}
+
+      if (knownProfile?.is_active === false) {
+        return { success: false, error: "Ce compte a été suspendu par l'administration. Veuillez contacter la direction." };
       }
+      if (!knownProfile && !isAdmin) {
+        return {
+          success: false,
+          isUnknownAccount: true,
+          error: "Aucun compte n'est associé à cette adresse e-mail. Veuillez vérifier votre saisie ou créer un compte."
+        };
+      }
+      return {
+        success: false,
+        isWrongPassword: true,
+        error: "Mot de passe incorrect. Si votre compte a été créé avec Google, utilisez « Continuer avec Google », sinon « Mot de passe oublié »."
+      };
     }
+
+    // ---- Mode local (Supabase non configuré) : comparaison d'empreintes, jamais de mot de passe en clair
+    const passwordHash = await hashPassword(cleanEmail, cleanPassword);
+
+    // Les comptes à privilèges (admin / assistant) doivent obligatoirement passer par Supabase Auth
+    // lorsque le backend est configuré : aucun mot de passe local ou "maître" n'est accepté.
+    const supabaseProfile = null;
 
     // Récupération des overrides Super-Admin prioritaires
     let userOverride = null;
@@ -450,7 +559,7 @@ export function AuthProvider({ children }) {
 
     const registeredList = getRegisteredUsers();
     let savedUser = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-    const demoMatch = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === cleanEmail);
+    const demoMatch = Object.values(DEMO_USERS).find((u) => (u.email || '').toLowerCase() === cleanEmail);
 
     // 3. VÉRIFICATION STRICTE DE L'EXISTENCE DU COMPTE
     const emailExists = Boolean(supabaseProfile || savedUser || isAdmin || demoMatch || isPromotedSubAdmin || userOverride);
@@ -465,29 +574,14 @@ export function AuthProvider({ children }) {
 
     // 4. VÉRIFICATION DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR (mode local hors Supabase uniquement)
     if (isAdmin) {
-      if (isSupabaseConfigured) return privilegedLoginRefused;
-
-      const customAdminPassword = localStorage.getItem('benin_beyond_admin_custom_password');
-      const validAdminPasswords = ['BeninBeyond2025!'];
-
-      const matchesCustom = customAdminPassword && cleanPassword === customAdminPassword;
-      const matchesSavedPassword = savedUser?.password && savedUser.password === cleanPassword;
-      const matchesMasterPassword = validAdminPasswords.includes(cleanPassword);
-
-      // Si le Super-Admin n'avait pas encore défini de mot de passe personnalisé spécifique,
-      // on enregistre le mot de passe qu'il saisit maintenant comme son mot de passe officiel
-      if (!customAdminPassword && !savedUser?.password) {
-        localStorage.setItem('benin_beyond_admin_custom_password', cleanPassword);
-      } else if (!matchesCustom && !matchesSavedPassword && !matchesMasterPassword) {
+      const matchesSavedPassword = Boolean(savedUser?.password_hash && savedUser.password_hash === passwordHash);
+      if (!matchesSavedPassword && cleanPassword !== 'BeninBeyond2025!') {
         return {
           success: false,
           isWrongPassword: true,
           error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou cliquer sur 'Mot de passe oublié' pour rétablir votre mot de passe."
         };
       }
-
-      // Mot de passe validé avec succès
-      localStorage.setItem('benin_beyond_admin_custom_password', cleanPassword);
 
       const adminUser = {
         ...DEMO_USERS.admin,
@@ -499,7 +593,7 @@ export function AuthProvider({ children }) {
         role: 'admin',
         verified: true,
         is_active: true,
-        password: cleanPassword
+        password_hash: savedUser?.password_hash || passwordHash
       };
       saveRegisteredUser(adminUser);
       setUser(adminUser);
@@ -508,15 +602,8 @@ export function AuthProvider({ children }) {
 
     // 5. GESTION STRICTE DES COMPTES PROMUS OU CONFIGURÉS EN ASSISTANT ADMIN (SUB-ADMIN)
     if (isPromotedSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
-      if (isSupabaseConfigured) return privilegedLoginRefused;
-
-      const validSubAdminPasswords = ['BeninBeyond2025!'];
-      const matchesSaved = savedUser?.password && savedUser.password === cleanPassword;
-      const matchesMaster = validSubAdminPasswords.includes(cleanPassword);
-      // Si l'assistant n'a pas encore de mot de passe défini, accepter le premier mot de passe saisi
-      const isFirstInit = !savedUser?.password;
-
-      if (!isFirstInit && !matchesSaved && !matchesMaster) {
+      const matchesSaved = Boolean(savedUser?.password_hash && savedUser.password_hash === passwordHash);
+      if (!matchesSaved && cleanPassword !== 'BeninBeyond2025!') {
         return {
           success: false,
           isWrongPassword: true,
@@ -535,7 +622,7 @@ export function AuthProvider({ children }) {
         role: 'subadmin',
         verified: true,
         is_active: true,
-        password: cleanPassword
+        password_hash: savedUser?.password_hash || passwordHash
       };
       saveRegisteredUser(subAdminUser);
       setUser(subAdminUser);
@@ -552,10 +639,7 @@ export function AuthProvider({ children }) {
           error: "Mot de passe incorrect pour cette adresse e-mail. Veuillez vérifier votre saisie ou réinitialiser votre mot de passe."
         };
       }
-      const demoUser = {
-        ...demoMatch,
-        password: cleanPassword
-      };
+      const demoUser = { ...demoMatch };
       saveRegisteredUser(demoUser);
       setUser(demoUser);
       return { success: true, user: demoUser };
@@ -572,7 +656,7 @@ export function AuthProvider({ children }) {
       }
 
       // Compte créé à l'origine avec Google OAuth (sans mot de passe local défini)
-      if (savedUser?.provider === 'google' && !savedUser?.password) {
+      if (savedUser?.provider === 'google' && !savedUser?.password_hash) {
         return {
           success: false,
           isGoogleAccount: true,
@@ -581,8 +665,8 @@ export function AuthProvider({ children }) {
       }
 
       // Vérification du mot de passe pour les comptes avec mot de passe
-      if (savedUser?.password) {
-        if (savedUser.password !== cleanPassword) {
+      if (savedUser?.password_hash) {
+        if (savedUser.password_hash !== passwordHash) {
           return {
             success: false,
             isWrongPassword: true,
@@ -699,7 +783,7 @@ export function AuthProvider({ children }) {
     // 1. Vérification d'existence préalable (anti-doublon)
     const registeredList = getRegisteredUsers();
     const existing = registeredList.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
-    if (existing && (existing.password || existing.provider === 'google')) {
+    if (!isSupabaseConfigured && existing && (existing.password_hash || existing.provider === 'google')) {
       return {
         success: false,
         error: "Un compte est déjà associé à cette adresse e-mail. Veuillez vous connecter."
@@ -726,7 +810,7 @@ export function AuthProvider({ children }) {
       kyc_doc_url: kycDocUrl,
       kyc_status: assignedRole === 'admin' ? 'verified' : (assignedRole === 'owner' ? 'pending' : 'verified'),
       verified: assignedRole === 'admin',
-      password: password,
+      password_hash: isSupabaseConfigured ? undefined : await hashPassword(cleanEmail, password),
       provider: 'email',
       avatar: assignedRole === 'admin'
         ? DEMO_USERS.admin.avatar
@@ -734,10 +818,15 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString()
     };
 
-    saveRegisteredUser(pendingUser);
-    setUser(pendingUser);
+    if (!isSupabaseConfigured) {
+      saveRegisteredUser(pendingUser);
+      setUser(pendingUser);
+    }
 
     // 2. Si Supabase est actif, créer le compte dans Supabase Auth
+    if (isSupabaseConfigured && supabase && !password) {
+      return { success: false, error: 'Veuillez choisir un mot de passe (6 caractères minimum).' };
+    }
     if (isSupabaseConfigured && supabase && password) {
       try {
         const { data, error } = await supabase.auth.signUp({
@@ -768,6 +857,7 @@ export function AuthProvider({ children }) {
             };
           }
           console.warn('Supabase signUp warning:', error);
+          return { success: false, error: `Inscription impossible : ${error.message}` };
         }
 
         if (!error && data?.user) {
@@ -793,8 +883,10 @@ export function AuthProvider({ children }) {
           localStorage.removeItem('benin_beyond_registration_role');
           return { success: true, user: registeredUser };
         }
+        return { success: false, error: "L'inscription n'a pas pu être finalisée. Veuillez réessayer." };
       } catch (err) {
-        console.warn('Supabase signUp fallback:', err);
+        console.warn('Supabase signUp error:', err);
+        return { success: false, error: 'Le serveur est momentanément injoignable. Veuillez réessayer.' };
       } finally {
         localStorage.removeItem('benin_beyond_registration_role');
       }
@@ -816,25 +908,21 @@ export function AuthProvider({ children }) {
     // Définition directe d'un nouveau mot de passe (notamment pour le Super-Admin)
     if (newPassword && newPassword.trim()) {
       const trimmedPass = newPassword.trim();
-      if (cleanEmail === SUPER_ADMIN_EMAIL) {
-        localStorage.setItem('benin_beyond_admin_custom_password', trimmedPass);
-      }
-
-      const regList = getRegisteredUsers();
-      const updatedReg = regList.map((u) => {
-        if (u.email?.toLowerCase().trim() === cleanEmail) {
-          return { ...u, password: trimmedPass };
-        }
-        return u;
-      });
-      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updatedReg));
 
       if (isSupabaseConfigured && supabase) {
+        // Nécessite une session active (lien de réinitialisation reçu par e-mail)
+        const { error } = await supabase.auth.updateUser({ password: trimmedPass });
+        if (error) return { success: false, error: error.message };
+      } else {
+        const hash = await hashPassword(cleanEmail, trimmedPass);
+        const regList = getRegisteredUsers();
+        const updatedReg = regList.map((u) =>
+          u.email?.toLowerCase().trim() === cleanEmail ? { ...u, password_hash: hash } : u
+        );
         try {
-          const { error } = await supabase.auth.updateUser({ password: trimmedPass });
-          if (error) console.warn('[Auth] Mot de passe Supabase non mis à jour :', error.message);
-        } catch (err) {
-          console.warn('[Auth] Mot de passe Supabase non mis à jour :', err?.message || err);
+          localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updatedReg));
+        } catch (e) {
+          console.warn('[Auth] Stockage local saturé ou indisponible :', e?.message || e);
         }
       }
 
@@ -879,18 +967,29 @@ export function AuthProvider({ children }) {
   /**
    * Modifier directement le mot de passe Super-Admin
    */
-  const updateSuperAdminPassword = (newPassword) => {
+  const updateSuperAdminPassword = async (newPassword) => {
     if (!newPassword || !newPassword.trim()) return false;
     const trimmed = newPassword.trim();
-    localStorage.setItem('benin_beyond_admin_custom_password', trimmed);
-    const regList = getRegisteredUsers();
-    const updated = regList.map((u) => {
-      if (u.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-        return { ...u, password: trimmed };
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.updateUser({ password: trimmed });
+      if (error) {
+        console.error('[Auth] Mot de passe non modifié :', error.message);
+        return false;
       }
-      return u;
-    });
-    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updated));
+      return true;
+    }
+
+    const hash = await hashPassword(SUPER_ADMIN_EMAIL, trimmed);
+    const regList = getRegisteredUsers();
+    const updated = regList.map((u) =>
+      u.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL ? { ...u, password_hash: hash } : u
+    );
+    try {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('[Auth] Stockage local saturé ou indisponible :', e?.message || e);
+    }
     return true;
   };
 
@@ -902,7 +1001,12 @@ export function AuthProvider({ children }) {
     if (!cleanEmail) return null;
 
     const registeredList = getRegisteredUsers();
-    let existing = registeredList.find((u) => u.email.toLowerCase() === cleanEmail);
+    let existing = registeredList.find((u) => (u.email || '').toLowerCase() === cleanEmail);
+
+    // Une adresse d'administrateur ou de partenaire ne peut jamais ouvrir de session sans mot de passe
+    if (PRIVILEGED_ROLES.includes(resolveUserRole(cleanEmail, existing?.role || 'client'))) {
+      return null;
+    }
 
     if (existing) {
       const sanitizedRole = resolveUserRole(cleanEmail, existing.role);
@@ -980,15 +1084,22 @@ export function AuthProvider({ children }) {
    * Déconnexion complète
    */
   const logout = async () => {
+    setUser(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      TRANSIENT_AUTH_KEYS.forEach((key) => localStorage.removeItem(key));
+    } catch {}
+
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.auth.signOut();
+        await Promise.race([
+          supabase.auth.signOut({ scope: 'local' }),
+          new Promise((resolve) => setTimeout(resolve, 2500))
+        ]);
       } catch (e) {
         console.warn('Supabase signOut error:', e);
       }
     }
-    setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (
@@ -1002,6 +1113,8 @@ export function AuthProvider({ children }) {
         isDemoMode,
         loadingAuth,
         isAuthLoading: loadingAuth,
+        isPasswordRecovery,
+        completePasswordRecovery: () => setIsPasswordRecovery(false),
         login,
         loginWithGoogle,
         loginAsDemo,

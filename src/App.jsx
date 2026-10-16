@@ -19,6 +19,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthProvider } from './context/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { SyncErrorToast } from './components/SyncErrorToast';
 
 // Code-splitting : les dashboards lourds sont chargés à la demande (lazy loading)
 const AdminDashboardPage = React.lazy(() =>
@@ -69,6 +70,7 @@ export function App() {
       <AuthProvider>
         <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
           <ScrollToTop />
+          <SyncErrorToast />
           {showPublicHeader && <PublicHeader />}
           <main className={`flex-1 ${hidePublicChrome ? '' : 'pb-28'}`}>
             <Suspense fallback={<DashboardLoader />}>

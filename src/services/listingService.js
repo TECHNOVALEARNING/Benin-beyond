@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient.js';
+import { supabase, isSupabaseConfigured, runSupabaseQuery, notifySyncError } from '../supabase/supabaseClient.js';
 import { INITIAL_LISTINGS } from '../data/initialListings.js';
 
 const CUSTOM_LISTINGS_KEY = 'benin_beyond_custom_listings';
@@ -387,6 +387,7 @@ export async function addListing(listingData) {
       }
       if (error) {
         console.warn('Supabase addListing warning:', error.message);
+        notifySyncError("L'annonce n'a pas encore été publiée sur le serveur. Nouvel essai automatique au prochain chargement.");
       }
     } catch (err) {
       console.warn('Exception Supabase addListing:', err?.message || err);
@@ -514,6 +515,7 @@ export async function updateListing(id, updates = {}) {
         }
       } else if (error) {
         console.warn('Supabase updateListing warning:', error.message);
+        notifySyncError("Les modifications de l'annonce n'ont pas été enregistrées sur le serveur.");
       }
     } catch (err) {
       console.warn('Exception Supabase updateListing:', err?.message || err);

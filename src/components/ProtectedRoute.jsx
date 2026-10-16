@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getLocalVerificationApplication } from '../services/ownerVerificationService';
 
 /**
  * Composant de protection des routes sensibles.
@@ -24,21 +25,10 @@ export function ProtectedRoute({ children, allowedRoles = [], redirectTo = '/log
     // Si la route est destinée aux propriétaires/partenaires, vérifier si l'utilisateur a soumis son KYC propriétaire
     const isOwnerTargetRoute = allowedRoles.some((r) => r === 'owner' || r === 'partner');
     if (isOwnerTargetRoute && user.role === 'client') {
-      try {
-        const rawApps = localStorage.getItem('benin_beyond_owner_applications');
-        if (rawApps) {
-          const apps = JSON.parse(rawApps);
-          const hasOwnerApp = apps.some(
-            (a) =>
-              (String(a.user_id) === String(user.id) ||
-                (a.owner_email && a.owner_email.toLowerCase() === user.email?.toLowerCase())) &&
-              ['submitted', 'under_review', 'approved', 'additional_info_required'].includes(a.status)
-          );
-          if (hasOwnerApp) {
-            return children;
-          }
-        }
-      } catch {}
+      const ownerApp = getLocalVerificationApplication(user.id, user.email);
+      if (ownerApp && ['submitted', 'under_review', 'approved', 'additional_info_required'].includes(ownerApp.status)) {
+        return children;
+      }
     }
 
     const fallback =

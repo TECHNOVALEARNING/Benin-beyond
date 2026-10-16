@@ -32,7 +32,7 @@ const SERVICE_SUBCATEGORIES = [
 ];
 
 export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
-  const [step, setStep] = useState(1); // 1: Info, 2: Payment (500 FCFA), 3: Success
+  const [step, setStep] = useState(1); // 1: formulaire, 3: demande envoyée
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -51,10 +51,8 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
   const [image, setImage] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Payment state (Frais de référencement : 500 FCFA)
-  const [paymentMethod, setPaymentMethod] = useState('mtn'); // 'mtn' | 'moov' | 'card'
-  const [payerPhone, setPayerPhone] = useState('+229 ');
-  const [paymentReceipt, setPaymentReceipt] = useState(null);
+  // Demande envoyée (en attente de validation par l'équipe)
+  const [submittedDiscovery, setSubmittedDiscovery] = useState(null);
 
   if (!isOpen) return null;
 
@@ -110,144 +108,45 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
       setImage(finalImage);
     }
 
-    // SI RESTAURANT : Inscription 100% GRATUITE (0 FCFA) -> Publication directe
-    if (category === 'restaurants') {
-      setLoading(true);
-      try {
-        const cleanWhatsapp = (whatsapp || phone).replace(/[^0-9]/g, '');
-        const highlights = highlightsInput
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean);
-
-        if (highlights.length === 0) {
-          highlights.push(
-            'Saveurs authentiques & cuisine fraîche',
-            'Accueil chaleureux & service soigné',
-            'Carte variée & boissons locales'
-          );
-        }
-
-        const newDisc = await addDiscovery({
-          category: 'restaurants',
-          subcategory: 'gastronomie',
-          title: title.trim(),
-          badge: 'Table Recommandée',
-          location: location.trim() || 'Cotonou · Bénin',
-          tagline: tagline.trim() || 'Table & Terroir Gourmand',
-          description: description.trim(),
-          highlights,
-          tips: 'Réservation recommandée à l\'avance.',
-          pricing: pricing.trim() || 'Plats à la carte',
-          phone: phone.trim(),
-          whatsapp: cleanWhatsapp,
-          image: finalImage,
-          inHomeService: false,
-          creator_role: 'restaurant_partner',
-          payment_status: 'free',
-          payment_reference: 'RESTO-FREE-0F',
-          status: 'active'
-        });
-
-        setPaymentReceipt({
-          reference: 'RESTO-FREE-0F',
-          amount: 0,
-          currency: 'FCFA',
-          method: 'GRATUIT (0 FCFA)',
-          date: new Date().toLocaleDateString('fr-FR', {
-            day: '2-digit',
-            month: 'long',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        });
-
-        setStep(3);
-        if (onSuccess) {
-          onSuccess(newDisc);
-        }
-      } catch (err) {
-        console.error('Erreur inscription restaurant gratuit:', err);
-        setError('Une erreur est survenue lors de l\'enregistrement de votre restaurant.');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // SI AUTRES SERVICES : Étape de paiement des 500 FCFA
-    setStep(2);
-  };
-
-  const handleConfirmPaymentAndPublish = async () => {
-    setError('');
+    // Toute demande (restaurant ou prestataire) est enregistrée « en attente » :
+    // l'équipe Bénin Beyond la vérifie — et encaisse les 500 FCFA des prestataires — avant publication.
     setLoading(true);
-
     try {
-      // Simulation du paiement Mobile Money / Carte 500 FCFA
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-
-      const receiptRef = `BB-SRV-500-${Date.now().toString().slice(-6)}`;
+      const isRestaurant = category === 'restaurants';
       const cleanWhatsapp = (whatsapp || phone).replace(/[^0-9]/g, '');
-
       const highlights = highlightsInput
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean);
 
-      if (highlights.length === 0) {
-        highlights.push(
-          inHomeService ? 'Déplacement en villa ou appartement' : 'Service certifié Bénin Beyond',
-          'Disponibilité 7j/7 sur rendez-vous',
-          'Satisfaction garantie'
-        );
-      }
-
       const newDisc = await addDiscovery({
         category,
-        subcategory: category === 'restaurants' ? 'gastronomie' : subcategory,
+        subcategory: isRestaurant ? 'gastronomie' : subcategory,
         title: title.trim(),
-        badge: inHomeService ? 'Prestation en Villa' : 'Certifié Bénin Beyond',
+        badge: isRestaurant ? 'Table recommandée' : (inHomeService ? 'Prestation en villa' : 'Recommandé'),
         location: location.trim() || 'Cotonou · Bénin',
-        tagline: tagline.trim() || (category === 'restaurants' ? 'Table & Terroir' : 'Prestations Privées en Villa'),
+        tagline: tagline.trim(),
         description: description.trim(),
         highlights,
-        tips: inHomeService
-          ? 'Contactez directement le prestataire par WhatsApp ou téléphone pour convenir de l\'heure d\'intervention dans votre hébergement.'
-          : 'Réservation recommandée à l\'avance.',
+        tips: !isRestaurant && inHomeService
+          ? "Contactez directement le prestataire par WhatsApp ou téléphone pour convenir de l'heure d'intervention dans votre hébergement."
+          : '',
         pricing: pricing.trim(),
         phone: phone.trim(),
         whatsapp: cleanWhatsapp,
-        image,
-        inHomeService: Boolean(inHomeService),
-        creator_role: 'provider',
-        payment_status: 'paid',
-        payment_reference: receiptRef,
-        status: 'active'
+        image: finalImage,
+        inHomeService: isRestaurant ? false : Boolean(inHomeService),
+        creator_role: isRestaurant ? 'restaurant_partner' : 'provider'
       });
 
-      setPaymentReceipt({
-        reference: receiptRef,
-        amount: 500,
-        currency: 'FCFA',
-        method: paymentMethod.toUpperCase(),
-        date: new Date().toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      });
-
+      setSubmittedDiscovery(newDisc);
       setStep(3);
       if (onSuccess) {
         onSuccess(newDisc);
       }
     } catch (err) {
-      console.error('Erreur enregistrement prestataire:', err);
-      setError('Une erreur est survenue lors du paiement et de la publication.');
+      console.error('Erreur envoi demande de référencement:', err);
+      setError("Une erreur est survenue lors de l'envoi de votre demande. Réessayez dans un instant.");
     } finally {
       setLoading(false);
     }
@@ -274,13 +173,11 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
           </div>
           <h2 className="font-heading text-xl sm:text-2xl font-black text-foreground">
             {step === 1 && "Faire référencer votre service ou restaurant"}
-            {step === 2 && "Activation & Frais d'inscription (500 FCFA)"}
-            {step === 3 && "Votre service est en ligne !"}
+            {step === 3 && "Demande envoyée"}
           </h2>
           <p className="text-xs sm:text-sm text-foreground/60 mt-1">
             {step === 1 && "Proposez vos prestations (coiffure, onglerie, soins, gastronomie) directement aux résidents de nos villas et appartements de standing."}
-            {step === 2 && "Frais symboliques d'activation pour être mis en relation directe avec les résidents et touristes VIP."}
-            {step === 3 && "Votre fiche est publiée dans l'espace Découvertes de Bénin Beyond avec contact direct."}
+            {step === 3 && "Votre fiche sera publiée après vérification par l'équipe Bénin Beyond."}
           </p>
         </div>
 
@@ -352,7 +249,7 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                       <span>100% GRATUIT · 0 FCFA</span>
                     </span>
                     <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      Publication directe
+                      Après validation
                     </span>
                   </div>
                 </button>
@@ -646,13 +543,13 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
                 ) : category === 'restaurants' ? (
                   <>
                     <FontAwesomeIcon icon={faUtensils} className="h-4 w-4" />
-                    <span>Publier mon Établissement Gratuitement (0 FCFA)</span>
+                    <span>Envoyer ma demande (gratuit)</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 ml-1 opacity-80" />
                   </>
                 ) : (
                   <>
                     <FontAwesomeIcon icon={faCreditCard} className="h-4 w-4" />
-                    <span>Continuer vers l'Activation VIP (500 FCFA)</span>
+                    <span>Envoyer ma demande (500 FCFA)</span>
                     <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5 ml-1 opacity-80" />
                   </>
                 )}
@@ -662,250 +559,43 @@ export function ProviderRegistrationModal({ isOpen, onClose, onSuccess }) {
         )}
 
         {/* ========================================================================= */}
-        {/* ÉTAPE 2 : PAIEMENT DES FRAIS D'INSCRIPTION & ACTIVATION (500 FCFA) */}
-        {/* ========================================================================= */}
-        {step === 2 && (
-          <div className="space-y-6">
-            {/* Récapitulatif du service */}
-            <div className="rounded-2xl border border-foreground/15 bg-card p-4 flex items-center gap-3.5 shadow-xs">
-              {image && (
-                <img src={image} alt={title} className="h-14 w-14 rounded-xl object-cover shrink-0 ring-1 ring-foreground/10" />
-              )}
-              <div className="flex-1 min-w-0">
-                <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] uppercase font-black text-amber-600 dark:text-amber-400 tracking-wider">
-                  {category === 'services' ? 'Prestataire de Service Certifié' : 'Restaurant'}
-                </span>
-                <h4 className="text-sm font-extrabold text-foreground truncate mt-1">{title}</h4>
-                <p className="text-xs text-foreground/70 font-medium">{location} · {phone}</p>
-              </div>
-            </div>
-
-            {/* Boîte tarifaire explicative */}
-            <div className="rounded-2xl border-2 border-amber-500/35 bg-gradient-to-br from-amber-500/10 via-background to-amber-500/5 p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-xs">
-                    <FontAwesomeIcon icon={faShieldHalved} className="h-2.5 w-2.5" />
-                    Frais d'Activation Officiels
-                  </span>
-                  <h5 className="text-sm font-black text-foreground mt-2">
-                    Référencement & Mise en relation VIP
-                  </h5>
-                  <p className="text-xs text-foreground/70 mt-0.5 leading-relaxed">
-                    Visibilité directe auprès des résidents de villas et appartements de standing Bénin Beyond.
-                  </p>
-                </div>
-                <div className="text-right shrink-0 bg-background/95 border border-amber-500/30 px-4 py-2.5 rounded-2xl shadow-sm">
-                  <div className="flex items-baseline justify-end gap-1">
-                    <span className="text-3xl font-black text-foreground">500</span>
-                    <span className="text-xs font-black text-amber-500">FCFA</span>
-                  </div>
-                  <p className="text-[10px] text-foreground/60 font-bold uppercase tracking-wider">Paiement unique</p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-foreground/10 space-y-2 text-xs text-foreground/85">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                    <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                  </div>
-                  <span className="font-medium">Votre fiche activée immédiatement dans l'espace Découvertes</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                    <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                  </div>
-                  <span className="font-medium">Boutons d'appel direct & commande WhatsApp directe sans commission (0%)</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                    <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                  </div>
-                  <span className="font-medium">Badge officiel « Prestation en Villa » certifié Bénin Beyond</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Choix du mode de paiement */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-foreground/80 mb-2.5">
-                Choisissez votre moyen de paiement sécurisé
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('mtn')}
-                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all relative ${
-                    paymentMethod === 'mtn'
-                      ? 'border-amber-500 bg-amber-500/15 text-foreground font-extrabold shadow-md shadow-amber-500/10 ring-1 ring-amber-500/30'
-                      : 'border-foreground/15 bg-card/60 text-foreground/70 hover:border-foreground/30 hover:bg-card'
-                  }`}
-                >
-                  <div className="h-9 w-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs shadow-sm">
-                    MTN
-                  </div>
-                  <span className="text-xs font-bold">MTN MoMo</span>
-                  {paymentMethod === 'mtn' && (
-                    <span className="absolute top-2 right-2 h-4 w-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px]">
-                      <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('moov')}
-                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all relative ${
-                    paymentMethod === 'moov'
-                      ? 'border-blue-500 bg-blue-500/15 text-foreground font-extrabold shadow-md shadow-blue-500/10 ring-1 ring-blue-500/30'
-                      : 'border-foreground/15 bg-card/60 text-foreground/70 hover:border-foreground/30 hover:bg-card'
-                  }`}
-                >
-                  <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
-                    Moov
-                  </div>
-                  <span className="text-xs font-bold">Moov Money</span>
-                  {paymentMethod === 'moov' && (
-                    <span className="absolute top-2 right-2 h-4 w-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">
-                      <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all relative ${
-                    paymentMethod === 'card'
-                      ? 'border-emerald-500 bg-emerald-500/15 text-foreground font-extrabold shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/30'
-                      : 'border-foreground/15 bg-card/60 text-foreground/70 hover:border-foreground/30 hover:bg-card'
-                  }`}
-                >
-                  <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-                    <FontAwesomeIcon icon={faCreditCard} className="h-4 w-4" />
-                  </div>
-                  <span className="text-xs font-bold">Carte Bancaire</span>
-                  {paymentMethod === 'card' && (
-                    <span className="absolute top-2 right-2 h-4 w-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">
-                      <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Numéro pour le débit */}
-            <div>
-              <label className="block text-xs font-bold text-foreground/85 mb-1.5">
-                {paymentMethod === 'card' ? "Numéro de téléphone associé à la carte" : `Numéro de compte ${paymentMethod.toUpperCase()} (+229)`}
-              </label>
-              <input
-                type="tel"
-                value={payerPhone}
-                onChange={(e) => setPayerPhone(e.target.value)}
-                placeholder="+229 97 00 00 00"
-                className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none font-medium"
-              />
-              <p className="text-[11px] text-foreground/60 mt-1 font-medium">
-                Une invite de confirmation USSD sécurisée sera envoyée sur votre téléphone pour valider les 500 FCFA.
-              </p>
-            </div>
-
-            {/* Boutons d'action */}
-            <div className="flex items-center gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="px-4 py-3.5 rounded-2xl border border-foreground/20 text-xs font-bold text-foreground hover:bg-muted transition-colors"
-                disabled={loading}
-              >
-                ← Retour
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmPaymentAndPublish}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 px-6 py-4 text-xs sm:text-sm font-extrabold text-white shadow-xl shadow-emerald-600/25 transition-all active:scale-95 disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <FontAwesomeIcon icon={faSpinner} className="h-4 w-4 animate-spin" />
-                    <span>Validation du paiement (500 FCFA)...</span>
-                  </>
-                ) : (
-                  <>
-                    <FontAwesomeIcon icon={faReceipt} className="h-4 w-4" />
-                    <span>Régler 500 FCFA & Activer mon Référencement</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
         {/* ÉTAPE 3 : CONFIRMATION & SUCCÈS */}
         {/* ========================================================================= */}
-        {step === 3 && paymentReceipt && (
-          <div className="text-center py-6 space-y-5 animate-scale-in">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500">
-              <FontAwesomeIcon icon={faCircleCheck} className="h-8 w-8" />
-            </div>
-
+        {step === 3 && submittedDiscovery && (
+          <div className="space-y-5 py-4 text-center">
             <div>
-              <span className="text-xs uppercase font-bold text-accent tracking-wider">
-                Félicitations & Bienvenue sur Bénin Beyond
-              </span>
-              <h3 className="font-heading text-xl sm:text-2xl font-black text-foreground mt-1">
-                {category === 'restaurants' ? 'Votre restaurant est désormais publié !' : 'Votre service est désormais publié !'}
-              </h3>
-              <p className="text-xs sm:text-sm text-foreground/60 max-w-md mx-auto mt-2">
-                Votre établissement / profil <strong>{title}</strong> est désormais référencé dans notre catalogue officiel. 
-                Les voyageurs et résidents peuvent vous contacter directement par téléphone ou WhatsApp.
+              <h3 className="font-heading text-lg font-semibold text-foreground">Demande envoyée</h3>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-foreground/60">
+                La fiche <strong className="font-medium text-foreground">{title}</strong> est enregistrée. L'équipe Bénin Beyond la vérifie avant de la publier dans l'espace Découvertes.
               </p>
             </div>
 
-            {/* Reçu officiel d'enregistrement / paiement */}
-            <div className="max-w-md mx-auto rounded-2xl border border-foreground/10 bg-muted/40 p-4 text-left text-xs space-y-2">
-              <div className="flex justify-between items-center pb-2 border-b border-foreground/10">
-                <span className="font-semibold text-foreground/60">Référence Dossier :</span>
-                <span className="font-mono font-bold text-primary">{paymentReceipt.reference}</span>
+            <div className="mx-auto max-w-md divide-y divide-foreground/[0.07] rounded-xl border border-foreground/10 text-left text-sm">
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="text-foreground/60">Statut</span>
+                <span className="font-medium text-amber-600">En attente de validation</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-foreground/60">Frais d'inscription :</span>
-                <span className="font-bold text-foreground">
-                  {paymentReceipt.amount === 0 ? '0 FCFA (Gratuit)' : `${paymentReceipt.amount} FCFA`}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-foreground/60">Statut du compte :</span>
-                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full text-[11px]">
-                  <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
-                  <span>Actif & Publié</span>
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-foreground/60">Mode d'adhésion :</span>
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="text-foreground/60">Frais de référencement</span>
                 <span className="font-medium text-foreground">
-                  {paymentReceipt.amount === 0 ? 'Partenaire Restaurant (Offert)' : `${paymentReceipt.method} Mobile`}
+                  {category === 'restaurants' ? 'Gratuit' : '500 FCFA'}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-foreground/60">Date & Heure :</span>
-                <span className="text-foreground/75">{paymentReceipt.date}</span>
               </div>
             </div>
 
-            <div className="pt-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
-              >
-                <span>{category === 'restaurants' ? 'Voir mon restaurant dans Découvertes' : 'Voir mon service dans Découvertes'}</span>
-              </button>
-            </div>
+            {category !== 'restaurants' && (
+              <p className="mx-auto max-w-md text-xs leading-relaxed text-foreground/50">
+                L'équipe vous contactera au {phone.trim()} pour le règlement des 500 FCFA par Mobile Money. Votre fiche est mise en ligne dès réception du paiement.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Fermer
+            </button>
           </div>
         )}
 

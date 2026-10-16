@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, runSupabaseQuery } from '../supabase/supabaseClient';
+import { supabase, isSupabaseConfigured, runSupabaseQuery, notifySyncError } from '../supabase/supabaseClient';
 
 const STORAGE_KEY = 'benin_beyond_registered_users';
 const OVERRIDES_STORAGE_KEY = 'benin_beyond_user_admin_overrides';
@@ -175,7 +175,7 @@ export async function getUsers() {
 
       const { data: dbProfiles, error } = await withTimeout(queryPromise, 8000);
 
-      if (!error && dbProfiles && dbProfiles.length > 0) {
+      if (!error && Array.isArray(dbProfiles)) {
         const emailMap = new Map();
 
         // 1. Ajouter d'abord les profils réels de Supabase non supprimés
@@ -189,7 +189,8 @@ export async function getUsers() {
           if (deleted.has(id)) deleted.delete(id);
 
           const isAdmin = email === SUPER_ADMIN_EMAIL || p.role === 'admin';
-          const override = overrides[email] || overrides[id] || {};
+          // Les décisions d'administration sont lues en base, jamais depuis un cache local
+          const override = {};
           const isSubAdmin = !isAdmin && (p.role === 'subadmin' || override.role === 'subadmin');
 
           emailMap.set(email, {
@@ -217,35 +218,6 @@ export async function getUsers() {
             is_active: isAdmin ? true : (override.is_active !== undefined ? Boolean(override.is_active) : (p.is_active !== undefined ? p.is_active : true)),
             created_at: p.created_at || new Date().toISOString()
           });
-        });
-
-        // 2. Fusionner avec les comptes enregistrés localement (en ignorant les faux comptes démo par défaut si Supabase est actif)
-        localList.forEach((lu) => {
-          const email = (lu.email || '').trim().toLowerCase();
-          const id = (lu.id || '').toString().toLowerCase();
-          if (!email || email === 'proprietaire@beninbeyond.com' || lu.id === 'usr_owner_01' || deleted.has(email) || deleted.has(id)) return;
-
-          const override = overrides[email] || overrides[id] || {};
-
-          if (!emailMap.has(email)) {
-            emailMap.set(email, {
-              ...lu,
-              ...override
-            });
-          } else {
-            const existing = emailMap.get(email);
-            const mergedRole = override.role || (existing.role === 'admin' ? 'admin' : (existing.role === 'subadmin' ? 'subadmin' : (existing.role === 'owner' || lu.role === 'owner' || lu.role === 'partner' ? 'owner' : existing.role)));
-            emailMap.set(email, {
-              ...existing,
-              ...lu,
-              ...override,
-              role: mergedRole,
-              kyc_status: override.kyc_status !== undefined ? override.kyc_status : (lu.kyc_status || existing.kyc_status || 'pending'),
-              verified: override.verified !== undefined ? Boolean(override.verified) : Boolean(existing.verified || lu.verified || existing.kyc_status === 'verified' || lu.kyc_status === 'verified'),
-              is_active: override.is_active !== undefined ? override.is_active : (lu.is_active !== undefined ? lu.is_active : existing.is_active),
-              rejection_reason: override.rejection_reason !== undefined ? override.rejection_reason : (lu.rejection_reason || existing.rejection_reason || '')
-            });
-          }
         });
 
         // Persister la liste noire nettoyée
@@ -365,9 +337,11 @@ export async function updateUser(userId, updates) {
     rejection_reason: updates.rejection_reason !== undefined ? updates.rejection_reason : (existingUser?.rejection_reason || '')
   };
 
-  // 1. Sauvegarder immédiatement l'override administrateur prioritaire et indestructible
-  if (cleanEmail) saveAdminOverride(cleanEmail, sanitizedUpdates);
-  if (userId) saveAdminOverride(userId, sanitizedUpdates);
+  // 1. Mode local uniquement : mémoriser la décision dans le navigateur (avec Supabase, la base fait foi)
+  if (!isSupabaseConfigured) {
+    if (cleanEmail) saveAdminOverride(cleanEmail, sanitizedUpdates);
+    if (userId) saveAdminOverride(userId, sanitizedUpdates);
+  }
 
   // 2. Supabase (uniquement avec les colonnes valides existantes dans le schéma Supabase)
   if (isSupabaseConfigured && supabase) {
@@ -411,16 +385,19 @@ export async function updateUser(userId, updates) {
         } catch {}
       }
 
-      if (!updatedInSupabase && cleanEmail) {
-        try {
-          await runSupabaseQuery('profiles.upsert', supabase.from('profiles').upsert({
-            ...(isUuid ? { id: userId } : {}),
-            email: cleanEmail,
-            ...payload
-          }, { onConflict: 'email' }));
-        } catch (e) {
-          console.warn('Erreur upsert profile Supabase:', e);
-        }
+      if (!updatedInSupabase && cleanEmail && isUuid) {
+        const { error } = await runSupabaseQuery('profiles.upsert', supabase.from('profiles').upsert({
+          id: userId,
+          email: cleanEmail,
+          ...payload
+        }, { onConflict: 'email' }));
+        updatedInSupabase = !error;
+      }
+
+      if (!updatedInSupabase) {
+        // Rien n'a été modifié côté serveur : ne pas laisser croire que la décision est enregistrée
+        notifySyncError("La modification de ce compte n'a pas été enregistrée sur le serveur (compte introuvable en base ou droits insuffisants).");
+        return { ...sanitizedUpdates, sync_failed: true };
       }
     } catch (e) {
       console.warn('Erreur updateUser Supabase:', e);
@@ -431,7 +408,7 @@ export async function updateUser(userId, updates) {
   const list = getLocalUsers();
   let found = false;
   const updatedList = list.map((u) => {
-    if (u.id === userId || (cleanEmail && u.email.toLowerCase() === cleanEmail)) {
+    if (u.id === userId || (cleanEmail && (u.email || '').toLowerCase() === cleanEmail)) {
       found = true;
       return {
         ...u,
@@ -540,7 +517,7 @@ export async function deleteUser(userId, userEmail = '') {
 
   // 3. LocalStorage
   const list = getLocalUsers();
-  const filtered = list.filter((u) => u.id !== userId && u.email.toLowerCase() !== cleanEmail);
+  const filtered = list.filter((u) => u.id !== userId && (u.email || '').toLowerCase() !== cleanEmail);
   saveLocalUsers(filtered);
 
   return true;

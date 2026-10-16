@@ -28,9 +28,10 @@ export async function getPacks() {
         .from('packs')
         .select('*')
         .order('created_at', { ascending: false });
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         saveCustomPacks(data);
-        return data;
+        // Aucun pack créé en base : formules éditoriales par défaut
+        return data.length > 0 ? data : COMBINED_PACKS;
       }
     } catch (err) {
       console.warn('Supabase packs fetch error:', err.message);

@@ -67,10 +67,20 @@ import { saveMediaBlob, uploadMediaFile, parseVideoEmbed } from '../services/med
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
-import { BrandIcon } from '../components/BrandLogo';
+import { BrandIcon, BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 import { getVerificationApplication, getLocalVerificationApplication } from '../services/ownerVerificationService';
+
+/** Ligne Supabase « payouts » → format affiché dans le tableau de bord. */
+function normalizePayout(p) {
+  return {
+    ...p,
+    method: p.method_label || p.method,
+    recipient: p.recipient_phone_or_account || '',
+    date: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR') : ''
+  };
+}
 
 export function PartnerDashboardPage() {
   const navigate = useNavigate();
@@ -99,11 +109,7 @@ export function PartnerDashboardPage() {
     } catch (e) {
       console.warn('Erreur déconnexion partenaire:', e);
     }
-    try {
-      localStorage.removeItem('benin_beyond_user');
-      localStorage.removeItem('benin_beyond_partner_section');
-    } catch {}
-    window.location.href = '/login';
+    navigate('/login', { replace: true });
   };
 
   useEffect(() => {
@@ -256,7 +262,7 @@ export function PartnerDashboardPage() {
   const [payoutViewMode, setPayoutViewMode] = useState('summary'); // 'summary' | 'form'
   const [payoutChannel, setPayoutChannel] = useState('mobile_money'); // 'mobile_money' | 'bank_transfer'
   const [momoOperator, setMomoOperator] = useState('mtn'); // 'mtn' | 'moov' | 'celtiis'
-  const [momoPhone, setMomoPhone] = useState(user?.phone || '+229 97 00 00 00');
+  const [momoPhone, setMomoPhone] = useState(user?.phone || '+229 ');
   const [momoRecipientName, setMomoRecipientName] = useState(user?.name || '');
   const [bankName, setBankName] = useState('Bank of Africa (BOA Bénin)');
   const [bankCustomName, setBankCustomName] = useState('');
@@ -357,37 +363,20 @@ export function PartnerDashboardPage() {
       setListings(myPartnerListings);
       setBookings(myPartnerBookings);
 
-      // Chargement des demandes de versement de ce partenaire
+      // Demandes de reversement : Supabase fait foi (RLS : le propriétaire ne lit que les siennes)
       let myPayouts = [];
       if (isSupabaseConfigured && supabase) {
-        try {
-          const { data: pData } = await supabase
-            .from('payouts')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (pData) {
-            myPayouts = pData.filter((p) =>
-              (user.id && p.partner_id && String(p.partner_id) === String(user.id)) ||
-              (user.email && p.partner_email && p.partner_email.toLowerCase() === user.email.toLowerCase())
-            );
-          }
-        } catch {
-          myPayouts = [];
+        const { data: pData, error: pError } = await supabase
+          .from('payouts')
+          .select('*')
+          .eq('partner_id', user.id)
+          .order('created_at', { ascending: false });
+        if (pError) {
+          console.error('[Payouts] Lecture impossible :', pError.message);
+        } else {
+          myPayouts = (pData || []).map(normalizePayout);
         }
       }
-      try {
-        const localP = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
-        const existingIds = new Set(myPayouts.map((p) => p.id));
-        localP.forEach((lp) => {
-          const isMine =
-            (user.id && lp.partner_id && String(lp.partner_id) === String(user.id)) ||
-            (user.email && lp.partner_email && lp.partner_email.toLowerCase() === user.email.toLowerCase()) ||
-            (!lp.partner_id && !lp.partner_email);
-          if (isMine && !existingIds.has(lp.id)) {
-            myPayouts.push(lp);
-          }
-        });
-      } catch {}
       setPartnerPayouts(myPayouts);
     } catch (err) {
       console.error('Erreur chargement dashboard:', err);
@@ -401,7 +390,7 @@ export function PartnerDashboardPage() {
     setPayoutError('');
     setPayoutSuccessMessage('');
 
-    const maxAvailable = financials.net;
+    const maxAvailable = financials.available;
     const requestedAmount = payoutAmount ? parseInt(payoutAmount, 10) : maxAvailable;
 
     if (!requestedAmount || requestedAmount <= 0) {
@@ -409,12 +398,13 @@ export function PartnerDashboardPage() {
       return;
     }
 
-    if (maxAvailable > 0 && requestedAmount > maxAvailable) {
+    if (requestedAmount > maxAvailable) {
       setPayoutError(`Le montant demandé (${formatPrice(requestedAmount)}) dépasse votre solde disponible (${formatPrice(maxAvailable)}).`);
       return;
     }
 
     let methodLabel = '';
+    let methodCode = '';
     let recipientInfo = '';
 
     if (payoutChannel === 'mobile_money') {
@@ -424,6 +414,7 @@ export function PartnerDashboardPage() {
         return;
       }
       methodLabel = operatorName;
+      methodCode = momoOperator === 'mtn' ? 'mtn_momo' : momoOperator === 'moov' ? 'moov_money' : 'celtiis_cash';
       recipientInfo = `${momoPhone.trim()} — Titulaire : ${momoRecipientName.trim() || user?.name || 'Propriétaire'}`;
     } else {
       const finalBank = bankName === 'Autre banque' ? (bankCustomName.trim() || 'Banque UEMOA') : bankName;
@@ -436,52 +427,47 @@ export function PartnerDashboardPage() {
         return;
       }
       methodLabel = `Virement Bancaire (${finalBank})`;
+      methodCode = 'bank_transfer';
       recipientInfo = `${finalBank} • RIB/IBAN : ${bankIban.trim()} (Titulaire : ${bankAccountHolder.trim()}${bankSwift ? ` | BIC: ${bankSwift.trim()}` : ''})`;
     }
 
+    if (!isSupabaseConfigured || !supabase) {
+      setPayoutError('Le serveur n’est pas joignable : la demande ne peut pas être transmise pour le moment.');
+      return;
+    }
+
     setPayoutSubmitting(true);
-    const newPayoutObj = {
-      id: `po_${Date.now()}`,
-      partner_id: user?.id || 'partner',
-      partner_name: user?.name || 'Partenaire Hôte',
-      partnerName: user?.name || 'Partenaire Hôte',
-      partner_email: user?.email || '',
-      company: user?.company || 'Partenaire Bénin Beyond',
-      method: methodLabel,
-      recipient: recipientInfo,
-      amount: requestedAmount,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-    };
-
     try {
-      // 1. Sauvegarde locale persistante
-      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
-      stored.unshift(newPayoutObj);
-      localStorage.setItem('benin_beyond_payouts', JSON.stringify(stored));
+      const { data: inserted, error: insertError } = await supabase
+        .from('payouts')
+        .insert({
+          partner_id: user.id,
+          partner_name: user?.name || null,
+          partner_email: user?.email || null,
+          company: user?.company || null,
+          method: methodCode,
+          method_label: methodLabel,
+          recipient_phone_or_account: recipientInfo,
+          amount: requestedAmount,
+          status: 'pending'
+        })
+        .select()
+        .single();
 
-      // 2. Sauvegarde Supabase
-      if (isSupabaseConfigured && supabase) {
-        try {
-          await supabase.from('payouts').insert({
-            id: newPayoutObj.id,
-            partner_id: user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id) ? user.id : null,
-            partner_name: newPayoutObj.partner_name,
-            company: newPayoutObj.company,
-            method: newPayoutObj.method,
-            recipient: newPayoutObj.recipient,
-            amount: newPayoutObj.amount,
-            status: 'pending',
-            created_at: newPayoutObj.created_at
-          });
-        } catch (sErr) {
-          console.warn('Supabase payout insert notice:', sErr);
-        }
+      if (insertError) {
+        console.error('[Payouts] Demande refusée :', insertError.message);
+        setPayoutError(
+          /solde disponible/i.test(insertError.message)
+            ? 'Le montant demandé dépasse votre solde disponible.'
+            : /row-level security|permission/i.test(insertError.message)
+            ? 'Votre session a expiré : reconnectez-vous puis renouvelez la demande.'
+            : 'La demande n’a pas pu être enregistrée. Réessayez dans un instant.'
+        );
+        return;
       }
 
-      setPartnerPayouts((prev) => [newPayoutObj, ...prev]);
-      setPayoutSuccessMessage(`Votre demande de versement de ${formatPrice(requestedAmount)} via ${methodLabel} a été transmise avec succès à l'administration financière Bénin Beyond !`);
+      setPartnerPayouts((prev) => [normalizePayout(inserted), ...prev]);
+      setPayoutSuccessMessage(`Votre demande de versement de ${formatPrice(requestedAmount)} via ${methodLabel} a été transmise à l'équipe Bénin Beyond. Vous serez payé après validation.`);
       setPayoutViewMode('summary');
       setPayoutAmount('');
     } catch (err) {
@@ -492,10 +478,23 @@ export function PartnerDashboardPage() {
   };
 
   // Financial calculations
+  // Seules les réservations confirmées ET payées génèrent un gain reversable
   const financials = useMemo(() => {
-    const totalGross = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || 0), 0);
-    const totalCommission = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || 0) * 0.10)), 0);
+    const earnedBookings = bookings.filter(
+      (b) =>
+        !b.is_manual_block &&
+        (b.status === 'confirmed' || b.status === 'completed') &&
+        (b.payment_status || 'paid') === 'paid'
+    );
+    const totalGross = earnedBookings.reduce((sum, b) => sum + (Number(b.gross_amount) || 0), 0);
+    const totalCommission = earnedBookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || 0) * 0.10)), 0);
     const totalNet = totalGross - totalCommission;
+    const paidOut = partnerPayouts
+      .filter((p) => p.status === 'completed')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const inProgress = partnerPayouts
+      .filter((p) => p.status === 'pending' || p.status === 'processing')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const pendingCount = bookings.filter((b) => b.status === 'pending').length;
     const confirmedCount = bookings.filter((b) => b.status === 'confirmed').length;
 
@@ -503,10 +502,13 @@ export function PartnerDashboardPage() {
       gross: totalGross,
       commission: totalCommission,
       net: totalNet,
+      paidOut,
+      inProgress,
+      available: Math.max(totalNet - paidOut - inProgress, 0),
       pendingCount,
       confirmedCount
     };
-  }, [bookings]);
+  }, [bookings, partnerPayouts]);
 
   // Durée moyenne réelle de séjour calculée sur les réservations effectives
   const avgStayDuration = useMemo(() => {
@@ -521,79 +523,20 @@ export function PartnerDashboardPage() {
   }, [bookings]);
 
   // Évolution financière dynamique des gains réels de l'hôte (Montée aux réservations, baisse aux annulations)
-  const partnerEvolutionData = useMemo(() => {
-    if (bookings.length === 0) return [];
-
-    const sorted = [...bookings].sort((a, b) => {
-      const ta = new Date(a.created_at || a.created_date || 0).getTime();
-      const tb = new Date(b.created_at || b.created_date || 0).getTime();
-      return ta - tb;
-    });
-
-    let runningNet = 0;
-    let runningComm = 0;
-    const history = [];
-
-    // Point de départ
-    const firstDate = sorted[0]?.created_at ? new Date(sorted[0].created_at) : new Date();
-    const prevDate = new Date(firstDate.getTime() - 24 * 60 * 60 * 1000);
-    history.push({
-      label: prevDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
-      date: prevDate.toLocaleDateString('fr-FR'),
-      value: 0,
-      secondaryValue: 0,
-      changeType: 'flat'
-    });
-
-    sorted.forEach((b) => {
-      const gross = Number(b.gross_amount) || 0;
-      const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
-      const net = gross - comm;
-      const isCancelled = b.status === 'cancelled';
-
-      if (isCancelled) {
-        // En cas d'annulation : les gains nets effectifs diminuent
-        runningNet = Math.max(0, runningNet - net);
-        runningComm = Math.max(0, runningComm - comm);
-      } else {
-        // En cas de réservation : les gains nets augmentent
-        runningNet += net;
-        runningComm += comm;
-      }
-
-      const d = b.created_at ? new Date(b.created_at) : new Date();
-      const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-
-      history.push({
-        label,
-        date: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
-        value: runningNet,
-        secondaryValue: runningComm,
-        changeType: isCancelled ? 'down' : 'up',
-        bookingRef: b.booking_ref
-      });
-    });
-
-    return history;
-  }, [bookings]);
+  // Une transaction par réservation du partenaire (gains nets / commission déduite)
+  const partnerChartTransactions = useMemo(
+    () =>
+      bookings
+        .filter((b) => b.status !== 'cancelled' && !b.is_manual_block)
+        .map((b) => {
+          const gross = Number(b.gross_amount) || 0;
+          const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
+          return { date: b.created_at || b.created_date, value: gross - comm, secondaryValue: comm };
+        }),
+    [bookings]
+  );
 
   // Statistiques mensuelles réelles du partenaire
-  const monthlyPartnerStats = useMemo(() => {
-    if (bookings.length === 0) return [];
-    const monthsMap = {};
-    bookings.forEach((b) => {
-      const d = b.created_at ? new Date(b.created_at) : new Date();
-      const monthName = d.toLocaleDateString('fr-FR', { month: 'short' });
-      if (!monthsMap[monthName]) {
-        monthsMap[monthName] = { month: monthName, net: 0 };
-      }
-      const gross = Number(b.gross_amount) || 0;
-      const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
-      monthsMap[monthName].net += (gross - comm);
-    });
-    return Object.values(monthsMap);
-  }, [bookings]);
-
   // Top biens réservés réels du partenaire
   const topPartnerListings = useMemo(() => {
     if (bookings.length === 0 || listings.length === 0) return [];
@@ -1160,26 +1103,28 @@ export function PartnerDashboardPage() {
     });
   }, [blockedBookings, blockFilterListing, blockSearch]);
 
-  // Nav Items with FontAwesome
-  const navItems = [
-    { key: 'overview', label: 'Vue d’ensemble', icon: faChartPie },
+  // Navigation groupée (même structure que l'espace admin)
+  const navGroups = [
     {
-      key: 'bookings',
-      label: 'Réservations reçues',
-      icon: faCalendarCheck,
-      badge: financials.pendingCount > 0 ? `${financials.pendingCount} en attente` : null
+      title: 'Pilotage',
+      items: [
+        { key: 'overview', label: 'Vue d’ensemble', icon: faChartPie },
+        { key: 'bookings', label: 'Réservations', icon: faCalendarCheck, badge: financials.pendingCount },
+        { key: 'availability', label: 'Disponibilités', icon: faCalendarDays, badge: blockedBookings.length },
+        { key: 'finances', label: 'Revenus', icon: faWallet }
+      ]
     },
     {
-      key: 'availability',
-      label: 'Disponibilités & Calendrier',
-      icon: faCalendarDays,
-      badge: blockedBookings.length > 0 ? `${blockedBookings.length} bloqué(s)` : null
-    },
-    { key: 'listings', label: 'Mes annonces & biens', icon: faHouse, count: listings.length },
-    { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus, highlight: true },
-    { key: 'finances', label: 'Solde & Revenus', icon: faWallet },
-    { key: 'stats', label: 'Statistiques & Vues', icon: faChartLine }
+      title: 'Mes biens',
+      items: [
+        { key: 'listings', label: 'Annonces', icon: faHouse },
+        { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus },
+        { key: 'stats', label: 'Statistiques', icon: faChartLine }
+      ]
+    }
   ];
+
+  const navItems = navGroups.flatMap((g) => g.items);
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-muted/20 text-foreground flex flex-col md:flex-row">
@@ -1196,137 +1141,98 @@ export function PartnerDashboardPage() {
       {/* 1. SIDEBAR PRO MARKETPLACE (FONTAWESOME ICONS ONLY) - STRICTLY PINNED */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-[272px] h-[100dvh] max-h-[100dvh] md:h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-64 max-w-[85vw] shrink-0 flex-col border-r border-foreground/10 bg-card text-foreground transition-transform duration-300 ease-in-out md:static md:h-screen md:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Brand Logo & Close button on Mobile */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] shrink-0">
-            <Link to="/" className="flex items-center gap-2.5 group">
-              <BrandIcon size={26} />
-              <div className="flex items-center gap-2">
-                <span className="font-heading text-[15px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
-                  Bénin Beyond
-                </span>
-                <span className="rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
-                  Hôte & Flotte
-                </span>
-              </div>
-            </Link>
-
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10"
-            >
-              <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Partner Profile Snippet */}
-          <div className="px-4 py-3 bg-white/[0.03] border-b border-white/[0.08] flex items-center gap-3 shrink-0">
-            <div className="h-8 w-8 rounded-full bg-accent/20 text-accent font-semibold flex items-center justify-center text-xs shrink-0 font-heading">
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'P'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-heading text-[13.5px] font-semibold text-white truncate tracking-wide">
-                {user?.name || 'Partenaire Hôte'}
-              </p>
-              <div className="text-[11px] text-white/50 flex items-center gap-1.5 mt-0.5">
-                {user?.verified ? (
-                  <>
-                    <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-400 text-[10px]" />
-                    <span className="text-emerald-400 font-medium">KYC Certifié</span>
-                  </>
-                ) : (
-                  <>
-                    <FontAwesomeIcon icon={faClock} className="text-amber-400 text-[10px]" />
-                    <span className="text-amber-400 font-medium">Audit en attente</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-1 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <div className="px-3 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-white/45 font-heading">
-              Navigation Espace Pro
-            </div>
-            {navItems.map((item) => {
-              const isActive = currentSection === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    if (item.action) {
-                      item.action();
-                    } else {
-                      handleSetSection(item.key);
-                    }
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all btn-press ${
-                    isActive
-                      ? 'bg-white/[0.12] text-white shadow-xs font-semibold nav-active-indicator'
-                      : item.highlight
-                      ? 'bg-accent text-secondary font-semibold hover:bg-accent/90 shadow-xs'
-                      : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <FontAwesomeIcon
-                      icon={item.icon}
-                      className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                        isActive
-                          ? 'text-accent'
-                          : item.highlight
-                          ? 'text-secondary'
-                          : 'text-white/60 group-hover:text-white'
-                      }`}
-                    />
-                    <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
-                  </div>
-
-                  {item.badge && (
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-                      item.highlight ? 'bg-black/20 text-secondary' : 'bg-accent/20 text-accent'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  )}
-                  {typeof item.count === 'number' && !item.badge && (
-                    <span className="text-[11px] text-white/50 font-mono px-2 py-0.5 rounded-full bg-white/[0.06]">
-                      {item.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+        <div className="flex h-16 shrink-0 items-center justify-between px-5">
+          <Link to="/" title="Retour au site" className="flex items-center">
+            <BrandLogo size="sm" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-md p-1.5 text-foreground/50 hover:bg-muted hover:text-foreground md:hidden"
+            aria-label="Fermer le menu"
+          >
+            <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* Sidebar Footer Actions (Strictly Pinned at the Bottom) */}
-        <div className="p-3 border-t border-white/[0.08] space-y-1.5 shrink-0 bg-secondary pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-          <Link
-            to="/"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
-          >
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
-            <span>Voir le site public</span>
-          </Link>
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {navGroups.map((group) => (
+            <div key={group.title}>
+              <p className="px-3 pb-1.5 text-[11px] font-medium text-foreground/40">{group.title}</p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = currentSection === item.key;
+                  return (
+                    <li key={item.key}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.action) {
+                            item.action();
+                          } else {
+                            handleSetSection(item.key);
+                          }
+                          setSidebarOpen(false);
+                        }}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors ${
+                          isActive
+                            ? 'bg-muted font-semibold text-foreground'
+                            : 'text-foreground/65 hover:bg-muted/60 hover:text-foreground'
+                        }`}
+                      >
+                        <FontAwesomeIcon
+                          icon={item.icon}
+                          className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-foreground/40'}`}
+                        />
+                        <span className="flex-1 truncate text-left">{item.label}</span>
+                        {item.badge > 0 && (
+                          <span className="min-w-[20px] rounded-full bg-accent/20 px-1.5 py-0.5 text-center text-[10.5px] font-semibold tabular-nums text-foreground/80">
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
 
-          <button
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
-            className="w-full flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 transition-all shadow-sm active:scale-95"
-            title="Se déconnecter"
-          >
-            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5 text-rose-400" />
-            <span>Déconnexion</span>
-          </button>
+        <div className="shrink-0 border-t border-foreground/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'P'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-foreground">{user?.name || 'Partenaire Hôte'}</p>
+              <p className={`truncate text-[11px] ${user?.verified ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {user?.verified ? 'Compte certifié' : 'Vérification en attente'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              className="rounded-md p-2 text-foreground/45 hover:bg-muted hover:text-rose-600"
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+            >
+              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="mt-1 flex items-center gap-1 px-1">
+            <Link to="/" className="rounded-md px-2 py-1.5 text-[12px] text-foreground/55 hover:bg-muted hover:text-foreground">
+              Voir le site
+            </Link>
+          </div>
         </div>
       </aside>
 
@@ -1334,464 +1240,210 @@ export function PartnerDashboardPage() {
       {/* 2. MAIN DASHBOARD CONTENT AREA - INDEPENDENT FLUID SCROLL */}
       {/* ========================================================================= */}
       <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        
+
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-foreground/10 bg-background/90 px-4 backdrop-blur sm:px-8">
+          <div className="flex min-w-0 items-center gap-3">
             <button
+              type="button"
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-lg border border-foreground/15 text-foreground hover:bg-muted shrink-0"
+              className="rounded-md p-2 text-foreground/60 hover:bg-muted md:hidden"
               aria-label="Ouvrir le menu"
             >
               <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
             </button>
             <div className="min-w-0">
-              <h1 className="font-heading text-base sm:text-xl font-bold text-foreground truncate">
-                {navItems.find((i) => i.key === currentSection)?.label || 'Espace Propriétaire'}
+              <h1 className="truncate text-base font-semibold text-foreground">
+                {navItems.find((i) => i.key === currentSection)?.label || 'Espace propriétaire'}
               </h1>
-              <p className="text-[11px] text-foreground/60 hidden sm:block truncate max-w-sm">
-                Portail de gestion des hébergements et véhicules
+              <p className="hidden truncate text-xs text-foreground/50 sm:block">
+                {getTimeBasedGreeting()}, {(user?.name || '').split(' ')[0] || 'Partenaire'}
               </p>
             </div>
           </div>
 
-          {/* Quick Actions in Header */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="hidden lg:flex items-center gap-2 bg-muted/60 border border-foreground/10 rounded-full px-3 py-1.5 text-xs">
-              <FontAwesomeIcon icon={faWallet} className="text-primary h-3.5 w-3.5" />
-              <span className="text-foreground/70">Solde :</span>
-              <strong className="text-foreground font-mono">{formatPrice(financials.net)}</strong>
-            </div>
-
-            <button
-              onClick={() => setCurrentSection('publish')}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-primary px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all active:scale-95"
-            >
-              <FontAwesomeIcon icon={faCirclePlus} className="h-3.5 w-3.5" />
-              <span>Publier</span>
-            </button>
-
-            {/* Quick Logout Button directly on mobile */}
+          {currentSection !== 'publish' && (
             <button
               type="button"
-              onClick={() => {
-                logout();
-                navigate('/login');
-              }}
-              className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 transition-colors"
-              title="Se déconnecter"
-              aria-label="Se déconnecter"
+              onClick={() => setCurrentSection('publish')}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
+              <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+              <span className="hidden sm:inline">Publier un bien</span>
             </button>
-          </div>
+          )}
         </header>
 
         {/* Dynamic Section Rendering */}
-        <main key={currentSection} className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto animate-section-enter">
+        <main key={currentSection} className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8 animate-section-enter">
 
           {/* ========================================================================= */}
           {/* SECTION A : VUE D'ENSEMBLE (OVERVIEW) */}
           {/* ========================================================================= */}
           {currentSection === 'overview' && (
-            <div className="space-y-8 animate-section-stagger">
-              
-              {/* Welcome Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-foreground/10">
-                <div>
-                  <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
-                    {getTimeBasedGreeting()}, {user?.name || 'Partenaire Hôte'}
-                  </h2>
-                  <p className="text-xs text-foreground/60 mt-0.5">
-                    Bienvenue sur votre espace de gestion des réservations et des revenus Bénin Beyond.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      handleSetSection('finances');
-                      setPayoutViewMode('form');
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 px-3.5 py-2 text-xs font-bold transition-all"
-                  >
-                    <FontAwesomeIcon icon={faHandHoldingDollar} />
-                    <span>Demande de virement</span>
-                  </button>
-                </div>
-              </div>
-              
-              {/* Dual Indicators: Subscription Status vs Verification Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* 1. Statut Abonnement */}
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center justify-between shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold shrink-0">
-                      <FontAwesomeIcon icon={faCircleCheck} className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                        Abonnement Propriétaire Partenaire
-                      </p>
-                      <p className="font-heading text-sm font-bold text-foreground">
-                        Formule Sérénité & Visibilité Pro — Actif
-                      </p>
-                      <p className="text-[11px] text-foreground/50">Renouvellement annuel jusqu'au 31/12/2026</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
-                    En règle
-                  </span>
-                </div>
-
-                {/* 2. Statut Vérification (KYC / KYB / Actifs) */}
-                <div className={`rounded-2xl border p-4 flex items-center justify-between shadow-xs ${
-                  isPartnerCertified
-                    ? 'border-emerald-500/20 bg-emerald-500/5'
-                    : verifStatus === 'additional_info_required'
-                    ? 'border-amber-500/40 bg-amber-500/10'
-                    : verifStatus === 'rejected'
-                    ? 'border-rose-500/30 bg-rose-500/10'
-                    : 'border-primary/20 bg-primary/5'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-10 w-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
-                      isPartnerCertified
-                        ? 'bg-emerald-500/20 text-emerald-600'
-                        : verifStatus === 'additional_info_required'
-                        ? 'bg-amber-500/20 text-amber-700'
+            <div className="space-y-6">
+              {/* Vérification du compte (si non certifié) */}
+              {!isPartnerCertified && (
+                <section className="flex flex-col gap-3 rounded-2xl border border-foreground/10 bg-card px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold ${
+                      verifStatus === 'additional_info_required'
+                        ? 'text-amber-600'
                         : verifStatus === 'rejected'
-                        ? 'bg-rose-500/20 text-rose-700'
-                        : 'bg-primary/20 text-primary'
+                        ? 'text-rose-600'
+                        : 'text-foreground'
                     }`}>
-                      <FontAwesomeIcon icon={isPartnerCertified ? faShieldHalved : verifStatus === 'additional_info_required' ? faTriangleExclamation : faClock} className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/60">
-                        Vérification & Conformité (KYC / Actifs)
-                      </p>
-                      <p className="font-heading text-sm font-bold text-foreground">
-                        {isPartnerCertified
-                          ? 'Identité & Actifs Certifiés Conformes'
-                          : verifStatus === 'additional_info_required'
-                          ? 'Complément d’information requis'
-                          : verifStatus === 'rejected'
-                          ? 'Dossier de vérification refusé'
-                          : verifStatus === 'submitted' || verifStatus === 'under_review'
-                          ? 'Dossier en cours d’examen'
-                          : 'Dossier non finalisé (Brouillon)'}
-                      </p>
-                      <p className="text-[11px] text-foreground/50">
-                        {isPartnerCertified
-                          ? 'Publications directes en ligne actives'
-                          : 'Publication bloquée jusqu’à validation'}
-                      </p>
-                    </div>
+                      {verifStatus === 'additional_info_required'
+                        ? 'Des pièces justificatives doivent être corrigées'
+                        : verifStatus === 'rejected'
+                        ? 'Dossier de vérification refusé'
+                        : verifStatus === 'submitted' || verifStatus === 'under_review'
+                        ? 'Dossier en cours d’examen'
+                        : 'Finalisez votre vérification'}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-foreground/50">
+                      {verifStatus === 'additional_info_required'
+                        ? `« ${verificationApp?.admin_feedback || 'Veuillez vérifier les pièces signalées'} » — vos annonces restent en attente jusqu’à régularisation.`
+                        : verifStatus === 'rejected'
+                        ? `Motif : « ${user?.rejection_reason || verificationApp?.rejection_reason || 'Dossier non conforme'} ».`
+                        : 'Vous pouvez déjà créer vos annonces : elles seront mises en ligne dès la validation de votre dossier.'}
+                    </p>
                   </div>
                   <Link
                     to="/onboarding/partner"
-                    className="rounded-xl bg-primary text-white text-xs font-bold px-3 py-1.5 hover:bg-primary-dark transition-all shrink-0 inline-flex items-center gap-1.5 shadow-xs"
+                    className="shrink-0 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
                   >
-                    <span>{isPartnerCertified ? 'Consulter' : 'Gérer'}</span>
-                    <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
+                    Gérer ma vérification
                   </Link>
-                </div>
-              </div>
-
-              {/* Action Banner if NOT certified */}
-              {!isPartnerCertified && (
-                <div className={`rounded-2xl border p-4 flex items-start gap-3.5 shadow-sm ${
-                  verifStatus === 'additional_info_required'
-                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200'
-                    : verifStatus === 'rejected'
-                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-200'
-                    : 'border-primary/20 bg-primary/5 text-foreground'
-                }`}>
-                  <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                    verifStatus === 'additional_info_required'
-                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                      : verifStatus === 'rejected'
-                      ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                      : 'bg-primary/20 text-primary'
-                  }`}>
-                    <FontAwesomeIcon icon={verifStatus === 'additional_info_required' ? faTriangleExclamation : faClock} className="h-4 w-4" />
-                  </div>
-                  <div className="text-xs flex-1">
-                    <p className="font-bold text-sm text-foreground">
-                      {verifStatus === 'additional_info_required'
-                        ? 'Action requise : Des pièces justificatives nécessitent une correction'
-                        : verifStatus === 'rejected'
-                        ? 'Dossier de vérification rejeté par l’équipe de modération'
-                        : 'Finalisez votre vérification pour débloquer la visibilité publique de vos annonces'}
-                    </p>
-                    <p className="mt-1 text-foreground/70 leading-relaxed">
-                      {verifStatus === 'additional_info_required'
-                        ? `L’équipe de conformité a demandé le remplacement de certains documents : "${verificationApp?.admin_feedback || 'Veuillez vérifier les pièces signalées'}". Vos annonces restent en attente tant que ces pièces ne sont pas régularisées.`
-                        : verifStatus === 'rejected'
-                        ? `Motif du refus : "${user?.rejection_reason || verificationApp?.rejection_reason || 'Dossier non conforme'}". Cliquez sur "Gérer" pour corriger votre demande.`
-                        : 'Bienvenue sur Bénin Beyond ! Vous pouvez créer et enregistrer vos annonces dès maintenant. Pour des raisons de sécurité juridique des voyageurs, vos biens seront automatiquement mis en ligne dès validation officielle de votre dossier.'}
-                    </p>
-                    <div className="pt-2">
-                      <Link
-                        to="/onboarding/partner"
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
-                      >
-                        <span>Accéder à mon espace de vérification</span>
-                        <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                </section>
               )}
 
-              {/* Top Financial & Operational Metric Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                
-                {/* 1. Solde Brut */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                    <span>Revenus Bruts Réservés</span>
-                    <FontAwesomeIcon icon={faMoneyBillWave} className="h-4 w-4 text-emerald-600" />
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  { label: 'Revenus bruts', value: formatPrice(financials.gross), hint: 'Total de vos réservations' },
+                  { label: 'Commission (10 %)', value: formatPrice(financials.commission), hint: 'Frais de service inclus' },
+                  { label: 'Solde disponible', value: formatPrice(financials.available), hint: 'Retirable dès maintenant' },
+                  { label: 'Réservations', value: bookings.length, hint: `${financials.pendingCount} en attente` }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {formatPrice(financials.gross)}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1 flex items-center gap-1">
-                    <FontAwesomeIcon icon={faArrowTrendUp} className="text-emerald-600" />
-                    <span>Total cumulé de vos réservations</span>
-                  </p>
-                </div>
-
-                {/* 2. Commission Plateforme (10%) */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                    <span>Commission Plateforme (10%)</span>
-                    <FontAwesomeIcon icon={faPercent} className="h-4 w-4 text-accent" />
-                  </div>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {formatPrice(financials.commission)}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    Frais de service & assurance inclus
-                  </p>
-                </div>
-
-                {/* 3. Solde Net Propriétaire */}
-                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-sm relative overflow-hidden">
-                  <div className="flex items-center justify-between text-primary text-xs mb-2 font-semibold">
-                    <span>Votre Solde Net Retirable</span>
-                    <FontAwesomeIcon icon={faWallet} className="h-4 w-4 text-primary" />
-                  </div>
-                  <p className="font-heading text-2xl font-bold text-primary">
-                    {formatPrice(financials.net)}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[11px] text-primary/80 font-medium">Prêt pour virement</span>
-                    <button
-                      onClick={() => {
-                        handleSetSection('finances');
-                        setPayoutViewMode('form');
-                      }}
-                      className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
-                    >
-                      <span>Retirer</span>
-                      <FontAwesomeIcon icon={faArrowRight} className="text-[9px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* 4. Réservations Actives */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <div className="flex items-center justify-between text-foreground/60 text-xs mb-2">
-                    <span>Réservations reçues</span>
-                    <FontAwesomeIcon icon={faCalendarCheck} className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {bookings.length}
-                  </p>
-                  <p className="text-[11px] text-amber-700 font-semibold mt-1">
-                    {financials.pendingCount} en attente de confirmation
-                  </p>
-                </div>
+                ))}
               </div>
 
-              {/* Graphical Activity & Recent Bookings Split (100% réel, aucun chiffre fictif) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                
-                {/* Visual Earnings Evolution Chart */}
-                <div className="lg:col-span-7">
-                  <EvolutionAreaChart
-                    title="Évolution des Revenus Hôte"
-                    subtitle="Traçabilité continue : Gains nets perçus & commissions partenaires au fil des séjours"
-                    data={partnerEvolutionData.length > 0 ? partnerEvolutionData : monthlyPartnerStats.map(m => ({ label: m.month, value: m.net, secondaryValue: Math.round(m.net * 0.111) }))}
-                    valueLabel="Gains Nets Perçus"
-                    secondaryLabel="Commission Déduite (10%)"
-                    height={270}
-                  />
-                </div>
+              <EvolutionAreaChart
+                title="Vos revenus"
+                transactions={partnerChartTransactions}
+                valueLabel="Gains nets"
+                secondaryLabel="Commission déduite (10 %)"
+              />
 
-                {/* Quick Shortcuts & Verified Status */}
-                <div className="lg:col-span-5 flex flex-col justify-between rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground mb-1">
-                      Gestion de Vos Annonces
-                    </h3>
-                    <p className="text-xs text-foreground/60 mb-4">
-                      Vos publications actuellement répertoriées dans votre espace
-                    </p>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                {/* Compte */}
+                <section className="rounded-2xl border border-foreground/10 bg-card lg:col-span-2">
+                  <h3 className="border-b border-foreground/10 px-5 py-4 text-sm font-semibold text-foreground">Mon compte</h3>
+                  <ul className="divide-y divide-foreground/[0.07] text-sm">
+                    <li className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <span className="text-foreground/75">Vérification</span>
+                      <Link
+                        to="/onboarding/partner"
+                        className={`text-xs font-medium hover:underline ${
+                          isPartnerCertified
+                            ? 'text-emerald-600'
+                            : verifStatus === 'rejected'
+                            ? 'text-rose-600'
+                            : 'text-amber-600'
+                        }`}
+                      >
+                        {isPartnerCertified
+                          ? 'Certifié'
+                          : verifStatus === 'additional_info_required'
+                          ? 'Complément requis'
+                          : verifStatus === 'rejected'
+                          ? 'Refusé'
+                          : verifStatus === 'submitted' || verifStatus === 'under_review'
+                          ? 'En cours d’examen'
+                          : 'Non finalisé'}
+                      </Link>
+                    </li>
+                    <li className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <span className="text-foreground/75">Hébergements</span>
+                      <span className="tabular-nums text-foreground">{listings.filter((l) => l.type === 'stay').length}</span>
+                    </li>
+                    <li className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <span className="text-foreground/75">Véhicules</span>
+                      <span className="tabular-nums text-foreground">{listings.filter((l) => l.type === 'drive').length}</span>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetSection('finances');
+                          setPayoutViewMode('form');
+                        }}
+                        className="flex w-full items-center justify-between px-5 py-3.5 text-left text-foreground/75 transition-colors hover:bg-muted/50 hover:text-foreground"
+                      >
+                        <span>Demander un virement</span>
+                        <FontAwesomeIcon icon={faChevronRight} className="h-2.5 w-2.5 text-foreground/35" />
+                      </button>
+                    </li>
+                  </ul>
+                </section>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-foreground/5 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <FontAwesomeIcon icon={faHouse} className="text-primary" />
-                          <span>Hébergements en ligne</span>
-                        </div>
-                        <span className="font-bold text-foreground">
-                          {listings.filter((l) => l.type === 'stay').length} villas / lofts
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-foreground/5 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <FontAwesomeIcon icon={faCar} className="text-primary" />
-                          <span>Véhicules en ligne</span>
-                        </div>
-                        <span className="font-bold text-foreground">
-                          {listings.filter((l) => l.type === 'drive').length} SUV & berlines
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-foreground/5 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <FontAwesomeIcon icon={faCheckCircle} className="text-emerald-600" />
-                          <span>Avis clients vérifiés</span>
-                        </div>
-                        <span className="font-semibold text-foreground/75">
-                          {bookings.length > 0 ? 'En cours' : 'Aucun avis'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-foreground/10 flex items-center justify-between">
+                {/* Dernières réservations */}
+                <section className="rounded-2xl border border-foreground/10 bg-card lg:col-span-3">
+                  <div className="flex items-center justify-between border-b border-foreground/10 px-5 py-4">
+                    <h3 className="text-sm font-semibold text-foreground">Dernières réservations</h3>
                     <button
-                      onClick={() => setCurrentSection('publish')}
-                      className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
-                    >
-                      <FontAwesomeIcon icon={faCirclePlus} />
-                      <span>Ajouter un nouveau logement ou véhicule</span>
-                    </button>
-                    <button
+                      type="button"
                       onClick={() => setCurrentSection('bookings')}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/70 hover:text-foreground"
+                      className="text-xs font-medium text-foreground/55 hover:text-foreground"
                     >
-                      <span>Voir les réservations</span>
-                      <FontAwesomeIcon icon={faChevronRight} className="text-[10px]" />
+                      Tout voir ({bookings.length})
                     </button>
                   </div>
-                </div>
 
-              </div>
-
-              {/* Recent Bookings Feed on Overview */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Dernières Réservations Reçues
-                    </h3>
-                    <p className="text-xs text-foreground/60">
-                      Les clients qui ont réservé vos logements ou véhicules
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setCurrentSection('bookings')}
-                    className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
-                  >
-                    <span>Voir toutes les réservations ({bookings.length})</span>
-                    <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-foreground/10 text-foreground/60">
-                        <th className="pb-3 font-semibold">Client / Voyageur</th>
-                        <th className="pb-3 font-semibold">Bien / Véhicule</th>
-                        <th className="pb-3 font-semibold">Dates</th>
-                        <th className="pb-3 font-semibold">Montant Brut</th>
-                        <th className="pb-3 font-semibold">Votre Net</th>
-                        <th className="pb-3 font-semibold">Statut</th>
-                        <th className="pb-3 font-semibold text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-foreground/5">
-                      {bookings.slice(0, 4).map((b) => (
-                        <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="py-3.5 pr-4">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={b.customer_avatar}
-                                alt={b.customer_name}
-                                className="h-8 w-8 rounded-full object-cover border border-foreground/10"
-                              />
-                              <div>
-                                <p className="font-bold text-foreground">{b.customer_name}</p>
-                                <p className="text-[11px] text-foreground/50">{b.customer_phone}</p>
-                              </div>
+                  {bookings.length === 0 ? (
+                    <p className="px-5 py-10 text-center text-sm text-foreground/50">Aucune réservation pour le moment.</p>
+                  ) : (
+                    <ul className="divide-y divide-foreground/[0.07]">
+                      {bookings.slice(0, 5).map((b) => (
+                        <li key={b.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBookingModal(b)}
+                            className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/40"
+                          >
+                            <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                              {b.listing_image && (
+                                <img
+                                  src={b.listing_image}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              )}
                             </div>
-                          </td>
-                          <td className="py-3.5 pr-4">
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={b.listing_image}
-                                alt={b.listing_title}
-                                className="h-8 w-8 rounded-lg object-cover"
-                              />
-                              <span className="font-medium text-foreground line-clamp-1">
-                                {b.listing_title}
-                              </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-foreground">{b.customer_name}</p>
+                              <p className="truncate text-xs text-foreground/45">{b.listing_title} · {b.dates}</p>
                             </div>
-                          </td>
-                          <td className="py-3.5 pr-4 text-foreground/75 font-mono text-[11px]">
-                            {b.dates}
-                          </td>
-                          <td className="py-3.5 pr-4 font-bold text-foreground font-mono">
-                            {formatPrice(b.gross_amount)}
-                          </td>
-                          <td className="py-3.5 pr-4 font-bold text-primary font-mono">
-                            {formatPrice(b.net_amount)}
-                          </td>
-                          <td className="py-3.5 pr-4">
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                b.status === 'confirmed'
-                                  ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
-                                  : 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
-                              }`}
-                            >
-                              <FontAwesomeIcon
-                                icon={b.status === 'confirmed' ? faCheckCircle : faClock}
-                                className="text-[9px]"
-                              />
-                              <span>{b.status === 'confirmed' ? 'Confirmée' : 'En attente'}</span>
-                            </span>
-                          </td>
-                          <td className="py-3.5 text-right">
-                            <button
-                              onClick={() => setSelectedBookingModal(b)}
-                              className="rounded-lg border border-foreground/15 bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition-colors"
-                            >
-                              Détails
-                            </button>
-                          </td>
-                        </tr>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-medium tabular-nums text-foreground">{formatPrice(b.net_amount)}</p>
+                              <p className={`text-xs ${b.status === 'confirmed' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {b.status === 'confirmed' ? 'Confirmée' : 'En attente'}
+                              </p>
+                            </div>
+                          </button>
+                        </li>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </ul>
+                  )}
+                </section>
               </div>
-
             </div>
           )}
 
@@ -1799,182 +1451,127 @@ export function PartnerDashboardPage() {
           {/* SECTION B : RÉSERVATIONS REÇUES (DETAILED BOOKINGS LIST) */}
           {/* ========================================================================= */}
           {currentSection === 'bookings' && (
-            <div className="space-y-6 animate-section-stagger">
-              
-              {/* Header & Controls */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground">
-                    Liste des Clients Ayant Réservé
-                  </h2>
-                  <p className="text-xs text-foreground/60">
-                    Consultez l'identité des clients, les montants bruts payés et vos revenus nets
-                  </p>
-                </div>
-
-                {/* Filter tabs & Search */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="relative">
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Recherche et filtres */}
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="relative w-full lg:max-w-xs">
                     <FontAwesomeIcon
                       icon={faMagnifyingGlass}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 text-xs"
+                      className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35"
                     />
                     <input
                       type="text"
                       placeholder="Nom, téléphone, annonce..."
                       value={bookingSearch}
                       onChange={(e) => setBookingSearch(e.target.value)}
-                      className="rounded-full border border-foreground/15 bg-card pl-8 pr-4 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-48 sm:w-60"
+                      className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
                     />
                   </div>
 
-                  <div className="flex items-center rounded-full border border-foreground/15 bg-card p-1 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { key: 'all', label: 'Toutes', count: bookings.length },
+                        { key: 'confirmed', label: 'Confirmées', count: financials.confirmedCount },
+                        { key: 'pending', label: 'En attente', count: financials.pendingCount }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setBookingFilter(tab.key)}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            bookingFilter === tab.key ? 'bg-muted text-foreground' : 'text-foreground/50 hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
+                        </button>
+                      ))}
+                    </div>
+
                     <button
-                      onClick={() => setBookingFilter('all')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        bookingFilter === 'all' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
+                      type="button"
+                      onClick={() => handleOpenBlockModal()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-foreground/15 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                      title="Enregistrer une réservation directe (hors plateforme) ou bloquer des dates"
                     >
-                      Toutes ({bookings.length})
-                    </button>
-                    <button
-                      onClick={() => setBookingFilter('confirmed')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        bookingFilter === 'confirmed' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      Confirmées ({financials.confirmedCount})
-                    </button>
-                    <button
-                      onClick={() => setBookingFilter('pending')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        bookingFilter === 'pending' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      En attente ({financials.pendingCount})
+                      <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                      <span>Réservation directe</span>
                     </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenBlockModal()}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3.5 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 hover:bg-amber-500 hover:text-white transition-all shadow-xs"
-                    title="Enregistrer une réservation directe (hors plateforme) ou bloquer des dates"
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-                    <span>Réservation physique</span>
-                  </button>
                 </div>
-              </div>
 
-              {/* Bookings Table / Cards */}
-              <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
                 {filteredBookings.length === 0 ? (
-                  <div className="p-12 text-center text-foreground/60">
-                    <FontAwesomeIcon icon={faReceipt} className="h-10 w-10 text-foreground/30 mb-3" />
-                    <p className="text-sm font-semibold">Aucune réservation trouvée</p>
-                    <p className="text-xs text-foreground/50 mt-1">
-                      Les réservations effectuées par les clients apparaîtront ici en temps réel.
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucune réservation trouvée.</p>
+                    <p className="mt-1 text-xs text-foreground/40">
+                      Les réservations de vos clients apparaîtront ici en temps réel.
                     </p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-muted/40 border-b border-foreground/10 text-foreground/60">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                         <tr>
-                          <th className="px-6 py-3.5 font-semibold">Réf & Date</th>
-                          <th className="px-4 py-3.5 font-semibold">Voyageur / Client</th>
-                          <th className="px-4 py-3.5 font-semibold">Bien / Véhicule réservé</th>
-                          <th className="px-4 py-3.5 font-semibold">Dates réservées</th>
-                          <th className="px-4 py-3.5 font-semibold">Prix Brut</th>
-                          <th className="px-4 py-3.5 font-semibold">Commission (10%)</th>
-                          <th className="px-4 py-3.5 font-semibold">Votre Net</th>
-                          <th className="px-4 py-3.5 font-semibold">Paiement</th>
-                          <th className="px-4 py-3.5 font-semibold">Statut</th>
-                          <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
+                          <th className="px-5 py-3 font-medium">Client</th>
+                          <th className="px-5 py-3 font-medium">Bien</th>
+                          <th className="px-5 py-3 font-medium">Dates</th>
+                          <th className="px-5 py-3 font-medium">Montant</th>
+                          <th className="px-5 py-3 font-medium">Commission</th>
+                          <th className="px-5 py-3 font-medium">Votre net</th>
+                          <th className="px-5 py-3 font-medium">Paiement</th>
+                          <th className="px-5 py-3 font-medium">Statut</th>
+                          <th className="px-5 py-3 text-right font-medium">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-foreground/5">
+                      <tbody className="divide-y divide-foreground/[0.07]">
                         {filteredBookings.map((b) => (
-                          <tr key={b.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-6 py-4 font-mono font-bold text-foreground">
-                              {b.booking_ref}
+                          <tr key={b.id} className="transition-colors hover:bg-muted/40">
+                            <td className="px-5 py-3">
+                              <p className="font-medium text-foreground">{b.customer_name}</p>
+                              <p className="text-xs text-foreground/45">
+                                {b.customer_phone}{b.customer_phone && b.booking_ref ? ' · ' : ''}<span className="font-mono">{b.booking_ref}</span>
+                              </p>
+                              {b.customer_email && <p className="text-xs text-foreground/40">{b.customer_email}</p>}
                             </td>
 
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={b.customer_avatar}
-                                  alt={b.customer_name}
-                                  className="h-9 w-9 rounded-full object-cover border border-foreground/10 shrink-0"
-                                />
-                                <div>
-                                  <p className="font-bold text-foreground">{b.customer_name}</p>
-                                  <p className="text-[11px] text-foreground/60">{b.customer_phone}</p>
-                                  <p className="text-[10px] text-foreground/45">{b.customer_email}</p>
-                                </div>
-                              </div>
+                            <td className="px-5 py-3">
+                              <p className="line-clamp-1 text-foreground/75">{b.listing_title}</p>
+                              <p className="text-xs text-foreground/45">{b.location}</p>
                             </td>
 
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2.5">
-                                <img
-                                  src={b.listing_image}
-                                  alt={b.listing_title}
-                                  className="h-9 w-9 rounded-xl object-cover shrink-0"
-                                />
-                                <div>
-                                  <p className="font-bold text-foreground line-clamp-1">{b.listing_title}</p>
-                                  <p className="text-[10px] text-foreground/50">{b.location}</p>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-4 text-foreground/80 font-mono text-[11px]">
+                            <td className="whitespace-nowrap px-5 py-3 text-foreground/60">
                               {b.dates}
-                              <p className="text-[10px] text-foreground/50 font-sans">{b.guests}</p>
+                              {b.guests && <p className="text-xs text-foreground/40">{b.guests}</p>}
                             </td>
 
-                            <td className="px-4 py-4 font-bold font-mono text-foreground">
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground">
                               {formatPrice(b.gross_amount)}
                             </td>
 
-                            <td className="px-4 py-4 font-mono text-foreground/60">
-                              -{formatPrice(b.commission_amount)}
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground/60">
+                              −{formatPrice(b.commission_amount)}
                             </td>
 
-                            <td className="px-4 py-4 font-bold font-mono text-primary text-sm">
+                            <td className="whitespace-nowrap px-5 py-3 font-medium tabular-nums text-foreground">
                               {formatPrice(b.net_amount)}
                             </td>
 
-                            <td className="px-4 py-4">
-                              <span className="text-[11px] text-foreground/75 font-medium block">
-                                {b.payment_method}
+                            <td className="px-5 py-3 text-xs text-foreground/60">
+                              {b.payment_method}
+                            </td>
+
+                            <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
+                              <span className={b.status === 'confirmed' ? 'text-emerald-600' : 'text-amber-600'}>
+                                {b.status === 'confirmed' ? 'Confirmée' : 'En attente'}
                               </span>
                             </td>
 
-                            <td className="px-4 py-4">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                  b.status === 'confirmed'
-                                    ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
-                                    : 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
-                                }`}
-                              >
-                                <FontAwesomeIcon
-                                  icon={b.status === 'confirmed' ? faCheckCircle : faClock}
-                                  className="text-[9px]"
-                                />
-                                <span>{b.status === 'confirmed' ? 'Confirmée' : 'En attente'}</span>
-                              </span>
-                            </td>
-
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
+                            <td className="px-5 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
                                 {b.status === 'pending' && (
                                   <button
                                     onClick={() => handleConfirmBooking(b.id)}
-                                    className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow hover:bg-emerald-700 transition-colors"
+                                    className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                                     title="Confirmer la réservation"
                                   >
                                     Confirmer
@@ -1982,7 +1579,7 @@ export function PartnerDashboardPage() {
                                 )}
                                 <button
                                   onClick={() => setSelectedBookingModal(b)}
-                                  className="rounded-lg border border-foreground/15 bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition-colors"
+                                  className="rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
                                 >
                                   Détails
                                 </button>
@@ -1994,7 +1591,7 @@ export function PartnerDashboardPage() {
                     </table>
                   </div>
                 )}
-              </div>
+              </section>
             </div>
           )}
 
@@ -2002,273 +1599,155 @@ export function PartnerDashboardPage() {
           {/* SECTION DISPONIBILITÉS & BLOCAGES CALENDRIER PAR LE PROPRIÉTAIRE */}
           {/* ========================================================================= */}
           {currentSection === 'availability' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Header & Main Action */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground flex items-center gap-2">
-                    <FontAwesomeIcon icon={faCalendarDays} className="text-primary text-base" />
-                    <span>Disponibilités des Biens & Réservations Physiques</span>
-                  </h2>
-                  <p className="text-xs text-foreground/60 mt-1 max-w-2xl leading-relaxed">
-                    Gérez en direct les disponibilités de votre parc. Si vous avez déjà fait une réservation pour un client en physique (hors plateforme), bloquez l'accès à ces dates : elles deviendront immédiatement indisponibles pour les réservations en ligne, tandis que toute date ultérieure restera librement réservable.
-                  </p>
-                </div>
+            <div className="space-y-6">
+              <p className="text-xs leading-relaxed text-foreground/50">
+                Bloquez les dates d’une réservation conclue en direct : elles deviennent indisponibles en ligne, les autres dates restent réservables.
+              </p>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenBlockModal()}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-primary/90 transition-all active:scale-95"
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="text-[11px]" />
-                    <span>Bloquer des dates / Réservation physique</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Toast confirmation banner */}
               {blockSuccessToast && (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-200 flex items-center justify-between animate-fadeIn shadow-sm">
-                  <div className="flex items-center gap-2.5 font-medium">
-                    <FontAwesomeIcon icon={faCheckCircle} className="text-emerald-600 text-sm" />
-                    <span>{blockSuccessToast}</span>
-                  </div>
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-foreground/10 bg-card px-5 py-3.5">
+                  <span className="text-sm text-emerald-600">{blockSuccessToast}</span>
                   <button
                     type="button"
                     onClick={() => setBlockSuccessToast('')}
-                    className="text-emerald-700 hover:text-emerald-900 text-xs font-bold"
+                    className="shrink-0 rounded-md p-1.5 text-foreground/45 hover:bg-muted hover:text-foreground"
+                    aria-label="Fermer"
                   >
-                    <FontAwesomeIcon icon={faXmark} />
+                    <FontAwesomeIcon icon={faXmark} className="h-3 w-3" />
                   </button>
                 </div>
               )}
 
-              {/* KPI Metrics */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
-                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider block">
-                    Biens sous gestion
-                  </span>
-                  <div className="font-heading text-2xl font-bold text-foreground mt-1">
-                    {listings.length}
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10">
+                {[
+                  { label: 'Biens', value: listings.length, hint: 'Sous gestion' },
+                  { label: 'Périodes bloquées', value: blockedBookings.length, hint: 'Réservations directes' },
+                  { label: 'Réservations en ligne', value: bookings.filter((b) => !b.is_manual_block && !b.block_reason).length, hint: 'Via Bénin Beyond' }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  <span className="text-[11px] text-foreground/60 mt-0.5 block">
-                    Villas, Lofts & Véhicules
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 shadow-xs">
-                  <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider block">
-                    Périodes bloquées en direct
-                  </span>
-                  <div className="font-heading text-2xl font-bold text-amber-700 mt-1">
-                    {blockedBookings.length}
-                  </div>
-                  <span className="text-[11px] text-amber-600/80 mt-0.5 block">
-                    Réservations physiques actives
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
-                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider block">
-                    Réservations en ligne
-                  </span>
-                  <div className="font-heading text-2xl font-bold text-primary mt-1">
-                    {bookings.filter((b) => !b.is_manual_block && !b.block_reason).length}
-                  </div>
-                  <span className="text-[11px] text-foreground/60 mt-0.5 block">
-                    Payées via Bénin Beyond
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-xs">
-                  <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider block">
-                    Synchronisation
-                  </span>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="font-heading text-sm font-bold text-emerald-800">Temps Réel</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-600/80 mt-0.5 block">
-                    Anti-conflit calendrier actif
-                  </span>
-                </div>
+                ))}
               </div>
 
-              {/* Filters & Search */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-foreground/10 bg-card p-4 shadow-xs">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="relative min-w-[200px]">
-                    <FontAwesomeIcon
-                      icon={faMagnifyingGlass}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 text-xs"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Rechercher par client, note, réf..."
-                      value={blockSearch}
-                      onChange={(e) => setBlockSearch(e.target.value)}
-                      className="w-full rounded-xl border border-foreground/15 bg-background pl-8 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                    />
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative w-full sm:w-60">
+                      <FontAwesomeIcon
+                        icon={faMagnifyingGlass}
+                        className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Rechercher par client, note, réf..."
+                        value={blockSearch}
+                        onChange={(e) => setBlockSearch(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+
+                    <select
+                      value={blockFilterListing}
+                      onChange={(e) => setBlockFilterListing(e.target.value)}
+                      className="w-full min-w-0 rounded-lg border border-foreground/10 bg-background px-2.5 py-2 text-xs text-foreground focus:outline-none sm:w-auto sm:max-w-[220px]"
+                    >
+                      <option value="all">Tous mes biens ({listings.length})</option>
+                      {listings.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.title}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <select
-                    value={blockFilterListing}
-                    onChange={(e) => setBlockFilterListing(e.target.value)}
-                    className="rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="all">Tous mes biens ({listings.length})</option>
-                    {listings.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="text-xs text-foreground/60 font-medium">
-                  {filteredBlockedBookings.length} blocage(s) affiché(s)
-                </div>
-              </div>
-
-              {/* List of Blocked Periods */}
-              {filteredBlockedBookings.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-10 text-center max-w-xl mx-auto shadow-xs">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
-                    <FontAwesomeIcon icon={faCalendarDays} className="h-6 w-6" />
-                  </div>
-                  <h3 className="font-heading text-base font-bold text-foreground">
-                    Aucune période bloquée manuellement
-                  </h3>
-                  <p className="mt-1.5 text-xs text-foreground/65 leading-relaxed">
-                    Vos biens sont actuellement ouverts aux réservations en ligne selon leurs disponibilités standard. Si vous concluez une réservation en direct ou souhaitez bloquer des dates pour un usage personnel, cliquez ci-dessous.
-                  </p>
                   <button
                     type="button"
                     onClick={() => handleOpenBlockModal()}
-                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
+                    className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted lg:self-auto"
                   >
-                    <FontAwesomeIcon icon={faPlus} className="text-[10px]" />
-                    <span>Bloquer des dates maintenant</span>
+                    <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                    <span>Bloquer des dates</span>
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredBlockedBookings.map((b) => {
-                    const it = b.items?.[0] || {};
-                    const start = b.start_date || b.check_in || it.startDate || '';
-                    const end = b.end_date || b.check_out || it.endDate || '';
-                    const todayStr = new Date().toISOString().slice(0, 10);
-                    const isCurrent = start <= todayStr && end >= todayStr;
-                    const isUpcoming = start > todayStr;
 
-                    return (
-                      <div
-                        key={b.id || b.booking_ref}
-                        className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm hover:border-foreground/20 transition-all flex flex-col justify-between gap-4"
-                      >
-                        <div className="flex items-start gap-3.5">
-                          {it.image && (
-                            <img
-                              src={it.image}
-                              alt=""
-                              className="h-16 w-20 rounded-xl object-cover border border-foreground/10 shrink-0"
-                            />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono text-[10px] text-foreground/50 uppercase font-semibold">
-                                {b.booking_ref}
-                              </span>
-                              {isCurrent ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                                  <span>En cours</span>
-                                </span>
-                              ) : isUpcoming ? (
-                                <span className="inline-flex items-center rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                                  À venir
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-medium text-foreground/60">
-                                  Terminé
-                                </span>
+                {filteredBlockedBookings.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucune période bloquée.</p>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/40">
+                      Vos biens sont ouverts aux réservations en ligne selon leurs disponibilités habituelles.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {filteredBlockedBookings.map((b) => {
+                      const it = b.items?.[0] || {};
+                      const start = b.start_date || b.check_in || it.startDate || '';
+                      const end = b.end_date || b.check_out || it.endDate || '';
+                      const todayStr = new Date().toISOString().slice(0, 10);
+                      const isCurrent = start <= todayStr && end >= todayStr;
+                      const isUpcoming = start > todayStr;
+
+                      return (
+                        <li key={b.id || b.booking_ref} className="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center">
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                              {it.image && (
+                                <img
+                                  src={it.image}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
                               )}
                             </div>
-
-                            <h4 className="font-heading text-sm font-bold text-foreground mt-0.5 truncate">
-                              {it.title || b.title || 'Bien partenaire'}
-                            </h4>
-
-                            <div className="mt-2 flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-200">
-                                <FontAwesomeIcon icon={faCalendarDays} className="text-[11px]" />
-                                <span>Du {start} au {end}</span>
-                              </span>
-                              {b.duration_days && (
-                                <span className="text-[11px] text-foreground/60 font-medium">
-                                  ({b.duration_days} nuit{b.duration_days > 1 ? 's' : ''})
-                                </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {it.title || b.title || 'Bien partenaire'}
+                              </p>
+                              <p className="truncate text-xs text-foreground/45">
+                                Du {start} au {end}
+                                {b.duration_days ? ` · ${b.duration_days} nuit${b.duration_days > 1 ? 's' : ''}` : ''}
+                                {' · '}{b.block_reason || 'Réservation directe'}
+                                {b.customer_name ? ` · ${b.customer_name}` : ''}
+                              </p>
+                              {(b.customer_phone || b.notes) && (
+                                <p className="truncate text-xs text-foreground/40">
+                                  {b.customer_phone && (
+                                    <a href={`tel:${b.customer_phone}`} className="hover:text-foreground hover:underline">
+                                      {b.customer_phone}
+                                    </a>
+                                  )}
+                                  {b.customer_phone && b.notes ? ' · ' : ''}
+                                  {b.notes}
+                                </p>
                               )}
                             </div>
                           </div>
-                        </div>
 
-                        {/* Motif & Client */}
-                        <div className="rounded-xl bg-muted/40 p-3 text-xs space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-foreground/50 text-[11px]">Motif du blocage :</span>
-                            <span className="font-semibold text-foreground/85">
-                              {b.block_reason || 'Réservation physique / Directe'}
+                          <div className="flex shrink-0 items-center justify-between gap-3 pl-[60px] sm:pl-0">
+                            <span className={`text-xs font-medium ${
+                              isCurrent ? 'text-emerald-600' : isUpcoming ? 'text-amber-600' : 'text-foreground/45'
+                            }`}>
+                              {isCurrent ? 'En cours' : isUpcoming ? 'À venir' : 'Terminé'}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUnblockPeriod(b)}
+                              className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
+                            >
+                              Débloquer
+                            </button>
                           </div>
-                          {b.customer_name && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-foreground/50 text-[11px]">Client physique :</span>
-                              <span className="font-semibold text-foreground/90">{b.customer_name}</span>
-                            </div>
-                          )}
-                          {b.customer_phone && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-foreground/50 text-[11px]">Contact :</span>
-                              <a
-                                href={`tel:${b.customer_phone}`}
-                                className="font-semibold text-primary hover:underline flex items-center gap-1"
-                              >
-                                <FontAwesomeIcon icon={faPhone} className="text-[10px]" />
-                                <span>{b.customer_phone}</span>
-                              </a>
-                            </div>
-                          )}
-                          {b.notes && (
-                            <div className="pt-1 border-t border-foreground/10 text-[11px] text-foreground/70 italic">
-                              « {b.notes} »
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
-                            <FontAwesomeIcon icon={faBan} className="text-[10px]" />
-                            <span>Verrouillé en ligne</span>
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() => handleUnblockPeriod(b)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-500 hover:text-white transition-all shadow-xs"
-                          >
-                            <FontAwesomeIcon icon={faTrash} className="text-[10px]" />
-                            <span>Libérer / Débloquer</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -2276,205 +1755,126 @@ export function PartnerDashboardPage() {
           {/* SECTION C : MES ANNONCES & BIENS (LISTINGS) */}
           {/* ========================================================================= */}
           {currentSection === 'listings' && (
-            <div className="space-y-6 animate-section-stagger">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground">
-                    Mes Logements & Véhicules Publiés
-                  </h2>
-                  <p className="text-xs text-foreground/60">
-                    Gérez l'ensemble de vos villas, appartements et flottes en ligne
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center rounded-full border border-foreground/15 bg-card p-1 text-xs">
-                    <button
-                      onClick={() => setListingFilter('all')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        listingFilter === 'all' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      Tous ({listings.length})
-                    </button>
-                    <button
-                      onClick={() => setListingFilter('stay')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        listingFilter === 'stay' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      Hébergements
-                    </button>
-                    <button
-                      onClick={() => setListingFilter('drive')}
-                      className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                        listingFilter === 'drive' ? 'bg-primary text-white' : 'text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      Véhicules
-                    </button>
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[
+                      { key: 'all', label: 'Tous', count: listings.length },
+                      { key: 'stay', label: 'Hébergements', count: listings.filter((l) => l.type === 'stay').length },
+                      { key: 'drive', label: 'Véhicules', count: listings.filter((l) => l.type === 'drive').length }
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setListingFilter(tab.key)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          listingFilter === tab.key ? 'bg-muted text-foreground' : 'text-foreground/50 hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
+                      </button>
+                    ))}
                   </div>
 
                   <button
                     onClick={() => setCurrentSection('publish')}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
+                    className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
                   >
-                    <FontAwesomeIcon icon={faCirclePlus} />
+                    <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
                     <span>Nouvelle annonce</span>
                   </button>
                 </div>
-              </div>
 
-              {/* Listings Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredListings.map((item) => (
-                  <div
-                    key={item.id}
-                    className="group rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
-                  >
-                    <div className="relative aspect-[16/10] overflow-hidden bg-muted">
-                      <img
-                        src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80'}
-                        alt={item.title}
-                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                      <div className="absolute left-3 top-3 flex items-center gap-1.5">
-                        <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-accent uppercase backdrop-blur-sm border border-white/10">
-                          {item.type === 'stay' ? (item.subcategory === 'hotel' ? 'Hôtel' : 'Logement') : 'Véhicule'}
-                        </span>
-                        {item.availability?.available_from && (
-                          <span className="rounded-full bg-blue-600/90 text-white px-2 py-0.5 text-[9px] font-bold shadow">
-                            Dispo {item.availability.available_from.slice(5)} au {item.availability.available_to?.slice(5)}
-                          </span>
-                        )}
-                        {item.video_url && (
-                          <span className="rounded-full bg-accent text-black px-2 py-0.5 text-[9px] font-bold shadow flex items-center gap-1">
-                            <FontAwesomeIcon icon={faVideo} className="text-[8px]" />
-                            <span>Vidéo</span>
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="absolute right-3 top-3">
-                        {item.status === 'pending' ? (
-                          <span className="rounded-full bg-amber-500/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow flex items-center gap-1">
-                            <FontAwesomeIcon icon={faClock} className="text-[9px]" />
-                            <span>{isPartnerCertified ? 'En cours de publication' : 'En attente KYC'}</span>
-                          </span>
-                        ) : item.status === 'refused' ? (
-                          <button
-                            onClick={() => setSelectedRejectionModal(item)}
-                            className="rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow flex items-center gap-1 hover:bg-rose-700 transition-colors animate-pulse"
-                          >
-                            <FontAwesomeIcon icon={faTriangleExclamation} className="text-[9px]" />
-                            <span>Refusée (Voir motif)</span>
-                          </button>
-                        ) : item.status === 'suspended' ? (
-                          <span className="rounded-full bg-neutral-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                            Suspendue
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-emerald-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                            En ligne
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-5 flex-1 flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-heading text-base font-bold text-foreground group-hover:text-primary transition-colors">
-                          {item.title}
-                        </h4>
-                        <p className="text-xs text-foreground/60 mt-1 flex items-center gap-1.5">
-                          <FontAwesomeIcon icon={faLocationDot} className="text-primary text-[10px]" />
-                          <span>{item.location}</span>
-                        </p>
-                        <p className="mt-2 text-xs text-foreground/75 line-clamp-2">
-                          {item.description}
-                        </p>
-
-                        {item.status === 'refused' && (
-                          <div className="mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-800 text-[11px] flex items-center justify-between">
-                            <span className="truncate mr-2 font-medium">⚠️ Qualité non conforme aux critères</span>
-                            <button
-                              onClick={() => setSelectedRejectionModal(item)}
-                              className="font-bold underline text-rose-700 shrink-0 hover:text-rose-900"
-                            >
-                              Voir le motif
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-5 pt-4 border-t border-foreground/10 flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] text-foreground/50 uppercase font-semibold">Tarif affiché</p>
-                          <p className="font-heading text-base font-bold text-primary font-mono">
-                            {formatPrice(item.price)}
-                            <span className="text-[10px] font-normal text-foreground/60 ml-1">
-                              / {item.price_unit || 'nuit'}
-                            </span>
+                {filteredListings.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucune annonce dans cette catégorie.</p>
+                    <button
+                      onClick={() => setCurrentSection('publish')}
+                      className="mt-2 text-xs font-medium text-foreground/55 hover:text-foreground"
+                    >
+                      Publier une annonce
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {filteredListings.map((item) => (
+                      <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:flex-nowrap">
+                        <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                          <img
+                            src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80'}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1 basis-[calc(100%-60px)] sm:basis-auto">
+                          <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+                          <p className="truncate text-xs text-foreground/45">
+                            {item.type === 'stay' ? (item.subcategory === 'hotel' ? 'Hôtel' : 'Logement') : 'Véhicule'}
+                            {item.location ? ` · ${item.location}` : ''}
+                            {item.availability?.available_from ? ` · dispo ${item.availability.available_from.slice(5)} au ${item.availability.available_to?.slice(5)}` : ''}
+                            {item.video_url ? ' · vidéo' : ''}
                           </p>
                         </div>
-
-                        <div className="flex items-center gap-2">
+                        <div className="shrink-0 pl-[60px] text-left sm:pl-0 sm:text-right">
+                          <p className="text-sm font-medium tabular-nums text-foreground">
+                            {formatPrice(item.price)}
+                            <span className="text-xs font-normal text-foreground/45"> / {item.price_unit || 'nuit'}</span>
+                          </p>
+                          {item.status === 'pending' ? (
+                            <p className="text-xs text-amber-600">{isPartnerCertified ? 'Publication en cours' : 'En attente de vérification'}</p>
+                          ) : item.status === 'refused' ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRejectionModal(item)}
+                              className="text-xs text-rose-600 hover:underline"
+                            >
+                              Refusée · voir le motif
+                            </button>
+                          ) : item.status === 'suspended' ? (
+                            <p className="text-xs text-foreground/50">Suspendue</p>
+                          ) : (
+                            <p className="text-xs text-emerald-600">En ligne</p>
+                          )}
+                        </div>
+                        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:ml-0">
                           <button
                             type="button"
                             onClick={() => handleOpenBlockModal(item)}
-                            className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                             title="Gérer les disponibilités / Bloquer des dates (réservation physique)"
                           >
-                            <FontAwesomeIcon icon={faCalendarDays} />
+                            <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(item)}
-                            className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                             title="Modifier cette annonce"
                           >
-                            <FontAwesomeIcon icon={faPen} />
+                            <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => setPreviewListingModal(item)}
-                            className="rounded-lg border border-foreground/15 p-2 text-xs text-foreground/70 hover:text-foreground hover:bg-muted transition-colors"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                             title="Aperçu du bien en direct (sans quitter le tableau de bord)"
                           >
-                            <FontAwesomeIcon icon={faEye} />
+                            <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
                           </button>
                           <button
                             onClick={() => handleDeleteListingItem(item.id, item.title)}
-                            className="rounded-lg border border-red-200 p-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                             title="Supprimer l'annonce"
                           >
-                            <FontAwesomeIcon icon={faTrash} />
+                            <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {filteredListings.length === 0 && (
-                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
-                  <FontAwesomeIcon icon={faHouse} className="h-10 w-10 text-foreground/20 mb-3" />
-                  <h4 className="font-heading text-base font-bold text-foreground">
-                    Vous n'avez pas encore d'annonce dans cette catégorie
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
-                    Publiez dès aujourd'hui vos villas, appartements ou véhicules haut de gamme pour commencer à recevoir des réservations certifiées.
-                  </p>
-                  <button
-                    onClick={() => setCurrentSection('publish')}
-                    className="mt-4 rounded-xl bg-primary text-white px-4 py-2 text-xs font-bold shadow-md hover:bg-primary/90 transition-all inline-flex items-center gap-2"
-                  >
-                    <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>Publier une annonce</span>
-                  </button>
-                </div>
-              )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -2482,135 +1882,35 @@ export function PartnerDashboardPage() {
           {/* SECTION D : PUBLIER UNE ANNONCE (PUBLISH FORM) */}
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
-            <div className="max-w-3xl mx-auto space-y-6 animate-section-stagger">
-              <div>
-                <h2 className="font-heading text-xl font-bold text-foreground">
-                  Publier une Nouvelle Annonce
-                </h2>
-                <p className="text-xs text-foreground/60">
-                  Mettez en ligne un hébergement de prestige ou un véhicule d'exception sur Bénin Beyond
-                </p>
-              </div>
-
-              {/* CHARTE DE PUBLICATION ET STATUT DE CERTIFICATION HÔTE */}
-              {isPartnerCertified ? (
-                <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-6 space-y-4 shadow-sm">
-                  <div className="flex items-center gap-3 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
-                    <div className="h-9 w-9 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0">
-                      <FontAwesomeIcon icon={faCircleCheck} className="text-base" />
-                    </div>
-                    <div>
-                      <span className="block text-xs uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold">Hôte Certifié Bénin Beyond</span>
-                      <h3 className="font-heading text-sm sm:text-base font-bold text-foreground">
-                        Mise en Ligne Immédiate de vos Annonces
-                      </h3>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-foreground/80 leading-relaxed">
-                    Votre profil partenaire est <strong>certifié conforme (KYC validé)</strong>. Toute annonce que vous publiez est <strong>mise en ligne instantanément</strong> sans délai d'attente ni modération préalable. Veillez simplement au respect de notre charte de prestige visuel :
+            <div className="mx-auto max-w-3xl space-y-6">
+              {/* Statut de publication */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="px-5 py-4">
+                  <h3 className={`text-sm font-semibold ${isPartnerCertified ? 'text-foreground' : 'text-amber-600'}`}>
+                    {isPartnerCertified ? 'Publication immédiate' : 'Publication dès la validation de votre profil'}
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-foreground/50">
+                    {isPartnerCertified
+                      ? 'Votre compte est certifié : vos annonces sont visibles par les voyageurs dès leur enregistrement.'
+                      : 'Vous pouvez déjà enregistrer vos annonces : elles seront mises en ligne automatiquement après la certification de votre dossier.'}
                   </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
-                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-foreground">
-                        <FontAwesomeIcon icon={faCamera} className="text-emerald-600 text-xs" />
-                        <span>Photos Nettes (1080p)</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/70 leading-snug">
-                        Prises de jour, nettes, lumineuses et en format horizontal pour attirer les clients.
-                      </p>
-                    </div>
-
-                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-foreground">
-                        <FontAwesomeIcon icon={faVideo} className="text-emerald-600 text-xs" />
-                        <span>Vidéo Visite Réelle</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/70 leading-snug">
-                        Courte vidéo (15 à 45 sec, max 25 Mo) montrant le bien ou le véhicule avec authenticité.
-                      </p>
-                    </div>
-
-                    <div className="bg-emerald-500/10 p-3.5 rounded-2xl border border-emerald-500/25 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-300">
-                        <FontAwesomeIcon icon={faCheck} className="text-emerald-600 text-xs" />
-                        <span>Publication Directe</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/75 leading-snug">
-                        Votre annonce est visible par tous les voyageurs dès que vous cliquez sur Publier.
-                      </p>
-                    </div>
-                  </div>
                 </div>
-              ) : (
-                <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-6 space-y-4 shadow-sm">
-                  <div className="flex items-center gap-3 text-amber-900 dark:text-amber-300 font-bold text-sm">
-                    <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
-                      <FontAwesomeIcon icon={faClock} className="text-base" />
-                    </div>
-                    <div>
-                      <span className="block text-xs uppercase tracking-widest text-amber-700 dark:text-amber-400 font-bold">Compte en Attente de Certification</span>
-                      <h3 className="font-heading text-sm sm:text-base font-bold text-foreground">
-                        Publication Automatique dès Validation de votre Profil (KYC)
-                      </h3>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-foreground/80 leading-relaxed">
-                    Votre dossier KYC est actuellement en cours d'examen. 
-                    <strong> Vous pouvez dès à présent créer et enregistrer vos annonces</strong> : elles seront <strong>automatiquement mises en ligne</strong> dès la certification de votre profil par l'administration.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
-                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-foreground">
-                        <FontAwesomeIcon icon={faCamera} className="text-amber-600 text-xs" />
-                        <span>Photos Nettes (1080p)</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/70 leading-snug">
-                        Prises de jour, nettes, bien éclairées et en format horizontal.
-                      </p>
-                    </div>
-
-                    <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-foreground/10 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-foreground">
-                        <FontAwesomeIcon icon={faVideo} className="text-amber-600 text-xs" />
-                        <span>Vidéo Courte</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/70 leading-snug">
-                        Visite immersive courte (15 à 45 sec) pour valoriser votre bien.
-                      </p>
-                    </div>
-
-                    <div className="bg-amber-500/10 p-3.5 rounded-2xl border border-amber-500/25 flex flex-col justify-between space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                        <FontAwesomeIcon icon={faShieldHalved} className="text-amber-600 text-xs" />
-                        <span>Activation Automatique</span>
-                      </div>
-                      <p className="text-[11px] text-foreground/75 leading-snug">
-                        Dès validation de votre KYC par l'admin, vos biens s'affichent publiquement sans action requise.
-                      </p>
-                    </div>
-                  </div>
+                <div className="border-t border-foreground/10 px-5 py-3 text-xs text-foreground/50">
+                  Photos nettes et horizontales (1080p, en plein jour) · la visite vidéo est ajoutée par l’équipe Bénin Beyond lors de la certification.
                 </div>
-              )}
+              </section>
 
               {publishSuccess && (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3 animate-fadeIn">
-                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-lg" />
-                  <span>{publishSuccess}</span>
-                </div>
+                <p className="rounded-2xl border border-foreground/10 bg-card px-5 py-3.5 text-sm text-emerald-600">
+                  {publishSuccess}
+                </p>
               )}
 
-              <form onSubmit={handlePublishSubmit} className="rounded-3xl border border-foreground/10 bg-card p-6 sm:p-8 shadow-sm space-y-6">
-                
-                {/* 1. Sélection de Catégorie */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block mb-3">
-                    1. Catégorie de publication
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <form onSubmit={handlePublishSubmit} className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Catégorie */}
+                <div className="space-y-4 px-5 py-5">
+                  <h3 className="text-sm font-semibold text-foreground">Catégorie</h3>
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => {
@@ -2620,19 +1920,14 @@ export function PartnerDashboardPage() {
                         setRoomsCount(1);
                         setFormSpecs('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
                       }}
-                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
+                      className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
                         formType === 'stay'
-                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
-                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                          ? 'border-foreground/60 bg-muted/40'
+                          : 'border-foreground/10 hover:border-foreground/25'
                       }`}
                     >
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <FontAwesomeIcon icon={faHouse} className="text-primary text-base" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm text-foreground">Hébergement</p>
-                        <p className="text-[11px] text-foreground/60 leading-snug">Villa, Appartement, Loft bord de mer</p>
-                      </div>
+                      <p className="text-sm font-medium text-foreground">Hébergement</p>
+                      <p className="mt-0.5 text-xs text-foreground/50">Villa, appartement, loft</p>
                     </button>
 
                     <button
@@ -2644,178 +1939,105 @@ export function PartnerDashboardPage() {
                         setRoomsCount(0);
                         setFormSpecs('Climatisation, Boîte automatique, Bluetooth, Caméra de recul, GPS');
                       }}
-                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
+                      className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
                         formType === 'drive'
-                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
-                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                          ? 'border-foreground/60 bg-muted/40'
+                          : 'border-foreground/10 hover:border-foreground/25'
                       }`}
                     >
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <FontAwesomeIcon icon={faCar} className="text-primary text-base" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm text-foreground">Véhicule</p>
-                        <p className="text-[11px] text-foreground/60 leading-snug">Location SUV, Berline ou Vente certifiée</p>
-                      </div>
+                      <p className="text-sm font-medium text-foreground">Véhicule</p>
+                      <p className="mt-0.5 text-xs text-foreground/50">Location ou vente</p>
                     </button>
                   </div>
 
-                  {/* 1b. Type d'hébergement : Villa vs Hôtel */}
                   {formType === 'stay' && (
-                    <div className="mt-3 rounded-2xl border border-foreground/10 bg-background/60 p-3 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-foreground/75 mr-1">Catégorie :</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormSubcategory('villa');
-                          setFormSpecs('Wi-Fi Fibre, Climatisation, Piscine privée, Sécurité 24/7');
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                          formSubcategory === 'villa'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'bg-muted text-foreground/70 hover:bg-muted/80'
-                        }`}
-                      >
-                        🏡 Villa / Résidence privée
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormSubcategory('hotel');
-                          setFormSpecs('Chambre Deluxe, Climatisation, Petit-déjeuner inclus, Service d\'étage');
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                          formSubcategory === 'hotel'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'bg-muted text-foreground/70 hover:bg-muted/80'
-                        }`}
-                      >
-                        🏨 Hôtel & Chambre d'hôtel
-                      </button>
+                    <div className="space-y-3">
+                      <p className="text-xs text-foreground/60">Type d’établissement</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormSubcategory('villa');
+                            setFormSpecs('Wi-Fi Fibre, Climatisation, Piscine privée, Sécurité 24/7');
+                          }}
+                          className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
+                            formSubcategory === 'villa'
+                              ? 'border-foreground/60 bg-muted/40'
+                              : 'border-foreground/10 hover:border-foreground/25'
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-foreground">Villa / résidence</p>
+                          <p className="mt-0.5 text-xs text-foreground/50">Bien entier</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormSubcategory('hotel');
+                            setFormSpecs('Chambre Deluxe, Climatisation, Petit-déjeuner inclus, Service d\'étage');
+                          }}
+                          className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
+                            formSubcategory === 'hotel'
+                              ? 'border-foreground/60 bg-muted/40'
+                              : 'border-foreground/10 hover:border-foreground/25'
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-foreground">Chambre d’hôtel</p>
+                          <p className="mt-0.5 text-xs text-foreground/50">Chambres et disponibilités</p>
+                        </button>
+                      </div>
+
+                      {formSubcategory === 'hotel' && (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="mb-1 block text-xs text-foreground/60">
+                              Chambres de ce type *
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="200"
+                              value={roomsCount}
+                              onChange={(e) => setRoomsCount(e.target.value)}
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-foreground/60">
+                              Disponible à partir du
+                            </label>
+                            <input
+                              type="date"
+                              value={availableFrom}
+                              onChange={(e) => setAvailableFrom(e.target.value)}
+                              className="w-full cursor-pointer rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-foreground/60">
+                              Disponible jusqu’au
+                            </label>
+                            <input
+                              type="date"
+                              value={availableTo}
+                              onChange={(e) => setAvailableTo(e.target.value)}
+                              className="w-full cursor-pointer rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
 
-                {/* 2. Titre & Localisation */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                      Titre de l'annonce *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder={
-                        formType === 'stay'
-                          ? formSubcategory === 'hotel'
-                            ? 'ex: Chambre Deluxe Vue Lagune — Hôtel Riviera'
-                            : 'ex: Villa Royale Cotonou Lagune'
-                          : 'ex: SUV Toyota Fortuner 7 Places VIP'
-                      }
-                      value={formTitle}
-                      onChange={(e) => setFormTitle(e.target.value)}
-                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                      Ville & Quartier *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: Cotonou, Haie Vive ou Ouidah Plage"
-                      value={formLocation}
-                      onChange={(e) => setFormLocation(e.target.value)}
-                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Disponibilité & Calendrier pour les Hôtels */}
-                {formType === 'stay' && formSubcategory === 'hotel' && (
-                  <div className="rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
-                        <FontAwesomeIcon icon={faCalendarCheck} className="h-3.5 w-3.5" />
-                        <span>Disponibilité & Calendrier des Chambres d'Hôtel</span>
-                      </span>
-                      <span className="text-[10px] text-accent font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
-                        Module Hôtelier
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-foreground/70">
-                      Renseignez la période d'ouverture et le nombre de chambres disponibles de ce type.
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {formType === 'drive' && (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
-                          Chambres dispo de ce type *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="200"
-                          value={roomsCount}
-                          onChange={(e) => setRoomsCount(e.target.value)}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
-                          Disponible à partir du
-                        </label>
-                        <input
-                          type="date"
-                          value={availableFrom}
-                          onChange={(e) => setAvailableFrom(e.target.value)}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
-                          Disponible jusqu'au
-                        </label>
-                        <input
-                          type="date"
-                          value={availableTo}
-                          onChange={(e) => setAvailableTo(e.target.value)}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Spécifications dédiées pour les Véhicules */}
-                {formType === 'drive' && (
-                  <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                        <FontAwesomeIcon icon={faCar} className="h-3.5 w-3.5" />
-                        <span>Caractéristiques Techniques du Véhicule</span>
-                      </span>
-                      <span className="text-[10px] text-primary font-bold bg-primary/15 px-2 py-0.5 rounded-full">
-                        Flotte & Mobilité (0 chambre)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-foreground/70">
-                      Renseignez les spécifications réelles du véhicule. Aucun compte de chambre d'hôtel n'est appliqué aux véhicules.
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-                      <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                        <label className="mb-1 block text-xs text-foreground/60">
                           Places assises *
                         </label>
                         <select
                           value={seatsCount}
                           onChange={(e) => setSeatsCount(Number(e.target.value))}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         >
                           <option value={2}>2 places (Sport / Coupé)</option>
                           <option value={4}>4 places (Berline compacte)</option>
@@ -2826,13 +2048,13 @@ export function PartnerDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                        <label className="mb-1 block text-xs text-foreground/60">
                           Boîte de vitesse
                         </label>
                         <select
                           value={transmission}
                           onChange={(e) => setTransmission(e.target.value)}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         >
                           <option value="automatique">Automatique</option>
                           <option value="manuelle">Manuelle</option>
@@ -2840,13 +2062,13 @@ export function PartnerDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                        <label className="mb-1 block text-xs text-foreground/60">
                           Carburant
                         </label>
                         <select
                           value={fuelType}
                           onChange={(e) => setFuelType(e.target.value)}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         >
                           <option value="essence">Essence</option>
                           <option value="diesel">Diesel</option>
@@ -2856,37 +2078,103 @@ export function PartnerDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
-                          Option Chauffeur VIP
+                        <label className="mb-1 block text-xs text-foreground/60">
+                          Chauffeur
                         </label>
                         <select
                           value={withDriver ? 'yes' : 'no'}
                           onChange={(e) => setWithDriver(e.target.value === 'yes')}
-                          className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         >
-                          <option value="no">Sans chauffeur (Autonome)</option>
-                          <option value="yes">Avec chauffeur dédié inclus</option>
+                          <option value="no">Sans chauffeur</option>
+                          <option value="yes">Avec chauffeur</option>
                         </select>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {/* 3. Tarification & Commission */}
-                <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      2. Tarification & Revenu Net Estimé
-                    </span>
-                    <span className="text-[11px] text-accent-foreground font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
-                      Commission plateforme : 10%
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Informations */}
+                <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                  <h3 className="text-sm font-semibold text-foreground">Informations</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                        Tarif brut (FCFA) * <span className="text-[10px] text-foreground/50 font-normal">(Min. 1 000 FCFA)</span>
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Titre de l’annonce *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={
+                          formType === 'stay'
+                            ? formSubcategory === 'hotel'
+                              ? 'ex: Chambre Deluxe Vue Lagune — Hôtel Riviera'
+                              : 'ex: Villa Royale Cotonou Lagune'
+                            : 'ex: SUV Toyota Fortuner 7 Places VIP'
+                        }
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Ville et quartier *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="ex: Cotonou, Haie Vive ou Ouidah Plage"
+                        value={formLocation}
+                        onChange={(e) => setFormLocation(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Caractéristiques clés (séparées par des virgules)
+                    </label>
+                    <input
+                      type="text"
+                      value={formSpecs}
+                      onChange={(e) => setFormSpecs(e.target.value)}
+                      placeholder={
+                        formType === 'stay'
+                          ? '4 Chambres, Piscine privée, Climatisation, Wifi'
+                          : '7 Places, Automatique, Climatisation, Carburant Essence'
+                      }
+                      className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Description pour les voyageurs
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                      placeholder="Présentez le confort, l'emplacement, les règles ou les équipements d'exception de votre bien..."
+                      className="w-full resize-none rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Tarification */}
+                <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-foreground">Tarification</h3>
+                    <span className="text-xs text-foreground/50">Commission 10 %</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Tarif (FCFA, min. 1 000) *
                       </label>
                       <input
                         type="number"
@@ -2895,18 +2183,18 @@ export function PartnerDashboardPage() {
                         placeholder={formType === 'stay' ? '85000' : '45000'}
                         value={formPrice}
                         onChange={(e) => setFormPrice(e.target.value)}
-                        className="w-full rounded-xl border border-foreground/15 bg-card px-3.5 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                        Fréquence / Modalité
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Modalité
                       </label>
                       <select
                         value={formPriceUnit}
                         onChange={(e) => setFormPriceUnit(e.target.value)}
-                        className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                       >
                         {formType === 'stay' ? (
                           <>
@@ -2924,160 +2212,95 @@ export function PartnerDashboardPage() {
                       </select>
                     </div>
 
-                    <div className="bg-card p-2.5 rounded-xl border border-foreground/10 flex flex-col justify-center">
-                      <p className="text-[10px] text-foreground/60">Votre revenu net estimé :</p>
-                      <p className="font-heading text-sm font-bold text-primary font-mono">
+                    <div>
+                      <p className="mb-1 text-xs text-foreground/60">Votre revenu net</p>
+                      <p className="py-2 text-sm font-medium tabular-nums text-foreground">
                         {formPrice ? formatPrice(Math.round(parseInt(formPrice, 10) * 0.90)) : '0 FCFA'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Caractéristiques & Description */}
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                    Caractéristiques clés (séparées par des virgules)
-                  </label>
-                  <input
-                    type="text"
-                    value={formSpecs}
-                    onChange={(e) => setFormSpecs(e.target.value)}
-                    placeholder={
-                      formType === 'stay'
-                        ? '4 Chambres, Piscine privée, Climatisation, Wifi'
-                        : '7 Places, Automatique, Climatisation, Carburant Essence'
-                    }
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                    Description détaillée pour les voyageurs
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder="Présentez le confort, l'emplacement, les règles ou les équipements d'exception de votre bien..."
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
-                  />
-                </div>
-
-                {/* 5. TÉLÉVERSEMENT DE VOS PHOTOS (CHOISIES PAR L'HÔTE) */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                        3. Vos Photos Haute Définition *
-                      </label>
-                      <p className="text-[11px] text-foreground/60">
-                        Choisissez vos propres photos de votre logement ou véhicule (min. 1 photo, format paysage recommandé)
-                      </p>
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent-foreground text-[10px] font-semibold self-start sm:self-auto">
-                      <FontAwesomeIcon icon={faShieldHalved} className="text-accent" />
-                      <span>Visite Vidéo certifiée par la Direction</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[11px] text-foreground/75 flex items-start gap-2.5">
-                    <FontAwesomeIcon icon={faCircleInfo} className="text-primary mt-0.5 text-xs shrink-0" />
-                    <div>
-                      <span className="font-bold text-foreground">Politique d'assurance & Vidéo :</span> Conformément aux standards d'excellence Bénin Beyond, les visites vidéo immersives sont vérifiées et ajoutées exclusivement par les administrateurs lors de la certification de votre annonce pour garantir une authenticité certifiée aux clients.
-                    </div>
+                {/* Photos */}
+                <div className="space-y-3 border-t border-foreground/10 px-5 py-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Photos *</h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">Au moins une photo, format paysage recommandé.</p>
                   </div>
 
                   {photoError && (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
-                      <FontAwesomeIcon icon={faTriangleExclamation} />
-                      <span>{photoError}</span>
-                    </div>
+                    <p className="text-xs text-rose-600">{photoError}</p>
                   )}
 
-                  {/* Dropzone / File Picker */}
-                  <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-6 text-center transition-colors bg-muted/20">
+                  <div className="relative rounded-lg border border-dashed border-foreground/15 px-4 py-6 text-center transition-colors hover:border-foreground/35">
                     <input
                       type="file"
                       id="host-photo-upload"
                       multiple
                       accept="image/jpeg,image/png,image/webp"
                       onChange={handlePhotoUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     />
-                    <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
-                      <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl">
-                        <FontAwesomeIcon icon={faUpload} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-foreground">
-                          Cliquez pour sélectionner vos photos ou glissez-déposez
-                        </p>
-                        <p className="text-[11px] text-foreground/50 mt-0.5">
-                          JPG, PNG, WebP — Résolution minimale recommandée : 1920x1080px (10 Mo max par photo)
-                        </p>
-                      </div>
+                    <div className="pointer-events-none flex flex-col items-center gap-1.5">
+                      <FontAwesomeIcon icon={faUpload} className="h-4 w-4 text-foreground/40" />
+                      <p className="text-sm text-foreground/75">Sélectionnez ou glissez-déposez vos photos</p>
+                      <p className="text-xs text-foreground/40">JPG, PNG, WebP · 1920x1080 recommandé · 10 Mo max</p>
                     </div>
                   </div>
 
-                  {/* Manual URL entry */}
                   <div className="flex items-center gap-2">
                     <input
                       type="url"
-                      placeholder="Ou collez un lien URL d'image web..."
+                      placeholder="Ou collez un lien d'image..."
                       value={photoUrlInput}
                       onChange={(e) => setPhotoUrlInput(e.target.value)}
-                      className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleAddPhotoUrl}
-                      className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                      className="shrink-0 rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground hover:bg-muted"
                     >
                       Ajouter
                     </button>
                   </div>
 
-                  {/* Uploaded Photos Preview Grid */}
                   {uploadedPhotos.length > 0 && (
-                    <div className="space-y-2 pt-2">
-                      <div className="flex items-center justify-between text-xs text-foreground/70">
-                        <span className="font-semibold">{uploadedPhotos.length} photo(s) sélectionnée(s)</span>
-                        <span className="text-[11px] text-accent font-medium">La photo avec le badge doré est la couverture</span>
-                      </div>
+                    <div className="space-y-2 pt-1">
+                      <p className="text-xs text-foreground/50">
+                        {uploadedPhotos.length} photo{uploadedPhotos.length > 1 ? 's' : ''} · la photo encadrée sert de couverture
+                      </p>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                         {uploadedPhotos.map((photo, index) => (
                           <div
                             key={index}
-                            className={`group relative aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all ${
+                            className={`group relative aspect-[16/10] overflow-hidden rounded-lg border-2 transition-colors ${
                               featuredPhotoIndex === index
-                                ? 'border-accent ring-2 ring-accent/40'
-                                : 'border-foreground/10 hover:border-foreground/30'
+                                ? 'border-foreground/70'
+                                : 'border-transparent hover:border-foreground/20'
                             }`}
                           >
                             <img src={photo} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
 
-                            {/* Badge Couverture */}
                             {featuredPhotoIndex === index ? (
-                              <span className="absolute top-1.5 left-1.5 bg-accent text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md">
-                                ★ Couverture
+                              <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
+                                Couverture
                               </span>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => setFeaturedPhotoIndex(index)}
-                                className="absolute top-1.5 left-1.5 bg-black/70 hover:bg-black text-white text-[9px] font-semibold px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
                               >
                                 Définir couverture
                               </button>
                             )}
 
-                            {/* Remove button */}
                             <button
                               type="button"
                               onClick={() => handleRemovePhoto(index)}
-                              className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/70 hover:bg-rose-600 text-white text-xs flex items-center justify-center transition-colors"
+                              className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded bg-black/70 text-xs text-white hover:bg-black"
                               title="Supprimer cette photo"
                             >
                               <FontAwesomeIcon icon={faXmark} />
@@ -3089,65 +2312,56 @@ export function PartnerDashboardPage() {
                   )}
                 </div>
 
-                {/* Submit button */}
-                <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
+                {/* Validation */}
+                <div className="flex flex-col-reverse gap-2 border-t border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setCurrentSection('listings')}
-                    className="rounded-xl border border-foreground/15 px-5 py-2.5 text-xs font-semibold text-foreground/75 hover:bg-muted"
+                    className="rounded-lg px-3.5 py-2 text-xs font-medium text-foreground/60 hover:bg-muted hover:text-foreground"
                   >
                     Annuler
                   </button>
 
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
+                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
                   >
-                    <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>
-                      {isPartnerCertified ? 'Publier et Mettre en Ligne Immédiatement' : 'Enregistrer et Transmettre pour Certification'}
-                    </span>
+                    {isPartnerCertified ? 'Publier l’annonce' : 'Enregistrer pour certification'}
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* Modal to view rejection reason by host */}
+          {/* Motif du refus d'une annonce */}
           {selectedRejectionModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-              <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 p-6 shadow-2xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
-                  <div className="flex items-center gap-2 text-rose-600 font-bold text-base">
-                    <FontAwesomeIcon icon={faTriangleExclamation} />
-                    <span>Non-Conformité & Motif du Refus</span>
-                  </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-md rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex items-center justify-between border-b border-foreground/10 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-foreground">Motif du refus</h3>
                   <button
                     onClick={() => setSelectedRejectionModal(null)}
-                    className="text-foreground/40 hover:text-foreground p-1"
+                    className="rounded-md p-1.5 text-foreground/45 hover:bg-muted hover:text-foreground"
+                    aria-label="Fermer"
                   >
-                    <FontAwesomeIcon icon={faXmark} />
+                    <FontAwesomeIcon icon={faXmark} className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
-                <div>
-                  <p className="text-[11px] text-foreground/60 mb-0.5 font-medium">Annonce auditée :</p>
-                  <p className="font-bold text-foreground text-sm">{selectedRejectionModal.title}</p>
+                <div className="space-y-3 px-5 py-4">
+                  <p className="text-sm font-medium text-foreground">{selectedRejectionModal.title}</p>
+                  <p className="text-sm leading-relaxed text-rose-600">
+                    {selectedRejectionModal.rejection_reason || "Qualité des photos insuffisante ou non conforme à la charte d'excellence visuelle Bénin Beyond."}
+                  </p>
+                  <p className="text-xs leading-relaxed text-foreground/50">
+                    Reprenez des photos horizontales et lumineuses, en plein jour et sous plusieurs angles, puis soumettez à nouveau votre bien.
+                  </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-950 text-xs leading-relaxed space-y-1">
-                  <p className="font-bold text-rose-800">Motif notifié par la modération :</p>
-                  <p>{selectedRejectionModal.rejection_reason || "Qualité des photos insuffisante ou non conforme à la charte d'excellence visuelle Bénin Beyond."}</p>
-                </div>
-
-                <p className="text-[11px] text-foreground/60 leading-normal">
-                  Conseil : Reprenez des photos horizontales lumineuses en plein jour sous plusieurs angles nets afin de soumettre à nouveau votre bien.
-                </p>
-
-                <div className="pt-2 flex justify-end">
+                <div className="flex justify-end border-t border-foreground/10 px-5 py-3.5">
                   <button
                     onClick={() => setSelectedRejectionModal(null)}
-                    className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow"
+                    className="rounded-lg border border-foreground/15 px-3.5 py-2 text-xs font-medium text-foreground hover:bg-muted"
                   >
                     Fermer
                   </button>
@@ -3160,613 +2374,407 @@ export function PartnerDashboardPage() {
           {/* SECTION E : SOLDE & FINANCES (FINANCIALS & PAYOUTS) */}
           {/* ========================================================================= */}
           {currentSection === 'finances' && (
-            <div className="space-y-8 animate-section-stagger">
-              
-              {/* Header with Navigation Pills */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-foreground/10">
-                <div>
-                  <h2 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
-                    Gestion Financière & Règlements
-                  </h2>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    Suivez vos encaissements réels, commissions plateforme et gérez vos virements vers Mobile Money ou compte bancaire.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
+            <div className="space-y-6">
+              {/* Onglets */}
+              <div className="flex items-center gap-5 border-b border-foreground/10">
+                {[
+                  {
+                    key: 'summary',
+                    label: 'Synthèse',
+                    onClick: () => {
                       setPayoutViewMode('summary');
                       setPayoutSuccessMessage('');
                       setPayoutError('');
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                      payoutViewMode === 'summary'
-                        ? 'bg-primary text-white shadow-sm'
-                        : 'bg-muted border border-foreground/10 text-foreground/75 hover:bg-muted/80'
-                    }`}
-                  >
-                    Vue d'ensemble
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
+                    }
+                  },
+                  {
+                    key: 'form',
+                    label: 'Demander un virement',
+                    onClick: () => {
                       setPayoutViewMode('form');
                       setPayoutSuccessMessage('');
                       setPayoutError('');
-                      if (!payoutAmount) setPayoutAmount(String(financials.net));
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      payoutViewMode === 'form'
-                        ? 'bg-primary text-white shadow-sm ring-2 ring-primary/30'
-                        : 'bg-accent/20 text-accent-foreground border border-accent/40 hover:bg-accent/30'
+                      if (!payoutAmount) setPayoutAmount(String(financials.available));
+                    }
+                  }
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={tab.onClick}
+                    className={`-mb-px shrink-0 border-b-2 pb-3 text-sm font-medium transition-colors ${
+                      payoutViewMode === tab.key
+                        ? 'border-foreground text-foreground'
+                        : 'border-transparent text-foreground/50 hover:text-foreground'
                     }`}
                   >
-                    <FontAwesomeIcon icon={faHandHoldingDollar} />
-                    <span>Demander un versement</span>
+                    {tab.label}
                   </button>
-                </div>
+                ))}
               </div>
 
-              {/* Feedback Success / Error */}
               {payoutSuccessMessage && (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-start justify-between gap-3 animate-fadeIn">
-                  <div className="flex items-start gap-2.5">
-                    <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-bold text-sm">Demande enregistrée avec succès !</p>
-                      <p className="mt-0.5 font-normal text-emerald-900/80 dark:text-emerald-200/80 leading-relaxed">
-                        {payoutSuccessMessage}
-                      </p>
-                    </div>
+                <div className="flex items-start justify-between gap-3 rounded-2xl border border-foreground/10 bg-card px-5 py-3.5">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-600">Demande enregistrée</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{payoutSuccessMessage}</p>
                   </div>
                   <button
                     onClick={() => setPayoutSuccessMessage('')}
-                    className="text-emerald-700 hover:text-emerald-900 p-1"
+                    className="shrink-0 rounded-md p-1.5 text-foreground/45 hover:bg-muted hover:text-foreground"
+                    aria-label="Fermer"
                   >
-                    <FontAwesomeIcon icon={faXmark} />
+                    <FontAwesomeIcon icon={faXmark} className="h-3 w-3" />
                   </button>
                 </div>
               )}
 
               {payoutError && (
-                <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs font-semibold text-rose-800 dark:text-rose-200 flex items-start justify-between gap-3 animate-fadeIn">
-                  <div className="flex items-start gap-2.5">
-                    <FontAwesomeIcon icon={faTriangleExclamation} className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
-                    <span>{payoutError}</span>
-                  </div>
+                <div className="flex items-start justify-between gap-3 rounded-2xl border border-foreground/10 bg-card px-5 py-3.5">
+                  <p className="text-sm text-rose-600">{payoutError}</p>
                   <button
                     onClick={() => setPayoutError('')}
-                    className="text-rose-700 hover:text-rose-900 p-1"
+                    className="shrink-0 rounded-md p-1.5 text-foreground/45 hover:bg-muted hover:text-foreground"
+                    aria-label="Fermer"
                   >
-                    <FontAwesomeIcon icon={faXmark} />
+                    <FontAwesomeIcon icon={faXmark} className="h-3 w-3" />
                   </button>
                 </div>
               )}
 
-              {/* VIEW 1 : FORMULAIRE INTÉGRÉ DE DEMANDE DE VERSEMENT */}
+              {/* Formulaire de demande de versement */}
               {payoutViewMode === 'form' && (
-                <div className="rounded-3xl border border-foreground/15 bg-card p-6 sm:p-8 shadow-md space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between border-b border-foreground/10 pb-4">
+                <form onSubmit={handleRequestPayout} className="rounded-2xl border border-foreground/10 bg-card">
+                  <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-baseline sm:justify-between">
                     <div>
-                      <h3 className="font-heading text-lg font-bold text-foreground flex items-center gap-2">
-                        <FontAwesomeIcon icon={faHandHoldingDollar} className="text-primary" />
-                        <span>Nouvelle Demande de Versement</span>
-                      </h3>
-                      <p className="text-xs text-foreground/60 mt-0.5">
-                        Choisissez votre canal de versement sécurisé (Mobile Money instantané ou Virement bancaire UEMOA).
-                      </p>
+                      <h3 className="text-sm font-semibold text-foreground">Nouvelle demande de versement</h3>
+                      <p className="mt-0.5 text-xs text-foreground/50">Payée par l’équipe après vérification.</p>
                     </div>
+                    <p className="text-sm text-foreground/60">
+                      Disponible : <span className="font-semibold tabular-nums text-foreground">{formatPrice(financials.available)}</span>
+                    </p>
+                  </div>
+
+                  {/* Canal */}
+                  <div className="space-y-3 border-t border-foreground/10 px-5 py-5">
+                    <h3 className="text-sm font-semibold text-foreground">Canal</h3>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {[
+                        { key: 'mobile_money', label: 'Mobile Money', hint: 'MTN, Moov ou Celtiis' },
+                        { key: 'bank_transfer', label: 'Virement bancaire', hint: 'IBAN / RIB' }
+                      ].map((ch) => (
+                        <button
+                          key={ch.key}
+                          type="button"
+                          onClick={() => setPayoutChannel(ch.key)}
+                          className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
+                            payoutChannel === ch.key
+                              ? 'border-foreground/60 bg-muted/40'
+                              : 'border-foreground/10 hover:border-foreground/25'
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-foreground">{ch.label}</p>
+                          <p className="mt-0.5 text-xs text-foreground/50">{ch.hint}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Coordonnées */}
+                  {payoutChannel === 'mobile_money' ? (
+                    <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                      <h3 className="text-sm font-semibold text-foreground">Coordonnées Mobile Money</h3>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { key: 'mtn', label: 'MTN MoMo' },
+                          { key: 'moov', label: 'Moov Money' },
+                          { key: 'celtiis', label: 'Celtiis Cash' }
+                        ].map((op) => (
+                          <button
+                            key={op.key}
+                            type="button"
+                            onClick={() => setMomoOperator(op.key)}
+                            className={`rounded-lg border px-2 py-2.5 text-center text-xs transition-colors ${
+                              momoOperator === op.key
+                                ? 'border-foreground/60 bg-muted/40 font-medium text-foreground'
+                                : 'border-foreground/10 text-foreground/60 hover:border-foreground/25'
+                            }`}
+                          >
+                            {op.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Numéro (+229) *
+                          </label>
+                          <input
+                            type="tel"
+                            value={momoPhone}
+                            onChange={(e) => setMomoPhone(e.target.value)}
+                            placeholder="+229 97 00 00 00"
+                            required
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Titulaire de la ligne *
+                          </label>
+                          <input
+                            type="text"
+                            value={momoRecipientName}
+                            onChange={(e) => setMomoRecipientName(e.target.value)}
+                            placeholder="ex: Jean Dossou"
+                            required
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          />
+                          <p className="mt-1 text-xs text-foreground/40">Nom enregistré sur la carte SIM</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                      <h3 className="text-sm font-semibold text-foreground">Coordonnées bancaires</h3>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Banque *
+                          </label>
+                          <select
+                            value={bankName}
+                            onChange={(e) => setBankName(e.target.value)}
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          >
+                            <option value="Bank of Africa (BOA Bénin)">Bank of Africa (BOA Bénin)</option>
+                            <option value="Ecobank Bénin">Ecobank Bénin</option>
+                            <option value="Coris Bank International Bénin">Coris Bank International Bénin</option>
+                            <option value="BGFI Bank Bénin">BGFI Bank Bénin</option>
+                            <option value="United Bank for Africa (UBA Bénin)">United Bank for Africa (UBA Bénin)</option>
+                            <option value="Société Générale Bénin (SGB)">Société Générale Bénin (SGB)</option>
+                            <option value="NSIA Banque Bénin">NSIA Banque Bénin</option>
+                            <option value="Orabank Bénin">Orabank Bénin</option>
+                            <option value="BIIC (Banque Internationale pour l'Industrie et le Commerce)">BIIC Bénin</option>
+                            <option value="Autre banque">Autre banque UEMOA</option>
+                          </select>
+                        </div>
+
+                        {bankName === 'Autre banque' && (
+                          <div>
+                            <label className="mb-1 block text-xs text-foreground/60">
+                              Nom de la banque *
+                            </label>
+                            <input
+                              type="text"
+                              value={bankCustomName}
+                              onChange={(e) => setBankCustomName(e.target.value)}
+                              placeholder="Nom officiel de votre établissement"
+                              required
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Titulaire du compte *
+                          </label>
+                          <input
+                            type="text"
+                            value={bankAccountHolder}
+                            onChange={(e) => setBankAccountHolder(e.target.value)}
+                            placeholder="ex: Jean Dossou ou SARL Prestige"
+                            required
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Numéro de compte / IBAN / RIB *
+                          </label>
+                          <input
+                            type="text"
+                            value={bankIban}
+                            onChange={(e) => setBankIban(e.target.value)}
+                            placeholder="ex: BJ061 01001 00123456789 01"
+                            required
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Code SWIFT / BIC (optionnel)
+                          </label>
+                          <input
+                            type="text"
+                            value={bankSwift}
+                            onChange={(e) => setBankSwift(e.target.value)}
+                            placeholder="ex: AFRIRJBJ"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Montant */}
+                  <div className="space-y-3 border-t border-foreground/10 px-5 py-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">Montant (FCFA)</h3>
+                      <div className="flex items-center gap-1">
+                        {[
+                          { label: 'Tout', value: financials.available },
+                          { label: '50 %', value: Math.round(financials.available * 0.5) },
+                          { label: '25 %', value: Math.round(financials.available * 0.25) }
+                        ].map((q) => (
+                          <button
+                            key={q.label}
+                            type="button"
+                            onClick={() => setPayoutAmount(String(q.value))}
+                            className="rounded-md px-2 py-1 text-xs font-medium text-foreground/55 transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            {q.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <input
+                      type="number"
+                      value={payoutAmount}
+                      onChange={(e) => setPayoutAmount(e.target.value)}
+                      placeholder={String(financials.available || 100000)}
+                      max={financials.available > 0 ? financials.available : undefined}
+                      min={1000}
+                      className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm tabular-nums text-foreground focus:border-foreground/30 focus:outline-none"
+                    />
+
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-foreground/60">Net viré sur votre compte</span>
+                      <span className="font-semibold tabular-nums text-foreground">
+                        {formatPrice(payoutAmount ? parseInt(payoutAmount, 10) : financials.available)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-2 border-t border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
                     <button
                       type="button"
                       onClick={() => setPayoutViewMode('summary')}
-                      className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                      className="rounded-lg px-3.5 py-2 text-xs font-medium text-foreground/60 hover:bg-muted hover:text-foreground"
                     >
-                      Retour au solde
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={payoutSubmitting}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {payoutSubmitting && <FontAwesomeIcon icon={faSpinner} className="h-3 w-3 animate-spin" />}
+                      <span>{payoutSubmitting ? 'Transmission…' : 'Valider la demande'}</span>
                     </button>
                   </div>
-
-                  <form onSubmit={handleRequestPayout} className="space-y-6">
-                    {/* Rappel du solde disponible */}
-                    <div className="rounded-2xl bg-primary/5 border border-primary/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <span className="text-xs text-foreground/60 block">Solde Net Disponible pour Retrait :</span>
-                        <span className="font-heading text-2xl font-black text-primary font-mono">
-                          {formatPrice(financials.net)}
-                        </span>
-                      </div>
-                      <div className="text-xs text-foreground/60 flex items-center gap-1.5">
-                        <FontAwesomeIcon icon={faShieldHalved} className="text-primary" />
-                        <span>Frais de retrait : <strong>0 FCFA</strong> (Pris en charge par Bénin Beyond)</span>
-                      </div>
-                    </div>
-
-                    {/* Étape 1 : Choix du Canal */}
-                    <div>
-                      <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2.5">
-                        1. Choisissez votre canal de versement
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Mobile Money */}
-                        <div
-                          onClick={() => setPayoutChannel('mobile_money')}
-                          className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-start gap-3.5 ${
-                            payoutChannel === 'mobile_money'
-                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm'
-                              : 'border-foreground/10 bg-background hover:border-foreground/25'
-                          }`}
-                        >
-                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            payoutChannel === 'mobile_money' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
-                          }`}>
-                            <FontAwesomeIcon icon={faPhone} className="text-sm" />
-                          </div>
-                          <div className="flex-1 min-w-0 text-xs">
-                            <p className="font-bold text-foreground text-sm flex items-center justify-between">
-                              <span>Mobile Money Bénin</span>
-                              {payoutChannel === 'mobile_money' && (
-                                <FontAwesomeIcon icon={faCircleCheck} className="text-primary" />
-                              )}
-                            </p>
-                            <p className="text-foreground/60 mt-0.5">
-                              MTN MoMo • Moov Money • Celtiis Cash
-                            </p>
-                            <span className="inline-block mt-2 rounded-full bg-emerald-500/15 text-emerald-700 px-2 py-0.5 text-[10px] font-bold">
-                              Instantané • 0 FCFA de frais
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Virement Bancaire */}
-                        <div
-                          onClick={() => setPayoutChannel('bank_transfer')}
-                          className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-start gap-3.5 ${
-                            payoutChannel === 'bank_transfer'
-                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm'
-                              : 'border-foreground/10 bg-background hover:border-foreground/25'
-                          }`}
-                        >
-                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            payoutChannel === 'bank_transfer' ? 'bg-primary text-white' : 'bg-muted text-foreground/70'
-                          }`}>
-                            <FontAwesomeIcon icon={faBuilding} className="text-sm" />
-                          </div>
-                          <div className="flex-1 min-w-0 text-xs">
-                            <p className="font-bold text-foreground text-sm flex items-center justify-between">
-                              <span>Virement Bancaire</span>
-                              {payoutChannel === 'bank_transfer' && (
-                                <FontAwesomeIcon icon={faCircleCheck} className="text-primary" />
-                              )}
-                            </p>
-                            <p className="text-foreground/60 mt-0.5">
-                              BOA, Ecobank, Coris, UBA, SGB, etc.
-                            </p>
-                            <span className="inline-block mt-2 rounded-full bg-blue-500/15 text-blue-700 px-2 py-0.5 text-[10px] font-bold">
-                              Délai 24h ouvrées • IBAN / RIB
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Étape 2 : Champs dynamiques selon le canal choisi */}
-                    {payoutChannel === 'mobile_money' ? (
-                      <div className="rounded-2xl border border-foreground/10 bg-muted/20 p-5 space-y-4">
-                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">
-                          2. Coordonnées Mobile Money
-                        </p>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground mb-1.5">
-                            Opérateur Mobile Bénin :
-                          </label>
-                          <div className="grid grid-cols-3 gap-3">
-                            {[
-                              { key: 'mtn', label: 'MTN MoMo', badge: 'Recommandé' },
-                              { key: 'moov', label: 'Moov Money', badge: 'Actif' },
-                              { key: 'celtiis', label: 'Celtiis Cash', badge: 'Actif' }
-                            ].map((op) => (
-                              <button
-                                key={op.key}
-                                type="button"
-                                onClick={() => setMomoOperator(op.key)}
-                                className={`p-3 rounded-xl border text-xs text-center transition-all ${
-                                  momoOperator === op.key
-                                    ? 'border-primary bg-primary/10 font-bold text-primary shadow-xs'
-                                    : 'border-foreground/10 bg-background text-foreground/70 hover:border-foreground/20'
-                                }`}
-                              >
-                                <span>{op.label}</span>
-                                <span className="block text-[10px] opacity-60 mt-0.5">{op.badge}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Numéro Mobile Bénin (+229) : *
-                            </label>
-                            <input
-                              type="tel"
-                              value={momoPhone}
-                              onChange={(e) => setMomoPhone(e.target.value)}
-                              placeholder="+229 97 00 00 00"
-                              required
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            />
-                            <p className="text-[10px] text-foreground/50 mt-1">Format international ou 8 chiffres</p>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Nom complet du titulaire de la ligne : *
-                            </label>
-                            <input
-                              type="text"
-                              value={momoRecipientName}
-                              onChange={(e) => setMomoRecipientName(e.target.value)}
-                              placeholder="ex: Jean Dossou"
-                              required
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            />
-                            <p className="text-[10px] text-foreground/50 mt-1">Doit concorder avec le nom enregistré sur la carte SIM</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-foreground/10 bg-muted/20 p-5 space-y-4">
-                        <p className="text-xs font-bold text-foreground uppercase tracking-wider">
-                          2. Coordonnées Bancaires (RIB / IBAN)
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Établissement Bancaire : *
-                            </label>
-                            <select
-                              value={bankName}
-                              onChange={(e) => setBankName(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            >
-                              <option value="Bank of Africa (BOA Bénin)">Bank of Africa (BOA Bénin)</option>
-                              <option value="Ecobank Bénin">Ecobank Bénin</option>
-                              <option value="Coris Bank International Bénin">Coris Bank International Bénin</option>
-                              <option value="BGFI Bank Bénin">BGFI Bank Bénin</option>
-                              <option value="United Bank for Africa (UBA Bénin)">United Bank for Africa (UBA Bénin)</option>
-                              <option value="Société Générale Bénin (SGB)">Société Générale Bénin (SGB)</option>
-                              <option value="NSIA Banque Bénin">NSIA Banque Bénin</option>
-                              <option value="Orabank Bénin">Orabank Bénin</option>
-                              <option value="BIIC (Banque Internationale pour l'Industrie et le Commerce)">BIIC Bénin</option>
-                              <option value="Autre banque">Autre banque UEMOA</option>
-                            </select>
-                          </div>
-
-                          {bankName === 'Autre banque' && (
-                            <div>
-                              <label className="block text-xs font-semibold text-foreground mb-1.5">
-                                Nom de la Banque : *
-                              </label>
-                              <input
-                                type="text"
-                                value={bankCustomName}
-                                onChange={(e) => setBankCustomName(e.target.value)}
-                                placeholder="Nom officiel de votre établissement"
-                                required
-                                className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                              />
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Nom ou Raison Sociale du Titulaire : *
-                            </label>
-                            <input
-                              type="text"
-                              value={bankAccountHolder}
-                              onChange={(e) => setBankAccountHolder(e.target.value)}
-                              placeholder="ex: Jean Dossou ou SARL Prestige"
-                              required
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Numéro de Compte / IBAN / RIB : *
-                            </label>
-                            <input
-                              type="text"
-                              value={bankIban}
-                              onChange={(e) => setBankIban(e.target.value)}
-                              placeholder="ex: BJ061 01001 00123456789 01"
-                              required
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            />
-                            <p className="text-[10px] text-foreground/50 mt-1">Relevé d'Identité Bancaire officiel</p>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground mb-1.5">
-                              Code SWIFT / BIC (optionnel) :
-                            </label>
-                            <input
-                              type="text"
-                              value={bankSwift}
-                              onChange={(e) => setBankSwift(e.target.value)}
-                              placeholder="ex: AFRIRJBJ"
-                              className="w-full rounded-xl border border-foreground/15 bg-background p-2.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Étape 3 : Montant à retirer */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-bold text-foreground uppercase tracking-wider">
-                          3. Montant à transférer (FCFA) :
-                        </label>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPayoutAmount(String(financials.net))}
-                            className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20"
-                          >
-                            100% Tout
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPayoutAmount(String(Math.round(financials.net * 0.5)))}
-                            className="px-2 py-0.5 rounded-md bg-muted text-foreground/70 text-[10px] font-bold hover:bg-muted/80"
-                          >
-                            50%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPayoutAmount(String(Math.round(financials.net * 0.25)))}
-                            className="px-2 py-0.5 rounded-md bg-muted text-foreground/70 text-[10px] font-bold hover:bg-muted/80"
-                          >
-                            25%
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={payoutAmount}
-                          onChange={(e) => setPayoutAmount(e.target.value)}
-                          placeholder={String(financials.net || 100000)}
-                          max={financials.net > 0 ? financials.net : undefined}
-                          min={1000}
-                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 pr-16 text-sm font-bold text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        />
-                        <span className="absolute right-3.5 top-3 text-xs font-bold text-foreground/50">
-                          FCFA
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Récapitulatif Final */}
-                    <div className="rounded-2xl border border-foreground/10 bg-card p-4 space-y-2 text-xs">
-                      <div className="flex justify-between text-foreground/70">
-                        <span>Montant demandé :</span>
-                        <span className="font-mono font-bold text-foreground">
-                          {formatPrice(payoutAmount ? parseInt(payoutAmount, 10) : financials.net)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-emerald-700 font-semibold">
-                        <span>Frais de transfert :</span>
-                        <span>0 FCFA (Offerts)</span>
-                      </div>
-                      <div className="flex justify-between text-foreground font-bold text-sm pt-2 border-t border-foreground/10">
-                        <span>Net viré sur votre compte :</span>
-                        <span className="font-mono text-primary text-base">
-                          {formatPrice(payoutAmount ? parseInt(payoutAmount, 10) : financials.net)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Boutons d'action */}
-                    <div className="flex items-center justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setPayoutViewMode('summary')}
-                        className="rounded-xl border border-foreground/15 px-5 py-2.5 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
-                      >
-                        Annuler
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={payoutSubmitting}
-                        className="rounded-xl bg-primary hover:bg-primary/95 text-white px-6 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {payoutSubmitting ? (
-                          <>
-                            <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
-                            <span>Transmission...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FontAwesomeIcon icon={faCheck} className="h-3.5 w-3.5" />
-                            <span>Valider la demande de virement</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                </form>
               )}
 
-              {/* VIEW 2 : RÉCAPITULATIF FINANCIER & HISTORIQUE */}
-              <div className="space-y-8">
-                {/* 3 Cartes de synthèse */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                    <p className="text-xs text-foreground/60 mb-1">Montant Brut Réservé</p>
-                    <p className="font-heading text-3xl font-bold text-foreground">
-                      {formatPrice(financials.gross)}
-                    </p>
-                    <p className="text-[11px] text-foreground/50 mt-2">
-                      Somme totale versée par les voyageurs
-                    </p>
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  { label: 'Encaissé (payé)', value: formatPrice(financials.gross), hint: 'Réservations payées par les voyageurs' },
+                  { label: 'Commission (10 %)', value: financials.commission > 0 ? `−${formatPrice(financials.commission)}` : formatPrice(0), hint: 'Retenue Bénin Beyond' },
+                  { label: 'Déjà versé', value: formatPrice(financials.paidOut), hint: financials.inProgress > 0 ? `${formatPrice(financials.inProgress)} en cours` : 'Virements exécutés' },
+                  { label: 'Solde disponible', value: formatPrice(financials.available), hint: 'Retirable dès maintenant' }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
+                ))}
+              </div>
 
-                  <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                    <p className="text-xs text-foreground/60 mb-1">Commissions Bénin Beyond (10%)</p>
-                    <p className="font-heading text-3xl font-bold text-accent">
-                      -{formatPrice(financials.commission)}
-                    </p>
-                    <p className="text-[11px] text-foreground/50 mt-2">
-                      Frais techniques, sécurité & conciergerie
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-primary/25 bg-primary/5 p-6 shadow-sm flex flex-col justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-primary mb-1">Solde Net Disponible</p>
-                      <p className="font-heading text-3xl font-bold text-primary">
-                        {formatPrice(financials.net)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setPayoutViewMode('form');
-                        setPayoutSuccessMessage('');
-                        setPayoutError('');
-                        if (!payoutAmount) setPayoutAmount(String(financials.net));
-                      }}
-                      className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-primary/90 transition-all"
-                    >
-                      <FontAwesomeIcon icon={faHandHoldingDollar} />
-                      <span>Demander un virement</span>
-                    </button>
-                  </div>
+              {/* Demandes de retrait */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-foreground">Demandes de retrait</h3>
+                  <span className="text-xs text-foreground/50">{partnerPayouts.length}</span>
                 </div>
 
-                {/* Historique des Demandes de Versement de ce Partenaire */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-heading text-base font-bold text-foreground flex items-center gap-2">
-                      <FontAwesomeIcon icon={faWallet} className="text-primary" />
-                      <span>Historique de vos Demandes de Retrait</span>
-                    </h3>
-                    <span className="text-xs text-foreground/50">
-                      {partnerPayouts.length} demande(s)
-                    </span>
-                  </div>
-
-                  {partnerPayouts.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
-                      Aucune demande de retrait effectuée pour le moment. Votre solde reste conservé en toute sécurité.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {partnerPayouts.map((po) => (
-                        <div
-                          key={po.id}
-                          className="rounded-xl border border-foreground/10 bg-muted/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-foreground">{po.method}</span>
-                              <span className="text-[10px] text-foreground/40 font-mono">({po.id})</span>
-                            </div>
-                            <p className="text-foreground/70 mt-0.5">
-                              Bénéficiaire : <span className="font-mono text-foreground">{po.recipient}</span>
-                            </p>
-                            <p className="text-[10px] text-foreground/45 mt-0.5">
-                              Demandé le : {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
-                            </p>
-                          </div>
-
-                          <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0">
-                            <span className="font-heading text-base font-bold text-foreground font-mono">
-                              {formatPrice(po.amount)}
-                            </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              po.status === 'approved'
-                                ? 'bg-emerald-500/15 text-emerald-700'
-                                : po.status === 'rejected'
-                                ? 'bg-rose-500/15 text-rose-700'
-                                : 'bg-amber-500/15 text-amber-700'
-                            }`}>
-                              {po.status === 'approved' ? '✓ Virement exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente de validation'}
-                            </span>
-                          </div>
+                {partnerPayouts.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-sm text-foreground/50">
+                    Aucune demande de retrait pour le moment.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {partnerPayouts.map((po) => (
+                      <li key={po.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{po.method}</p>
+                          <p className="truncate text-xs text-foreground/45">
+                            <span className="font-mono">{po.recipient}</span> · {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Simulated Payout Options */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm space-y-4">
-                  <h3 className="font-heading text-base font-bold text-foreground">
-                    Canaux de Retrait Pris en Charge
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    {[
-                      { title: 'MTN Mobile Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
-                      { title: 'Moov Money Bénin', fee: 'Sans frais', delay: 'Instantané' },
-                      { title: 'Celtiis Cash', fee: 'Sans frais', delay: 'Instantané' },
-                      { title: 'Virement Bancaire (UBA, BOA, etc.)', fee: 'Sans frais', delay: '24h ouvrées' }
-                    ].map((m, idx) => (
-                      <div key={idx} className="p-4 rounded-xl border border-foreground/10 bg-muted/30 text-xs">
-                        <p className="font-bold text-foreground">{m.title}</p>
-                        <p className="text-[11px] text-emerald-700 font-semibold mt-1">{m.fee}</p>
-                        <p className="text-[10px] text-foreground/50 mt-0.5">Délai : {m.delay}</p>
-                      </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-medium tabular-nums text-foreground">{formatPrice(po.amount)}</p>
+                          <p className={`text-xs ${
+                            po.status === 'completed' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
+                          }`}>
+                            {po.status === 'completed' ? 'Virement exécuté' : po.status === 'rejected' ? 'Refusé' : po.status === 'processing' ? 'En cours de virement' : 'En attente'}
+                          </p>
+                        </div>
+                      </li>
                     ))}
-                  </div>
-                </div>
+                  </ul>
+                )}
+              </section>
 
-                {/* Transactions History */}
-                <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <h3 className="font-heading text-base font-bold text-foreground mb-4">
-                    Historique des Règlements par Réservation
-                  </h3>
+              {/* Règlements par réservation */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <h3 className="border-b border-foreground/10 px-5 py-4 text-sm font-semibold text-foreground">Règlements par réservation</h3>
+                {bookings.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-sm text-foreground/50">Aucun règlement pour le moment.</p>
+                ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="border-b border-foreground/10 text-foreground/60">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                         <tr>
-                          <th className="pb-3 font-semibold">Référence</th>
-                          <th className="pb-3 font-semibold">Client</th>
-                          <th className="pb-3 font-semibold">Canal</th>
-                          <th className="pb-3 font-semibold">Brut</th>
-                          <th className="pb-3 font-semibold">Commission</th>
-                          <th className="pb-3 font-semibold">Net</th>
-                          <th className="pb-3 font-semibold">Statut</th>
+                          <th className="px-5 py-3 font-medium">Référence</th>
+                          <th className="px-5 py-3 font-medium">Client</th>
+                          <th className="px-5 py-3 font-medium">Canal</th>
+                          <th className="px-5 py-3 font-medium">Brut</th>
+                          <th className="px-5 py-3 font-medium">Commission</th>
+                          <th className="px-5 py-3 font-medium">Net</th>
+                          <th className="px-5 py-3 font-medium">Statut</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-foreground/5">
+                      <tbody className="divide-y divide-foreground/[0.07]">
                         {bookings.map((b) => (
                           <tr key={b.id}>
-                            <td className="py-3 font-mono font-bold text-foreground">{b.booking_ref}</td>
-                            <td className="py-3 text-foreground">{b.customer_name}</td>
-                            <td className="py-3 text-foreground/70">{b.payment_method}</td>
-                            <td className="py-3 font-mono font-bold text-foreground">{formatPrice(b.gross_amount)}</td>
-                            <td className="py-3 font-mono text-foreground/60">-{formatPrice(b.commission_amount)}</td>
-                            <td className="py-3 font-mono font-bold text-primary">{formatPrice(b.net_amount)}</td>
-                            <td className="py-3">
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                Validé
-                              </span>
-                            </td>
+                            <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-foreground/70">{b.booking_ref}</td>
+                            <td className="px-5 py-3 text-foreground">{b.customer_name}</td>
+                            <td className="px-5 py-3 text-foreground/60">{b.payment_method}</td>
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground">{formatPrice(b.gross_amount)}</td>
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground/60">−{formatPrice(b.commission_amount)}</td>
+                            <td className="whitespace-nowrap px-5 py-3 font-medium tabular-nums text-foreground">{formatPrice(b.net_amount)}</td>
+                            <td className={`px-5 py-3 text-xs font-medium ${(b.payment_status || 'paid') === 'paid' && b.status !== 'cancelled' ? 'text-emerald-600' : 'text-amber-600'}`}>{b.status === 'cancelled' ? 'Annulée' : (b.payment_status || 'paid') === 'paid' ? 'Payée' : 'Non payée'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              </div>
+                )}
+              </section>
 
+              <p className="text-xs text-foreground/45">
+                Chaque demande est vérifiée puis payée manuellement par l'équipe Bénin Beyond (Mobile Money ou virement). Seules les réservations confirmées et payées sont comptées dans votre solde.
+              </p>
             </div>
           )}
 
@@ -3774,106 +2782,70 @@ export function PartnerDashboardPage() {
           {/* SECTION F : STATISTIQUES & ANALYSES (PERFORMANCE RÉELLE) */}
           {/* ========================================================================= */}
           {currentSection === 'stats' && (
-            <div className="space-y-8 animate-section-stagger">
-              <div>
-                <h2 className="font-heading text-xl font-bold text-foreground">
-                  Statistiques & Performances des Annonces
-                </h2>
-                <p className="text-xs text-foreground/60">
-                  Suivez la visibilité de vos biens et l'engagement des voyageurs (données 100% réelles issues de vos réservations)
-                </p>
-              </div>
-
-              {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Vues Estimées</p>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {listings.length > 0 ? listings.length * 14 : 0}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    {listings.length > 0 ? `${listings.length} annonce(s) répertoriée(s)` : 'Aucune annonce active'}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Taux de Conversion</p>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {listings.length > 0 && bookings.length > 0
-                      ? `${((bookings.length / (listings.length * 14)) * 100).toFixed(1)}%`
-                      : '0%'}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    {bookings.length} réservation{bookings.length > 1 ? 's' : ''} confirmée{bookings.length > 1 ? 's' : ''}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Durée moyenne de séjour</p>
-                  <p className="font-heading text-2xl font-bold text-foreground">
-                    {bookings.length > 0
-                      ? `${avgStayDuration} ${avgStayDuration > 1 ? 'jours / nuits' : 'jour / nuit'}`
-                      : '0 jour'}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    {bookings.length > 0 ? 'Calculée sur vos réservations réelles' : 'En attente de réservations'}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm">
-                  <p className="text-xs text-foreground/60 mb-1">Avis Clients</p>
-                  <p className="font-heading text-lg font-bold text-foreground">
-                    {bookings.length > 0 ? 'En cours de collecte' : 'Aucun avis'}
-                  </p>
-                  <p className="text-[11px] text-foreground/50 mt-1">
-                    {bookings.length > 0 ? 'Retours des voyageurs vérifiés' : 'En attente des premiers séjours'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Top Listings (Données 100% réelles issues des réservations) */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-6 sm:p-7 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Top de Vos Biens les Plus Réservés
-                    </h3>
-                    <p className="text-xs text-foreground/60">
-                      Classement réel calculé sur le chiffre d'affaires net effectivement généré
-                    </p>
+            <div className="space-y-6">
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  {
+                    label: 'Annonces en ligne',
+                    value: listings.filter((l) => !l.status || l.status === 'active').length,
+                    hint: `${listings.length} au total`
+                  },
+                  {
+                    label: 'Réservations payées',
+                    value: bookings.filter((b) => !b.is_manual_block && (b.payment_status || 'paid') === 'paid' && b.status !== 'cancelled').length,
+                    hint: `${bookings.filter((b) => !b.is_manual_block).length} reçue${bookings.filter((b) => !b.is_manual_block).length > 1 ? 's' : ''} au total`
+                  },
+                  {
+                    label: 'Durée moyenne',
+                    value: bookings.length > 0 ? `${avgStayDuration} j` : '0 j',
+                    hint: bookings.length > 0 ? 'Sur vos réservations réelles' : 'En attente de réservations'
+                  },
+                  {
+                    label: 'Revenu net',
+                    value: formatPrice(financials.net),
+                    hint: 'Réservations payées, commission déduite'
+                  }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  {topPartnerListings.length > 0 && (
-                    <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full self-start">
-                      {topPartnerListings.length} bien(s) classé(s)
-                    </span>
-                  )}
+                ))}
+              </div>
+
+              {/* Biens les plus réservés */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="border-b border-foreground/10 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-foreground">Biens les plus réservés</h3>
+                  <p className="mt-0.5 text-xs text-foreground/50">Classés selon le revenu net réellement généré.</p>
                 </div>
 
                 {topPartnerListings.length === 0 ? (
-                  <div className="py-10 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
-                    <FontAwesomeIcon icon={faHouse} className="h-7 w-7 text-foreground/30 mb-2" />
-                    <p className="font-semibold text-foreground/75">Aucune réservation pour établir le classement</p>
-                    <p className="mt-1 max-w-md mx-auto">Le classement de vos annonces les plus performantes s'affichera automatiquement dès vos premières réservations confirmées.</p>
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucune réservation pour établir le classement.</p>
+                    <p className="mx-auto mt-1 max-w-md text-xs text-foreground/40">
+                      Le classement s’affichera dès vos premières réservations confirmées.
+                    </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ul className="divide-y divide-foreground/[0.07]">
                     {topPartnerListings.map((top, i) => (
-                      <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-muted/40 border border-foreground/5 hover:border-primary/20 transition-all">
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <span className="h-8 w-8 rounded-xl bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                            #{i + 1}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-bold text-xs text-foreground truncate">{top.title}</p>
-                            <p className="text-[11px] text-foreground/50">{top.type === 'stay' ? 'Hébergement' : 'Véhicule'} • {top.bookings} réservation{top.bookings > 1 ? 's' : ''}</p>
-                          </div>
+                      <li key={i} className="flex items-center gap-4 px-5 py-3.5">
+                        <span className="w-5 shrink-0 text-sm tabular-nums text-foreground/35">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{top.title}</p>
+                          <p className="text-xs text-foreground/45">
+                            {top.type === 'stay' ? 'Hébergement' : 'Véhicule'} · {top.bookings} réservation{top.bookings > 1 ? 's' : ''}
+                          </p>
                         </div>
-                        <span className="font-mono font-bold text-xs text-primary shrink-0 ml-3">{formatPrice(top.revenue)}</span>
-                      </div>
+                        <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{formatPrice(top.revenue)}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </section>
             </div>
           )}
 

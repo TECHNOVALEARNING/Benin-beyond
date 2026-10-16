@@ -16,14 +16,53 @@ import {
   faEyeSlash,
   faCrown
 } from '@fortawesome/free-solid-svg-icons';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, getPostLoginPath } from '../context/AuthContext';
+import { isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { BrandIcon, BrandLogo } from '../components/BrandLogo';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginWithGoogle, resetPassword, updateSuperAdminPassword, user } = useAuth();
+  const {
+    login,
+    loginWithGoogle,
+    resetPassword,
+    updateSuperAdminPassword,
+    user,
+    isPasswordRecovery,
+    completePasswordRecovery
+  } = useAuth();
+
+  // Définition du nouveau mot de passe après clic sur le lien reçu par e-mail
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySaving, setRecoverySaving] = useState(false);
+
+  const handleRecoverySubmit = async (e) => {
+    e.preventDefault();
+    setRecoveryError('');
+    if (recoveryPassword.length < 8) {
+      setRecoveryError('Le mot de passe doit comporter au moins 8 caractères.');
+      return;
+    }
+    if (recoveryPassword !== recoveryConfirm) {
+      setRecoveryError('Les deux mots de passe ne sont pas identiques.');
+      return;
+    }
+    setRecoverySaving(true);
+    const res = await resetPassword(user?.email || 'session', recoveryPassword);
+    setRecoverySaving(false);
+    if (!res.success) {
+      setRecoveryError(res.error || 'Le mot de passe n’a pas pu être modifié.');
+      return;
+    }
+    window.history.replaceState(null, '', window.location.pathname);
+    completePasswordRecovery();
+    if (user) navigate(getPostLoginPath(user), { replace: true });
+    else setSuccessMsg('Mot de passe modifié. Vous pouvez vous connecter.');
+  };
 
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || '';
@@ -49,37 +88,53 @@ export function LoginPage() {
   const [adminConfirmPassword, setAdminConfirmPassword] = useState('');
   const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
 
+  const oauthErrorMessage = (() => {
+    const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    const raw =
+      searchParams.get('error_description') ||
+      hashParams.get('error_description') ||
+      searchParams.get('error') ||
+      hashParams.get('error');
+    return raw ? raw.replace(/\+/g, ' ') : '';
+  })();
+
   const isOAuthCallback =
-    window.location.hash.includes('access_token') ||
-    window.location.hash.includes('id_token') ||
-    window.location.search.includes('code=') ||
-    Boolean(localStorage.getItem('benin_beyond_oauth_in_progress'));
+    !oauthErrorMessage && (
+      window.location.hash.includes('access_token') ||
+      window.location.hash.includes('id_token') ||
+      window.location.search.includes('code=') ||
+      Boolean(localStorage.getItem('benin_beyond_oauth_in_progress'))
+    );
+
+  useEffect(() => {
+    if (!oauthErrorMessage) return;
+    localStorage.removeItem('benin_beyond_oauth_in_progress');
+    const isServerError = /database error|server_error|unexpected/i.test(oauthErrorMessage);
+    setError(
+      isServerError
+        ? "La connexion Google a échoué côté serveur (compte mal initialisé dans Supabase). Exécutez le script src/supabase/fix_admin_auth_account.sql puis réessayez."
+        : `Connexion Google interrompue : ${oauthErrorMessage}`
+    );
+    // Nettoyer l'URL pour ne pas réafficher l'erreur au prochain chargement
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [oauthErrorMessage]);
 
   // Redirection automatique si déjà connecté ou suite à redirection OAuth Google
   useEffect(() => {
-    if (user) {
+    if (user && !isPasswordRecovery) {
       localStorage.removeItem('benin_beyond_oauth_in_progress');
       const savedRedirect = localStorage.getItem('benin_beyond_oauth_redirect_path');
-      if (savedRedirect) {
-        localStorage.removeItem('benin_beyond_oauth_redirect_path');
+      localStorage.removeItem('benin_beyond_oauth_redirect_path');
+      // Une redirection mémorisée vers l'onboarding (inscription) ne doit pas piéger les connexions suivantes :
+      // le tableau de bord propriétaire renvoie lui-même vers l'onboarding si le dossier n'est pas soumis.
+      if (savedRedirect && !savedRedirect.includes('onboarding') && savedRedirect !== '/login') {
         navigate(savedRedirect, { replace: true });
         return;
       }
 
-      if (user.role === 'admin' || user.role === 'subadmin') {
-        navigate('/admin', { replace: true });
-      } else if (user.role === 'owner' || user.role === 'partner') {
-        const isCertified = Boolean(user.verified || user.kyc_status === 'verified');
-        if (!isCertified) {
-          navigate('/onboarding/partner', { replace: true });
-        } else {
-          navigate('/dashboard/partner', { replace: true });
-        }
-      } else if (user.role === 'client') {
-        navigate('/dashboard/client', { replace: true });
-      }
+      navigate(getPostLoginPath(user), { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, isPasswordRecovery]);
 
   // Timeout de sécurité si l'authentification OAuth tarde à se synchroniser
   useEffect(() => {
@@ -112,10 +167,10 @@ export function LoginPage() {
         if (res.user.role === 'admin' || res.user.role === 'subadmin') {
           const isSub = res.user.role === 'subadmin';
           setSuccessMsg(isSub ? 'Compte Assistant Admin identifié. Accès à la console opérationnelle...' : 'Compte Super-Administrateur vérifié. Accès à la Tour de Contrôle...');
-          setTimeout(() => navigate('/admin', { replace: true }), 400);
+          setTimeout(() => navigate(getPostLoginPath(res.user), { replace: true }), 400);
         } else if (res.user.role === 'owner' || res.user.role === 'partner') {
           setSuccessMsg('Compte Partenaire identifié. Accès à votre tableau de bord...');
-          setTimeout(() => navigate('/dashboard/partner', { replace: true }), 400);
+          setTimeout(() => navigate(getPostLoginPath(res.user), { replace: true }), 400);
         } else {
           setSuccessMsg('Connexion réussie ! Accès à votre espace voyageur...');
           setTimeout(() => {
@@ -154,10 +209,11 @@ export function LoginPage() {
       return;
     }
 
-    const isSuperAdminEmail =
+    // Réinitialisation directe uniquement en mode local ; avec Supabase, un lien est envoyé par e-mail
+    const isSuperAdminEmail = !isSupabaseConfigured && (
       cleanForgotEmail === 'isidoretoudonou@gmail.com' ||
       cleanForgotEmail === 'admin@beninbeyond.com' ||
-      cleanForgotEmail === 'admin@beninbeyond.bj';
+      cleanForgotEmail === 'admin@beninbeyond.bj');
 
     if (isSuperAdminEmail) {
       if (!adminNewPassword) {
@@ -175,7 +231,7 @@ export function LoginPage() {
 
       setForgotLoading(true);
       try {
-        const success = updateSuperAdminPassword(adminNewPassword);
+        const success = await updateSuperAdminPassword(adminNewPassword);
         if (success) {
           setPassword(adminNewPassword);
           setEmail(cleanForgotEmail);
@@ -218,7 +274,7 @@ export function LoginPage() {
       if (cleanEmail) {
         try {
           const registered = JSON.parse(localStorage.getItem('benin_beyond_registered_users') || '[]');
-          const found = registered.find((u) => u.email.toLowerCase() === cleanEmail);
+          const found = registered.find((u) => (u.email || '').toLowerCase() === cleanEmail);
           if (found) {
             hintRole = found.role;
             hintCompany = found.company;
@@ -228,13 +284,7 @@ export function LoginPage() {
       const res = await loginWithGoogle(hintRole, hintCompany);
       if (res?.success && res.user) {
         localStorage.removeItem('benin_beyond_oauth_in_progress');
-        if (res.user.role === 'admin' || res.user.role === 'subadmin') {
-          navigate('/admin', { replace: true });
-        } else if (res.user.role === 'owner' || res.user.role === 'partner') {
-          navigate('/dashboard/partner', { replace: true });
-        } else {
-          navigate('/dashboard/client', { replace: true });
-        }
+        navigate(getPostLoginPath(res.user), { replace: true });
       } else if (res?.error) {
         localStorage.removeItem('benin_beyond_oauth_in_progress');
         setError(res.error);
@@ -249,6 +299,46 @@ export function LoginPage() {
 
   const pendingRedirectTarget = typeof window !== 'undefined' ? localStorage.getItem('benin_beyond_oauth_redirect_path') : null;
   const isOnboardingRedirect = pendingRedirectTarget && pendingRedirectTarget.includes('onboarding');
+
+  if (isPasswordRecovery) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center px-4">
+        <form onSubmit={handleRecoverySubmit} className="w-full max-w-sm space-y-4 rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
+          <div className="flex justify-center">
+            <BrandLogo size="md" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-lg font-semibold text-foreground">Nouveau mot de passe</h1>
+            <p className="mt-1 text-xs text-foreground/55">Choisissez un mot de passe d’au moins 8 caractères.</p>
+          </div>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={recoveryPassword}
+            onChange={(e) => setRecoveryPassword(e.target.value)}
+            placeholder="Nouveau mot de passe"
+            className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none"
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={recoveryConfirm}
+            onChange={(e) => setRecoveryConfirm(e.target.value)}
+            placeholder="Confirmer le mot de passe"
+            className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none"
+          />
+          {recoveryError && <p className="text-xs text-rose-600">{recoveryError}</p>}
+          <button
+            type="submit"
+            disabled={recoverySaving}
+            className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {recoverySaving ? 'Enregistrement…' : 'Enregistrer le mot de passe'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   // Écran de transition propre uniquement lors d'un retour OAuth en cours
   if ((isOAuthCallback || loadingGoogle) && !oauthTimeoutExpired) {
@@ -655,7 +745,7 @@ export function LoginPage() {
                     />
                   </div>
 
-                  {(forgotEmail.trim().toLowerCase() === 'isidoretoudonou@gmail.com' ||
+                  {!isSupabaseConfigured && (forgotEmail.trim().toLowerCase() === 'isidoretoudonou@gmail.com' ||
                     forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.com' ||
                     forgotEmail.trim().toLowerCase() === 'admin@beninbeyond.bj') && (
                     <div className="rounded-2xl border border-accent/40 bg-accent/10 p-3.5 space-y-3">

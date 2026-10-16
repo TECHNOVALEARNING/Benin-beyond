@@ -100,7 +100,7 @@ export function ClientDashboardPage() {
         // Filter by user's email or display all user's local orders
         const filtered = all.filter((b) => {
           if (!user?.email) return false;
-          const userEmail = user.email.toLowerCase().trim();
+          const userEmail = (user.email || '').toLowerCase().trim();
           const bookingEmail = (b.customer_email || '').toLowerCase().trim();
           const bookingUserId = b.user_id || b.client_id;
           return bookingEmail === userEmail || (bookingUserId && bookingUserId === user.id);

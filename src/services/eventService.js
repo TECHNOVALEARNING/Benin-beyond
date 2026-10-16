@@ -64,8 +64,10 @@ export async function getEvents() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return data;
+      if (!error && Array.isArray(data)) {
+        const result = data.length > 0 ? data : [...INITIAL_CULTURAL_EVENTS];
+        saveStoredEventsLocal(result);
+        return result;
       }
     } catch (err) {
       console.warn('Erreur lecture events Supabase, fallback local:', err);

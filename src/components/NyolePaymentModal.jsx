@@ -60,6 +60,10 @@ export function NyolePaymentModal({
   useEffect(() => {
     const handleWindowMessage = (event) => {
       if (!isOpen || isCompletedRef.current) return;
+      // N'accepter que les messages de notre propre site (page de retour) ou de la passerelle Nyole
+      const trustedOrigin =
+        event.origin === window.location.origin || /^https:\/\/([a-z0-9-]+\.)*nyole\.com$/i.test(event.origin);
+      if (!trustedOrigin) return;
       if (event.data?.type === 'NYOLE_PAYMENT_SUCCESS' || event.data?.type === 'NYOLE_IFRAME_REDIRECT') {
         handleTriggerSuccess({ source: 'postMessage' });
       }

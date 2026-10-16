@@ -167,7 +167,11 @@ export async function checkNyoleSessionStatus(sessionId) {
       return { success: false, error: errorMsg };
     }
 
-    const isPaid = Boolean(data?.paid === true || data?.status === 'SUCCESS');
+    const rawStatus = String(data?.status || '').toUpperCase();
+    const isPaid = Boolean(
+      data?.paid === true ||
+      ['SUCCESS', 'SUCCEEDED', 'SUCCESSFUL', 'COMPLETED', 'PAID', 'APPROVED'].includes(rawStatus)
+    );
 
     return {
       success: true,

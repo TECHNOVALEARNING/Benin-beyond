@@ -80,7 +80,7 @@ import { uploadMediaFile, parseVideoEmbed } from '../services/mediaStorage';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
-import { BrandIcon } from '../components/BrandLogo';
+import { BrandIcon, BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
@@ -137,6 +137,8 @@ function getVerificationStatusBadge(status) {
       return { label: 'Brouillon / Non soumis', bgClass: 'bg-muted border border-foreground/10', textClass: 'text-foreground/60' };
   }
 }
+
+const isUuidValue = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
 
 export function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -460,27 +462,24 @@ export function AdminDashboardPage() {
         balance: 0
       })));
 
+      // Demandes de reversement : Supabase uniquement (aucun cache navigateur)
       let fetchedPayouts = [];
       if (isSupabaseConfigured && supabase) {
-        try {
-          const { data: pData } = await supabase
-            .from('payouts')
-            .select('*')
-            .order('created_at', { ascending: false });
-          fetchedPayouts = pData || [];
-        } catch {
-          fetchedPayouts = [];
+        const { data: pData, error: pError } = await supabase
+          .from('payouts')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (pError) {
+          console.error('[Payouts] Lecture impossible :', pError.message);
+        } else {
+          fetchedPayouts = (pData || []).map((p) => ({
+            ...p,
+            method: p.method_label || p.method,
+            recipient: p.recipient_phone_or_account || '',
+            date: p.created_at ? new Date(p.created_at).toLocaleDateString('fr-FR') : ''
+          }));
         }
       }
-      try {
-        const localP = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
-        const existingIds = new Set(fetchedPayouts.map((p) => p.id));
-        localP.forEach((lp) => {
-          if (!existingIds.has(lp.id)) {
-            fetchedPayouts.push(lp);
-          }
-        });
-      } catch {}
       setPayouts(fetchedPayouts);
     } catch (err) {
       console.error('Erreur chargement admin:', err);
@@ -840,7 +839,7 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleSaveAdminPassword = (e) => {
+  const handleSaveAdminPassword = async (e) => {
     e.preventDefault();
     setAdminPasswordError('');
     const trimmed = (adminPasswordInput || '').trim();
@@ -848,8 +847,8 @@ export function AdminDashboardPage() {
       setAdminPasswordError('Veuillez saisir votre nouveau mot de passe.');
       return;
     }
-    if (trimmed.length < 4) {
-      setAdminPasswordError('Le mot de passe doit comporter au moins 4 caractères.');
+    if (trimmed.length < 8) {
+      setAdminPasswordError('Le mot de passe doit comporter au moins 8 caractères.');
       return;
     }
     if (trimmed !== (adminPasswordConfirm || '').trim()) {
@@ -859,7 +858,7 @@ export function AdminDashboardPage() {
 
     setAdminPasswordSaving(true);
     try {
-      const ok = updateSuperAdminPassword(trimmed);
+      const ok = await updateSuperAdminPassword(trimmed);
       if (ok) {
         showToast('Votre mot de passe Super-Administrateur a été enregistré avec succès !');
         setShowAdminPasswordModal(false);
@@ -1177,10 +1176,24 @@ export function AdminDashboardPage() {
   };
 
   // Financial calculations 100% réelles
+  const paidBookings = useMemo(
+    () =>
+      bookings.filter(
+        (b) =>
+          !b.is_manual_block &&
+          b.status !== 'cancelled' &&
+          (b.payment_status || 'paid') === 'paid'
+      ),
+    [bookings]
+  );
+
   const platformMetrics = useMemo(() => {
-    const totalGmv = bookings.reduce((sum, b) => sum + (Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0), 0);
-    const totalCommissions = bookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0) * 0.10)), 0);
-    const totalDisbursed = totalGmv - totalCommissions;
+    const totalGmv = paidBookings.reduce((sum, b) => sum + (Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0), 0);
+    const totalCommissions = paidBookings.reduce((sum, b) => sum + (Number(b.commission_amount) || Math.round((Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0) * 0.10)), 0);
+    const totalOwedToHosts = totalGmv - totalCommissions;
+    const totalDisbursed = payouts
+      .filter((p) => p.status === 'completed')
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
     const pendingPayoutsCount = payouts.filter((p) => p.status === 'pending').length;
     const pendingKycCount = partners.filter((p) => p.kycStatus === 'pending' || p.kyc_status === 'pending').length;
@@ -1190,6 +1203,7 @@ export function AdminDashboardPage() {
       gmv: totalGmv,
       commissions: totalCommissions,
       disbursed: totalDisbursed,
+      remainingToHosts: Math.max(totalOwedToHosts - totalDisbursed, 0),
       activeListings: listings.filter((l) => l.status === 'active' || !l.status).length,
       partnersCount: partners.length,
       pendingBookingsCount,
@@ -1197,104 +1211,79 @@ export function AdminDashboardPage() {
       pendingKycCount,
       pendingListingsCount
     };
-  }, [bookings, listings, partners, payouts]);
+  }, [bookings, paidBookings, listings, partners, payouts]);
 
   // Évolution financière dynamique (Montée à chaque achat, baisse aux annulations, paliers réels)
-  const evolutionData = useMemo(() => {
-    if (bookings.length === 0) return [];
-
-    const sorted = [...bookings].sort((a, b) => {
-      const ta = new Date(a.created_at || a.created_date || 0).getTime();
-      const tb = new Date(b.created_at || b.created_date || 0).getTime();
-      return ta - tb;
-    });
-
-    let runningGmv = 0;
-    let runningComm = 0;
-    const history = [];
-
-    // Point de départ antérieur pour tracer la première montée
-    const firstDate = sorted[0]?.created_at ? new Date(sorted[0].created_at) : new Date();
-    const prevDate = new Date(firstDate.getTime() - 24 * 60 * 60 * 1000);
-    history.push({
-      label: prevDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
-      date: prevDate.toLocaleDateString('fr-FR'),
-      value: 0,
-      secondaryValue: 0,
-      changeType: 'flat'
-    });
-
-    sorted.forEach((b) => {
-      const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
-      const comm = Number(b.commission_amount) || Math.round(gmv * 0.10);
-      const isCancelled = b.status === 'cancelled';
-
-      if (isCancelled) {
-        // En cas d'annulation : le chiffre d'affaires actif diminue fidèlement
-        runningGmv = Math.max(0, runningGmv - gmv);
-        runningComm = Math.max(0, runningComm - comm);
-      } else {
-        // En cas d'achat : le chiffre d'affaires monte
-        runningGmv += gmv;
-        runningComm += comm;
-      }
-
-      const d = b.created_at ? new Date(b.created_at) : new Date();
-      const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-
-      history.push({
-        label,
-        date: d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
-        value: runningGmv,
-        secondaryValue: runningComm,
-        changeType: isCancelled ? 'down' : 'up',
-        bookingRef: b.booking_ref
-      });
-    });
-
-    return history;
-  }, [bookings]);
-
-  // Statistiques mensuelles réelles
-  const monthlyStats = useMemo(() => {
-    if (bookings.length === 0) {
-      return [];
-    }
-    const monthsMap = {};
-    bookings.forEach((b) => {
-      const d = b.created_at ? new Date(b.created_at) : new Date();
-      const monthName = d.toLocaleDateString('fr-FR', { month: 'short' });
-      if (!monthsMap[monthName]) {
-        monthsMap[monthName] = { month: monthName, gmv: 0, commission: 0 };
-      }
-      const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
-      const comm = Number(b.commission_amount) || Math.round(gmv * 0.10);
-      monthsMap[monthName].gmv += gmv;
-      monthsMap[monthName].commission += comm;
-    });
-    return Object.values(monthsMap);
-  }, [bookings]);
+  // Une transaction par réservation encaissée (les annulations sont exclues)
+  const chartTransactions = useMemo(
+    () =>
+      paidBookings
+        .map((b) => {
+          const gmv = Number(b.gross_amount) || Number(b.total_amount) || Number(b.total_price) || 0;
+          return {
+            date: b.created_at || b.created_date,
+            value: gmv,
+            secondaryValue: Number(b.commission_amount) || Math.round(gmv * 0.10)
+          };
+        }),
+    [paidBookings]
+  );
 
   // Répartition réelle des canaux de paiement
   const paymentBreakdown = useMemo(() => {
-    if (bookings.length === 0) return null;
-    const totals = { mtn: 0, moov: 0, celtiis: 0, card: 0 };
-    bookings.forEach((b) => {
+    if (paidBookings.length === 0) return null;
+    const totals = { mtn: 0, moov: 0, celtiis: 0, card: 0, other: 0 };
+    paidBookings.forEach((b) => {
       const pm = (b.payment_method || '').toLowerCase();
       if (pm.includes('mtn')) totals.mtn += 1;
       else if (pm.includes('moov')) totals.moov += 1;
       else if (pm.includes('celtiis')) totals.celtiis += 1;
       else if (pm.includes('carte') || pm.includes('visa') || pm.includes('card')) totals.card += 1;
-      else totals.mtn += 1;
+      else totals.other += 1;
     });
-    const total = bookings.length || 1;
+    const total = paidBookings.length || 1;
     return {
       mtn: Math.round((totals.mtn / total) * 100),
       moov: Math.round((totals.moov / total) * 100),
       celtiis: Math.round((totals.celtiis / total) * 100),
-      card: Math.round((totals.card / total) * 100)
+      card: Math.round((totals.card / total) * 100),
+      other: Math.round((totals.other / total) * 100)
     };
-  }, [bookings]);
+  }, [paidBookings]);
+
+  // Export CSV des réservations payées (relevé comptable réel)
+  const handleExportStatement = () => {
+    if (paidBookings.length === 0) {
+      showToast('Aucune réservation payée à exporter.', 'error');
+      return;
+    }
+    const header = ['Référence', 'Date', 'Client', 'Bien', 'Canal', 'Montant (FCFA)', 'Commission (FCFA)', 'Net hôte (FCFA)', 'Statut'];
+    const rows = paidBookings.map((b) => {
+      const gross = Number(b.gross_amount) || Number(b.total_amount) || 0;
+      const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
+      return [
+        b.booking_ref,
+        b.created_at ? new Date(b.created_at).toLocaleDateString('fr-FR') : '',
+        b.customer_name,
+        b.listing_title,
+        b.payment_method,
+        gross,
+        comm,
+        gross - comm,
+        b.status
+      ];
+    });
+    const csv = [header, ...rows]
+      .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `releve-benin-beyond-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Actions
   const handleOpenMediaAudit = (item) => {
@@ -1728,42 +1717,39 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleApprovePayout = async (payoutId) => {
-    setPayouts((prev) =>
-      prev.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p))
-    );
-    try {
-      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
-      const updated = stored.map((p) => (p.id === payoutId ? { ...p, status: 'approved' } : p));
-      localStorage.setItem('benin_beyond_payouts', JSON.stringify(updated));
-    } catch {}
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('payouts').update({ status: 'approved' }).eq('id', payoutId);
-      } catch (err) {
-        console.warn('Supabase payout approve error:', err);
-      }
+  // L'administrateur exécute le virement (Mobile Money / banque) puis le marque ici comme payé
+  const updatePayoutStatus = async (payoutId, status) => {
+    if (!isSupabaseConfigured || !supabase) {
+      showToast('Serveur injoignable : statut non enregistré.', 'error');
+      return false;
     }
-    showToast(`Virement validé pour le partenaire !`);
+    const { error } = await supabase
+      .from('payouts')
+      .update({
+        status,
+        processed_at: new Date().toISOString(),
+        processed_by: isUuidValue(user?.id) ? user.id : null
+      })
+      .eq('id', payoutId);
+    if (error) {
+      console.error('[Payouts] Mise à jour refusée :', error.message);
+      showToast('Mise à jour refusée par le serveur. Reconnectez-vous puis réessayez.', 'error');
+      return false;
+    }
+    setPayouts((prev) => prev.map((p) => (p.id === payoutId ? { ...p, status } : p)));
+    return true;
+  };
+
+  const handleApprovePayout = async (payoutId) => {
+    if (await updatePayoutStatus(payoutId, 'completed')) {
+      showToast('Virement marqué comme exécuté.');
+    }
   };
 
   const handleRejectPayout = async (payoutId) => {
-    setPayouts((prev) =>
-      prev.map((p) => (p.id === payoutId ? { ...p, status: 'rejected' } : p))
-    );
-    try {
-      const stored = JSON.parse(localStorage.getItem('benin_beyond_payouts') || '[]');
-      const updated = stored.map((p) => (p.id === payoutId ? { ...p, status: 'rejected' } : p));
-      localStorage.setItem('benin_beyond_payouts', JSON.stringify(updated));
-    } catch {}
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('payouts').update({ status: 'rejected' }).eq('id', payoutId);
-      } catch (err) {
-        console.warn('Supabase payout reject error:', err);
-      }
+    if (await updatePayoutStatus(payoutId, 'rejected')) {
+      showToast('Demande de versement refusée.');
     }
-    showToast(`Demande de versement rejetée.`);
   };
 
   const handleVerifyPartnerKyc = async (partnerId, partnerEmail = '') => {
@@ -2171,90 +2157,34 @@ export function AdminDashboardPage() {
     return new Set(sorted.slice(0, 10).map((r) => r.id));
   }, [reviewsList]);
 
+  // Navigation épurée : 3 groupes, libellés courts, badge uniquement pour les actions en attente
+  const pendingReviewsCount = reviewsList.filter((r) => r.status === 'pending').length;
   const navGroups = [
     {
-      title: isSuperAdmin ? 'SUPERVISION & GOUVERNANCE' : 'OPÉRATIONS & MODÉRATION DÉLÉGUÉE',
+      title: 'Pilotage',
       items: [
-        { key: 'cockpit', label: 'Tour de Contrôle', icon: faCrown },
-        {
-          key: 'moderation',
-          label: 'Modération Catalogue',
-          icon: faShieldHalved,
-          badge: platformMetrics.pendingListingsCount > 0 ? `${platformMetrics.pendingListingsCount} en attente` : null,
-          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
-        },
-        {
-          key: 'reservations',
-          label: 'Réservations Globales',
-          icon: faCalendarCheck,
-          badge: platformMetrics.pendingBookingsCount > 0 ? `${platformMetrics.pendingBookingsCount} à valider` : null,
-          badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40'
-        },
-        {
-          key: 'partners',
-          label: 'Hôtes & Partenaires',
-          icon: faBuilding,
-          badge: platformMetrics.pendingKycCount > 0 ? `${platformMetrics.pendingKycCount} audit KYC` : null,
-          badgeColor: 'bg-rose-500/25 text-rose-300 border-rose-500/40'
-        },
-        ...(isSuperAdmin
-          ? [
-              {
-                key: 'users',
-                label: 'Gestion Utilisateurs',
-                icon: faUsers,
-                badge: usersList.length > 0 ? `${usersList.length} comptes` : null,
-                badgeColor: 'bg-primary/20 text-primary border-primary/30'
-              }
-            ]
-          : []),
-        { key: 'finances', label: 'Trésorerie & Marges', icon: faWallet },
-        { key: 'packs', label: 'Formules & Packs', icon: faLayerGroup },
-        {
-          key: 'events',
-          label: 'Événements & Agenda',
-          icon: faCalendarCheck,
-          badge: events.length > 0 ? `${events.length} publiés` : null,
-          badgeColor: 'bg-primary/20 text-primary border-primary/30'
-        },
-        {
-          key: 'discoveries',
-          label: 'Découvertes & Services',
-          icon: faCompass,
-          badge: discoveriesList.length > 0 ? `${discoveriesList.length} fiches` : null,
-          badgeColor: 'bg-primary/20 text-primary border-primary/30'
-        },
-        {
-          key: 'reviews',
-          label: 'Avis & Retours Clients',
-          icon: faStar,
-          badge: reviewsList.some((r) => r.status === 'pending')
-            ? `${reviewsList.filter((r) => r.status === 'pending').length} en attente`
-            : reviewsList.length > 0 ? `${reviewsList.length} avis` : null,
-          badgeColor: reviewsList.some((r) => r.status === 'pending')
-            ? 'bg-amber-500/30 text-amber-300 border-amber-500/50 animate-pulse font-bold'
-            : 'bg-amber-500/25 text-amber-300 border-amber-500/40'
-        }
+        { key: 'cockpit', label: "Vue d'ensemble", icon: faChartPie },
+        { key: 'reservations', label: 'Réservations', icon: faCalendarCheck, badge: platformMetrics.pendingBookingsCount },
+        { key: 'finances', label: 'Finances', icon: faWallet }
       ]
     },
     {
-      title: 'CRÉATION & INVENTAIRE (PROPRIÉTAIRE)',
+      title: 'Catalogue',
       items: [
-        {
-          key: 'publish',
-          label: 'Publier une annonce',
-          icon: faCirclePlus,
-          isHighlight: true,
-          badge: 'Direct en ligne',
-          badgeColor: 'bg-accent text-black font-extrabold'
-        },
-        {
-          key: 'catalog_inventory',
-          label: 'Inventaire des Biens',
-          icon: faHouse,
-          badge: `${listings.length} biens`,
-          badgeColor: 'bg-white/10 text-white/70 border-white/15'
-        }
+        { key: 'moderation', label: 'Modération', icon: faShieldHalved, badge: platformMetrics.pendingListingsCount },
+        { key: 'catalog_inventory', label: 'Biens', icon: faHouse },
+        { key: 'publish', label: 'Publier une annonce', icon: faCirclePlus },
+        { key: 'packs', label: 'Packs', icon: faLayerGroup },
+        { key: 'events', label: 'Événements', icon: faLandmark },
+        { key: 'discoveries', label: 'Découvertes', icon: faCompass }
+      ]
+    },
+    {
+      title: 'Communauté',
+      items: [
+        { key: 'partners', label: 'Partenaires', icon: faBuilding, badge: platformMetrics.pendingKycCount },
+        ...(isSuperAdmin ? [{ key: 'users', label: 'Utilisateurs', icon: faUsers }] : []),
+        { key: 'reviews', label: 'Avis', icon: faStar, badge: pendingReviewsCount }
       ]
     }
   ];
@@ -2281,210 +2211,88 @@ export function AdminDashboardPage() {
       {/* 1. SIDEBAR NAVIGATION (Apple-grade Minimalist Luxury - STRICTLY PINNED, NO SCROLL) */}
       {/* ========================================================================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-[272px] h-[100dvh] max-h-[100dvh] md:h-screen bg-secondary text-secondary-foreground transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 shrink-0 flex flex-col justify-between border-r border-white/[0.08] select-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-64 max-w-[85vw] shrink-0 flex-col border-r border-foreground/10 bg-card text-foreground transition-transform duration-300 ease-in-out md:static md:h-screen md:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Logo & Superviseur status in compact, Apple-grade header */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] shrink-0">
-            <Link to="/" className="flex items-center gap-2.5 group" title="Retourner à l'accueil du site">
-              <BrandIcon size={26} />
-              <div className="flex items-center gap-2">
-                <span className="font-heading text-[15px] font-bold tracking-wide text-white group-hover:text-accent transition-colors">
-                  Bénin Beyond
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-[9px] font-semibold text-accent uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  {isSuperAdmin ? 'Superviseur' : 'Assistant Admin'}
-                </span>
-              </div>
-            </Link>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10"
-            >
-              <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
-            </button>
-          </div>
+        <div className="flex h-16 shrink-0 items-center justify-between px-5">
+          <Link to="/" title="Retour au site" className="flex items-center">
+            <BrandLogo size="sm" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-md p-1.5 text-foreground/50 hover:bg-muted hover:text-foreground md:hidden"
+            aria-label="Fermer le menu"
+          >
+            <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
+          </button>
+        </div>
 
-          {/* Navigation Groups */}
-          <nav className="px-2.5 py-2.5 space-y-3 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {navGroups.map((group, gIdx) => (
-              <div key={gIdx} className="space-y-0.5">
-                <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-widest text-white/45 font-heading">
-                  {group.title}
-                </div>
-
-                <div className="space-y-0.5">
-                  {group.items.map((item) => {
-                    const isActive = currentSection === item.key;
-                    if (item.isHighlight) {
-                      return (
-                        <button
-                          key={item.key}
-                          onClick={() => {
-                            handleSetSection(item.key);
-                            setSidebarOpen(false);
-                          }}
-                          className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-semibold transition-all duration-150 btn-press ${
-                            isActive
-                              ? 'bg-accent text-secondary shadow-xs'
-                              : 'bg-accent/15 text-accent hover:bg-accent/25 hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <FontAwesomeIcon
-                              icon={item.icon}
-                              className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                                isActive ? 'text-secondary' : 'text-accent group-hover:text-white'
-                              }`}
-                            />
-                            <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
-                          </div>
-                          {item.badge && (
-                            <span
-                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
-                                isActive ? 'bg-black/20 text-secondary' : 'bg-accent text-secondary'
-                              }`}
-                            >
-                              {item.badge}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    }
-
-                    return (
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {navGroups.map((group) => (
+            <div key={group.title}>
+              <p className="px-3 pb-1.5 text-[11px] font-medium text-foreground/40">{group.title}</p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = currentSection === item.key;
+                  return (
+                    <li key={item.key}>
                       <button
-                        key={item.key}
+                        type="button"
                         onClick={() => {
                           handleSetSection(item.key);
                           setSidebarOpen(false);
                         }}
-                        className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-xl text-[13.5px] font-medium transition-all duration-150 btn-press ${
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors ${
                           isActive
-                            ? 'bg-white/[0.12] text-white shadow-xs font-semibold nav-active-indicator'
-                            : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
+                            ? 'bg-muted font-semibold text-foreground'
+                            : 'text-foreground/65 hover:bg-muted/60 hover:text-foreground'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <FontAwesomeIcon
-                            icon={item.icon}
-                            className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                              isActive ? 'text-accent' : 'text-white/50 group-hover:text-white'
-                            }`}
-                          />
-                          <span className="font-heading tracking-wide text-[13.5px] truncate">{item.label}</span>
-                        </div>
-                        {item.badge && (
-                          <span
-                            className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 border ${
-                              isActive
-                                ? 'bg-black/30 text-white border-transparent'
-                                : item.badgeColor
-                            }`}
-                          >
+                        <FontAwesomeIcon
+                          icon={item.icon}
+                          className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-foreground/40'}`}
+                        />
+                        <span className="flex-1 truncate text-left">{item.label}</span>
+                        {item.badge > 0 && (
+                          <span className="min-w-[20px] rounded-full bg-accent/20 px-1.5 py-0.5 text-center text-[10.5px] font-semibold tabular-nums text-foreground/80">
                             {item.badge}
                           </span>
                         )}
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
-        </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
 
-        {/* Sidebar Footer (Apple-grade compact footer) */}
-        <div className="p-3 border-t border-white/[0.08] space-y-1.5 shrink-0 bg-secondary pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-          <Link
-            to="/"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
-          >
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-accent" />
-            <span>Voir le site public</span>
-          </Link>
-
-          {isSuperAdmin && (
+        <div className="shrink-0 border-t border-foreground/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {(user?.name || 'A').trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-foreground">{user?.name || 'Administrateur'}</p>
+              <p className="truncate text-[11px] text-foreground/45">{isSuperAdmin ? 'Administrateur' : 'Assistant'}</p>
+            </div>
             <button
               type="button"
-              onClick={() => {
-                setAdminPasswordError('');
-                setAdminPasswordInput('');
-                setAdminPasswordConfirm('');
-                setShowAdminPasswordModal(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition-colors"
+              onClick={handleAdminLogout}
+              className="rounded-md p-2 text-foreground/45 hover:bg-muted hover:text-rose-600"
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
             >
-              <FontAwesomeIcon icon={faLock} className="h-3.5 w-3.5 text-accent" />
-              <span>Changer mon mot de passe</span>
+              <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5" />
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleAdminLogout}
-            className="w-full flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 transition-all shadow-sm active:scale-95"
-            title="Se déconnecter"
-          >
-            <FontAwesomeIcon icon={faRightFromBracket} className="h-3.5 w-3.5 text-rose-400" />
-            <span>Déconnexion</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ========================================================================= */}
-      {/* 2. MAIN ADMIN CONTENT CONTAINER - INDEPENDENT FLUID SCROLL */}
-      {/* ========================================================================= */}
-      <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        
-        {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-foreground/10 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-lg border border-foreground/10 text-foreground hover:bg-muted shrink-0"
-              aria-label="Ouvrir le menu"
-            >
-              <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="font-heading text-base sm:text-lg font-bold text-foreground truncate">
-                {currentSection === 'publish'
-                  ? (isSuperAdmin ? 'Publier une Annonce' : 'Nouvelle Annonce')
-                  : currentSection === 'catalog_inventory'
-                  ? 'Inventaire des Biens'
-                  : allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
-              </h1>
-              <p className="text-[11px] text-foreground/60 truncate">
-                {getTimeBasedGreeting()}, {user?.name || (isSuperAdmin ? 'Super-Admin' : 'Assistant')}
-                <span className="hidden lg:inline"> • {isSuperAdmin ? 'Supervision générale & gouvernance' : 'Cockpit Assistant Admin'}</span>
-              </p>
-            </div>
           </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Quick Action: Publier un bien */}
-            <button
-              onClick={() => setCurrentSection('publish')}
-              className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                currentSection === 'publish'
-                  ? 'bg-accent text-black ring-2 ring-accent/40 shadow-accent/20'
-                  : 'bg-accent/15 text-accent border border-accent/40 hover:bg-accent/25 hover:text-accent-foreground'
-              }`}
-            >
-              <FontAwesomeIcon icon={faCirclePlus} className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">+ Publier un bien</span>
-            </button>
-
-            {platformMetrics.pendingBookingsCount > 0 && (
-              <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-semibold text-amber-800">
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                <span>{platformMetrics.pendingBookingsCount} résa(s)</span>
-              </span>
-            )}
+          <div className="mt-1 flex items-center gap-1 px-1">
+            <Link to="/" className="rounded-md px-2 py-1.5 text-[12px] text-foreground/55 hover:bg-muted hover:text-foreground">
+              Voir le site
+            </Link>
             {isSuperAdmin && (
               <button
                 type="button"
@@ -2494,14 +2302,51 @@ export function AdminDashboardPage() {
                   setAdminPasswordConfirm('');
                   setShowAdminPasswordModal(true);
                 }}
-                className="hidden md:inline-flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-all shadow-sm"
-                title="Modifier mon mot de passe Super-Admin"
+                className="rounded-md px-2 py-1.5 text-[12px] text-foreground/55 hover:bg-muted hover:text-foreground"
               >
-                <FontAwesomeIcon icon={faLock} className="h-3 w-3" />
-                <span>Mon mot de passe</span>
+                Mot de passe
               </button>
             )}
           </div>
+        </div>
+      </aside>
+
+      {/* ========================================================================= */}
+      {/* 2. MAIN ADMIN CONTENT CONTAINER - INDEPENDENT FLUID SCROLL */}
+      {/* ========================================================================= */}
+      <main className="flex-1 h-screen overflow-y-auto min-w-0 flex flex-col scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        
+        {/* Top Header Bar */}
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-foreground/10 bg-background/90 px-4 backdrop-blur sm:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-md p-2 text-foreground/60 hover:bg-muted md:hidden"
+              aria-label="Ouvrir le menu"
+            >
+              <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold text-foreground">
+                {allNavItems.find((n) => n.key === currentSection)?.label || 'Administration'}
+              </h1>
+              <p className="hidden truncate text-xs text-foreground/50 sm:block">
+                {getTimeBasedGreeting()}, {(user?.name || '').split(' ')[0] || 'Administrateur'}
+              </p>
+            </div>
+          </div>
+
+          {currentSection !== 'publish' && (
+            <button
+              type="button"
+              onClick={() => setCurrentSection('publish')}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+              <span className="hidden sm:inline">Publier un bien</span>
+            </button>
+          )}
         </header>
 
         {/* Feedback Toast */}
@@ -2519,256 +2364,116 @@ export function AdminDashboardPage() {
           {/* SECTION 1: COCKPIT MACRO (TOUR DE CONTRÔLE) */}
           {/* ========================================================================= */}
           {currentSection === 'cockpit' && (
-            <div className="space-y-8 animate-section-stagger">
-              {/* Macro KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
-                      Volume Global (GMV)
-                    </span>
-                    <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                      <FontAwesomeIcon icon={faMoneyBillWave} className="h-4 w-4" />
-                    </div>
+            <div className="space-y-6">
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  { label: 'Volume encaissé', value: formatPrice(platformMetrics.gmv), hint: `${paidBookings.length} réservation${paidBookings.length > 1 ? 's' : ''} payée${paidBookings.length > 1 ? 's' : ''}` },
+                  { label: 'Commissions', value: formatPrice(platformMetrics.commissions), hint: '10 % du volume' },
+                  { label: 'Biens actifs', value: platformMetrics.activeListings, hint: 'Logements et véhicules' },
+                  { label: 'Partenaires', value: platformMetrics.partnersCount, hint: 'Propriétaires certifiés' }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  <p className="font-heading text-2xl font-black text-foreground">
-                    {formatPrice(platformMetrics.gmv)}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 font-medium mt-1">
-                    {bookings.length} réservation{bookings.length > 1 ? 's' : ''} enregistrée{bookings.length > 1 ? 's' : ''}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5 shadow-sm card-hover-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/75 font-semibold">
-                      Commissions Bénin Beyond (10%)
-                    </span>
-                    <div className="h-8 w-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground">
-                      <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="font-heading text-2xl font-black text-foreground">
-                    {formatPrice(platformMetrics.commissions)}
-                  </p>
-                  <p className="text-[11px] text-foreground/70 font-medium mt-1">
-                    Revenus nets conservés par la plateforme
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
-                      Biens & Flottes Actifs
-                    </span>
-                    <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center text-foreground/70">
-                      <FontAwesomeIcon icon={faHouse} className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="font-heading text-2xl font-black text-foreground">
-                    {platformMetrics.activeListings}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    Villas, appartements & véhicules vérifiés
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-5 shadow-sm card-hover-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="caption text-[11px] uppercase tracking-wider text-foreground/60 font-semibold">
-                      Hôtes & Partenaires
-                    </span>
-                    <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center text-foreground/70">
-                      <FontAwesomeIcon icon={faUsers} className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="font-heading text-2xl font-black text-foreground">
-                    {platformMetrics.partnersCount}
-                  </p>
-                  <p className="text-[11px] text-foreground/60 mt-1">
-                    Propriétaires certifiés au Bénin
-                  </p>
-                </div>
+                ))}
               </div>
 
-              {/* Graphe d'Évolution Financière Ultra-Moderne Bénin Beyond */}
               <EvolutionAreaChart
-                title="Évolution des Flux Financiers"
-                subtitle="Volume d'affaires global (Paiements) & Commissions de la plateforme (10%)"
-                data={evolutionData.length > 0 ? evolutionData : monthlyStats.map(m => ({ label: m.month, value: m.gmv, secondaryValue: m.commission }))}
-                valueLabel="Volume Global Encaissé"
-                secondaryLabel="Commissions Bénin Beyond (10%)"
-                height={290}
+                title="Revenus de la plateforme"
+                transactions={chartTransactions}
+                valueLabel="Volume encaissé"
+                secondaryLabel="Commissions (10 %)"
               />
 
-              {/* Quick Action Cards Grid */}
-              {/* Quick Action Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div
-                  onClick={() => handleSetSection('moderation')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                      <FontAwesomeIcon icon={faShieldHalved} className="h-4 w-4" />
-                    </span>
-                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
-                  </div>
-                  <h4 className="font-heading text-sm font-bold text-foreground">
-                    Modérer les annonces
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    Gérer la conformité et les suspensions du catalogue ({listings.length} actifs).
-                  </p>
-                </div>
-
-                <div
-                  onClick={() => handleSetSection('reservations')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                      <FontAwesomeIcon icon={faCalendarCheck} className="h-4 w-4" />
-                    </span>
-                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
-                  </div>
-                  <h4 className="font-heading text-sm font-bold text-foreground">
-                    Superviser les réservations
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    Contrôler les réservations clients et l'attribution conciergerie.
-                  </p>
-                </div>
-
-                <div
-                  onClick={() => handleSetSection('partners')}
-                  className="cursor-pointer rounded-2xl border border-foreground/10 bg-card p-5 hover:border-primary/50 transition-all group card-hover-lift btn-press"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="h-9 w-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground group-hover:bg-accent group-hover:text-black transition-colors">
-                      <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4" />
-                    </span>
-                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3.5 w-3.5 text-foreground/30 group-hover:text-primary transition-colors" />
-                  </div>
-                  <h4 className="font-heading text-sm font-bold text-foreground">
-                    Demandes de versement
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    {payouts.filter((p) => p.status === 'pending').length} demande(s) de virement Mobile Money en attente d'approbation.
-                  </p>
-                </div>
-              </div>
-
-              {/* Dernières Annonces & Biens Récemment Publiés */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-foreground/10">
-                  <div>
-                    <h3 className="font-heading text-lg font-bold text-foreground flex items-center gap-2">
-                      <FontAwesomeIcon icon={faHouse} className="h-4 w-4 text-primary" />
-                      Dernières Annonces & Biens en Ligne
-                    </h3>
-                    <p className="text-xs text-foreground/60 mt-0.5">
-                      Visualisez instantanément vos annonces actives sans quitter le cockpit ({listings.length} au total)
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      onClick={() => handleSetSection('publish')}
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-primary/90 transition-all"
-                    >
-                      <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
-                      Publier un bien
-                    </button>
-                    <button
-                      onClick={() => handleSetSection('catalog_inventory')}
-                      className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs font-bold text-foreground hover:bg-muted transition-all"
-                    >
-                      Voir tout l'inventaire ({listings.length})
-                      <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3 text-foreground/50" />
-                    </button>
-                  </div>
-                </div>
-
-                {listings.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <FontAwesomeIcon icon={faHouse} className="h-10 w-10 text-foreground/20 mb-3" />
-                    <p className="text-sm font-semibold text-foreground/70">Aucune annonce trouvée pour le moment.</p>
-                    <p className="text-xs text-foreground/40 mt-1">Cliquez sur « Publier un bien » pour ajouter votre première propriété ou véhicule.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
-                    {listings.slice(0, 6).map((item) => (
-                      <div
-                        key={item.id}
-                        className="group flex flex-col justify-between rounded-xl border border-foreground/10 bg-background/50 hover:bg-background hover:border-primary/40 transition-all p-3.5 shadow-xs"
-                      >
-                        <div className="flex gap-3">
-                          <div className="relative h-18 w-20 shrink-0 overflow-hidden rounded-lg bg-muted border border-foreground/10">
-                            {item.gallery && item.gallery[0] ? (
-                              <img
-                                src={item.gallery[0]}
-                                alt={item.title}
-                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-foreground/30">
-                                <FontAwesomeIcon icon={item.type === 'vehicle' ? faCar : faHouse} className="h-5 w-5" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                                item.type === 'vehicle' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
-                              }`}>
-                                <FontAwesomeIcon icon={item.type === 'vehicle' ? faCar : faHouse} className="h-2.5 w-2.5" />
-                                {item.type === 'vehicle' ? 'Véhicule' : 'Séjour'}
-                              </span>
-                              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                                item.status === 'approved'
-                                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                                  : item.status === 'pending'
-                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                  : 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
-                              }`}>
-                                {item.status === 'approved' ? 'En ligne' : item.status === 'pending' ? 'En attente' : 'Suspendu'}
-                              </span>
-                            </div>
-                            <h4 className="text-xs font-bold text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                              {item.title}
-                            </h4>
-                            <p className="text-[11px] text-foreground/60 flex items-center gap-1 mt-0.5 line-clamp-1">
-                              <FontAwesomeIcon icon={faLocationDot} className="h-2.5 w-2.5 shrink-0 text-foreground/40" />
-                              {item.location || 'Bénin'}
-                            </p>
-                            <p className="text-xs font-bold text-primary mt-1">
-                              {formatPrice(item.price)} <span className="text-[10px] font-normal text-foreground/60">{item.price_unit || (item.type === 'vehicle' ? '/jour' : '/nuit')}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-foreground/10 text-xs">
-                          <Link
-                            to={`/details/${item.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/70 hover:text-primary transition-colors"
-                          >
-                            <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
-                            Voir la fiche
-                          </Link>
-                          <button
-                            onClick={() => handleSetSection('catalog_inventory')}
-                            className="text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            Gérer dans l'inventaire →
-                          </button>
-                        </div>
-                      </div>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                {/* Actions en attente */}
+                <section className="rounded-2xl border border-foreground/10 bg-card lg:col-span-2">
+                  <h3 className="border-b border-foreground/10 px-5 py-4 text-sm font-semibold text-foreground">À traiter</h3>
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {[
+                      { key: 'moderation', label: 'Annonces à modérer', count: platformMetrics.pendingListingsCount },
+                      { key: 'reservations', label: 'Réservations à valider', count: platformMetrics.pendingBookingsCount },
+                      { key: 'partners', label: 'Dossiers KYC à vérifier', count: platformMetrics.pendingKycCount },
+                      { key: 'reviews', label: 'Avis à modérer', count: pendingReviewsCount }
+                    ].map((task) => (
+                      <li key={task.key}>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSection(task.key)}
+                          className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-foreground/75 transition-colors hover:bg-muted/50 hover:text-foreground"
+                        >
+                          <span>{task.label}</span>
+                          <span className={`min-w-[28px] rounded-full px-2 py-0.5 text-center text-xs font-semibold tabular-nums ${
+                            task.count > 0 ? 'bg-accent/20 text-foreground' : 'text-foreground/35'
+                          }`}>
+                            {task.count || 0}
+                          </span>
+                        </button>
+                      </li>
                     ))}
+                  </ul>
+                </section>
+
+                {/* Dernières annonces */}
+                <section className="rounded-2xl border border-foreground/10 bg-card lg:col-span-3">
+                  <div className="flex items-center justify-between border-b border-foreground/10 px-5 py-4">
+                    <h3 className="text-sm font-semibold text-foreground">Dernières annonces</h3>
+                    <button
+                      type="button"
+                      onClick={() => handleSetSection('catalog_inventory')}
+                      className="text-xs font-medium text-foreground/55 hover:text-foreground"
+                    >
+                      Tout voir ({listings.length})
+                    </button>
                   </div>
-                )}
+
+                  {listings.length === 0 ? (
+                    <p className="px-5 py-10 text-center text-sm text-foreground/50">Aucune annonce pour le moment.</p>
+                  ) : (
+                    <ul className="divide-y divide-foreground/[0.07]">
+                      {listings.slice(0, 5).map((item) => {
+                        const isVehicle = item.type === 'drive' || item.subcategory === 'car';
+                        const isOnline = item.status === 'active' || item.status === 'approved' || !item.status;
+                        return (
+                          <li key={item.id} className="flex items-center gap-3 px-5 py-3">
+                            <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                              {item.gallery?.[0] && (
+                                <img
+                                  src={item.gallery[0]}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <Link
+                                to={`/listing/${item.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block truncate text-sm font-medium text-foreground hover:text-primary"
+                              >
+                                {item.title}
+                              </Link>
+                              <p className="truncate text-xs text-foreground/45">
+                                {isVehicle ? 'Véhicule' : 'Logement'} · {item.location || 'Bénin'}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-medium tabular-nums text-foreground">{formatPrice(item.price)}</p>
+                              <p className={`text-xs ${isOnline ? 'text-emerald-600' : item.status === 'pending' ? 'text-amber-600' : 'text-rose-600'}`}>
+                                {isOnline ? 'En ligne' : item.status === 'pending' ? 'En attente' : 'Suspendu'}
+                              </p>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
               </div>
             </div>
           )}
@@ -2777,312 +2482,209 @@ export function AdminDashboardPage() {
           {/* SECTION 2: MODÉRATION DU CATALOGUE */}
           {/* ========================================================================= */}
           {currentSection === 'moderation' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Filter and Search Bar */}
-              <div className="flex flex-col gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="relative flex-1 max-w-md">
-                    <FontAwesomeIcon
-                      icon={faMagnifyingGlass}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
-                    />
-                    <input
-                      type="text"
-                      value={listingSearch}
-                      onChange={(e) => setListingSearch(e.target.value)}
-                      placeholder="Rechercher par titre, ville ou hôte..."
-                      className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
-                    />
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Recherche et filtres */}
+                <div className="space-y-3 border-b border-foreground/10 px-5 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative w-full sm:max-w-sm">
+                      <FontAwesomeIcon
+                        icon={faMagnifyingGlass}
+                        className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35"
+                      />
+                      <input
+                        type="text"
+                        value={listingSearch}
+                        onChange={(e) => setListingSearch(e.target.value)}
+                        placeholder="Rechercher par titre, ville ou hôte..."
+                        className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { key: 'all', label: `Tous (${listings.length})` },
+                        { key: 'stay', label: 'Séjours' },
+                        { key: 'drive', label: 'Véhicules' }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setListingTypeFilter(tab.key)}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            listingTypeFilter === tab.key
+                              ? 'bg-foreground text-background'
+                              : 'text-foreground/55 hover:bg-muted hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Category Type Filter */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setListingTypeFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        listingTypeFilter === 'all'
-                          ? 'bg-primary text-white'
-                          : 'bg-muted text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      Tous ({listings.length})
-                    </button>
-                    <button
-                      onClick={() => setListingTypeFilter('stay')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        listingTypeFilter === 'stay'
-                          ? 'bg-primary text-white'
-                          : 'bg-muted text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      🏡 Séjours
-                    </button>
-                    <button
-                      onClick={() => setListingTypeFilter('drive')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        listingTypeFilter === 'drive'
-                          ? 'bg-primary text-white'
-                          : 'bg-muted text-foreground/70 hover:text-foreground'
-                      }`}
-                    >
-                      🚗 Véhicules
-                    </button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[
+                      { key: 'all', label: 'Tous', count: listings.length },
+                      { key: 'pending', label: 'En attente', count: listings.filter((l) => l.status === 'pending').length },
+                      { key: 'active', label: 'En ligne', count: listings.filter((l) => l.status === 'active' || !l.status).length },
+                      { key: 'refused', label: 'Refusées', count: listings.filter((l) => l.status === 'refused').length },
+                      { key: 'suspended', label: 'Suspendues', count: listings.filter((l) => l.status === 'suspended').length }
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setListingStatusFilter(tab.key)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          listingStatusFilter === tab.key
+                            ? 'bg-muted text-foreground'
+                            : 'text-foreground/50 hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Status Tabs Filter (Pending, Active, Refused, Suspended) */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-foreground/10 text-xs">
-                  <span className="text-[11px] font-semibold text-foreground/60 mr-1">Filtrer par statut :</span>
-                  <button
-                    onClick={() => setListingStatusFilter('all')}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
-                      listingStatusFilter === 'all'
-                        ? 'bg-foreground text-background'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
-                    }`}
-                  >
-                    Tous ({listings.length})
-                  </button>
-
-                  <button
-                    onClick={() => setListingStatusFilter('pending')}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
-                      listingStatusFilter === 'pending'
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faClock} className="text-[10px]" />
-                    <span>En attente ({listings.filter((l) => l.status === 'pending').length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setListingStatusFilter('active')}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
-                      listingStatusFilter === 'active'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faCircleCheck} className="text-[10px]" />
-                    <span>En ligne ({listings.filter((l) => l.status === 'active' || !l.status).length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setListingStatusFilter('refused')}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
-                      listingStatusFilter === 'refused'
-                        ? 'bg-rose-600 text-white shadow-sm'
-                        : 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/20'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faTriangleExclamation} className="text-[10px]" />
-                    <span>Refusées ({listings.filter((l) => l.status === 'refused').length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setListingStatusFilter('suspended')}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1.5 ${
-                      listingStatusFilter === 'suspended'
-                        ? 'bg-neutral-600 text-white shadow-sm'
-                        : 'bg-neutral-500/10 text-neutral-700 hover:bg-neutral-500/20'
-                    }`}
-                  >
-                    <FontAwesomeIcon icon={faBan} className="text-[10px]" />
-                    <span>Suspendues ({listings.filter((l) => l.status === 'suspended').length})</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Listings Table */}
-              <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
+                {/* Liste des annonces */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                       <tr>
-                        <th className="p-4">Bien ou Véhicule</th>
-                        <th className="p-4">Médias Fournis</th>
-                        <th className="p-4">Catégorie</th>
-                        <th className="p-4">Localisation</th>
-                        <th className="p-4">Prix Public</th>
-                        <th className="p-4">Hôte / Agence</th>
-                        <th className="p-4">Statut Modération</th>
-                        <th className="p-4 text-right">Actions</th>
+                        <th className="px-5 py-3 font-medium">Annonce</th>
+                        <th className="px-5 py-3 font-medium">Médias</th>
+                        <th className="px-5 py-3 font-medium">Localisation</th>
+                        <th className="px-5 py-3 font-medium">Prix</th>
+                        <th className="px-5 py-3 font-medium">Hôte</th>
+                        <th className="px-5 py-3 font-medium">Statut</th>
+                        <th className="px-5 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-foreground/5">
+                    <tbody className="divide-y divide-foreground/[0.07]">
                       {filteredListings.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-foreground/50">
+                          <td colSpan={7} className="px-5 py-10 text-center text-sm text-foreground/50">
                             Aucune annonce ne correspond aux filtres sélectionnés.
                           </td>
                         </tr>
                       ) : (
                         filteredListings.map((item) => (
-                          <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="p-4">
+                          <tr key={item.id} className="transition-colors hover:bg-muted/40">
+                            <td className="px-5 py-3">
                               <div className="flex items-center gap-3">
                                 <img
                                   src={item.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=120&q=80'}
                                   alt={item.title}
-                                  className="h-11 w-16 object-cover rounded-lg border border-foreground/10 cursor-pointer hover:opacity-80 transition-opacity"
+                                  className="h-10 w-12 shrink-0 cursor-pointer rounded-md object-cover hover:opacity-80"
                                   onClick={() => handleOpenMediaAudit(item)}
                                   title="Cliquer pour inspecter les photos & gérer la vidéo"
                                 />
-                                <div>
-                                  <p className="font-bold text-foreground line-clamp-1">
+                                <div className="min-w-0">
+                                  <p className="line-clamp-1 font-medium text-foreground">
                                     {item.title}
                                   </p>
-                                  <span className="text-[10px] text-foreground/50 font-mono">
-                                    ID: {item.id}
-                                  </span>
+                                  <p className="text-xs text-foreground/45">
+                                    {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
+                                  </p>
                                 </div>
                               </div>
                             </td>
 
-                            {/* Médias & Vidéo */}
-                            <td className="p-4">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenMediaAudit(item)}
-                                  className="inline-flex items-center gap-1 bg-muted hover:bg-muted/80 px-2 py-0.5 rounded text-[10px] font-semibold text-foreground/80 transition-colors"
-                                  title="Inspecter la galerie de photos"
-                                >
-                                  <FontAwesomeIcon icon={faCamera} className="text-primary text-[9px]" />
-                                  <span>{item.gallery?.length || 1} photo(s)</span>
-                                </button>
-
-                                {item.video_url ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenMediaAudit(item)}
-                                    className="inline-flex items-center gap-1 bg-accent text-black px-2 py-0.5 rounded text-[10px] font-bold shadow-sm hover:bg-accent/80 transition-colors"
-                                    title="Gérer la visite vidéo certifiée"
-                                  >
-                                    <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
-                                    <span>Vidéo active</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenMediaAudit(item)}
-                                    className="inline-flex items-center gap-1 bg-muted hover:bg-accent/20 px-2 py-0.5 rounded text-[10px] text-foreground/60 transition-colors border border-dashed border-foreground/20"
-                                    title="Ajouter une visite vidéo certifiée (Exclusivité Admin)"
-                                  >
-                                    <FontAwesomeIcon icon={faVideo} className="text-[9px] text-accent" />
-                                    <span>+ Vidéo Admin</span>
-                                  </button>
-                                )}
-                              </div>
+                            <td className="whitespace-nowrap px-5 py-3">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenMediaAudit(item)}
+                                className="text-xs text-foreground/60 hover:text-foreground"
+                                title="Inspecter la galerie et la visite vidéo"
+                              >
+                                {item.gallery?.length || 1} photo{(item.gallery?.length || 1) > 1 ? 's' : ''}
+                                {' · '}
+                                {item.video_url ? <span className="text-emerald-600">vidéo</span> : <span className="text-foreground/40">sans vidéo</span>}
+                              </button>
                             </td>
 
-                            <td className="p-4">
-                              <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80">
-                                {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
-                              </span>
-                            </td>
-
-                            <td className="p-4 text-foreground/70">
+                            <td className="px-5 py-3 text-foreground/60">
                               {item.location}
                             </td>
 
-                            <td className="p-4 font-bold text-foreground">
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground">
                               {formatPrice(item.price)}
-                              <span className="text-[10px] text-foreground/50 font-normal">
+                              <span className="text-xs text-foreground/45">
                                 {' '}/{item.price_unit || 'nuit'}
                               </span>
                             </td>
 
-                            <td className="p-4 text-foreground/80">
+                            <td className="px-5 py-3 text-foreground/70">
                               {item.owner_name || 'Hôte Partenaire'}
                             </td>
 
-                            {/* Statut Modération */}
-                            <td className="p-4">
+                            <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
                               {item.status === 'pending' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-800 px-2.5 py-0.5 text-[10px] font-bold border border-amber-500/30">
-                                  <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
-                                  À Contrôler
-                                </span>
+                                <span className="text-amber-600">À contrôler</span>
                               ) : item.status === 'refused' ? (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold border border-rose-500/30 cursor-pointer"
+                                <button
+                                  type="button"
+                                  className="text-rose-600 hover:underline"
                                   title={item.rejection_reason || 'Non conforme'}
                                   onClick={() => handleOpenRejectionModal(item)}
                                 >
-                                  <FontAwesomeIcon icon={faTriangleExclamation} className="h-2.5 w-2.5" />
                                   Refusée
-                                </span>
+                                </button>
                               ) : item.status === 'suspended' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-500/15 text-neutral-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
-                                  Suspendue
-                                </span>
+                                <span className="text-foreground/50">Suspendue</span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
-                                  En Ligne (Active)
-                                </span>
+                                <span className="text-emerald-600">En ligne</span>
                               )}
                             </td>
 
-                            {/* Actions de modération */}
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {/* Bouton Inspection Médias & Gestion Vidéo */}
+                            <td className="px-5 py-3 text-right">
+                              <div className="flex items-center justify-end gap-0.5">
                                 <button
                                   onClick={() => handleOpenMediaAudit(item)}
-                                  className="p-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent-foreground hover:bg-accent hover:text-black transition-colors"
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                                   title="Gérer les photos et la vidéo (Exclusivité Super-Admin)"
                                 >
                                   <FontAwesomeIcon icon={faVideo} className="h-3 w-3" />
                                 </button>
 
-                                {/* Bouton Approuver */}
                                 {item.status !== 'active' && item.status && (
                                   <button
                                     onClick={() => handleApproveListing(item.id)}
-                                    className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                    className="rounded-md p-2 text-emerald-600 transition-colors hover:bg-emerald-500/10"
                                     title="Approuver et mettre en ligne"
                                   >
                                     <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
                                   </button>
                                 )}
 
-                                {/* Bouton Refuser avec motif */}
                                 {item.status !== 'refused' && (
                                   <button
                                     onClick={() => handleOpenRejectionModal(item)}
-                                    className="p-1.5 rounded-lg border border-rose-500/30 text-rose-600 hover:bg-rose-50 transition-colors"
+                                    className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                                     title="Refuser l'annonce (Photos/vidéo non conformes)"
                                   >
                                     <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
                                   </button>
                                 )}
 
-                                {/* Bouton Modifier l'annonce (Nom, Prix, Photos, Infos) */}
                                 <button
                                   onClick={() => handleOpenEditListing(item)}
-                                  className="p-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors"
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                                   title="Modifier cette annonce (Nom, Prix, Photos, Détails)"
                                 >
                                   <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
                                 </button>
 
-                                {/* Bouton Voir Public */}
                                 <Link
                                   to={`/listing/${item.id}`}
-                                  className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary hover:border-primary transition-colors"
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                                   title="Voir fiche publique"
                                 >
                                   <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
                                 </Link>
 
-                                {/* Bouton Supprimer Définitivement */}
                                 <button
                                   onClick={() => handleDeleteListingItem(item.id, item.title)}
-                                  className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-600 hover:text-white transition-colors"
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                                   title="Supprimer définitivement"
                                 >
                                   <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
@@ -3095,7 +2697,7 @@ export function AdminDashboardPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
@@ -3103,143 +2705,120 @@ export function AdminDashboardPage() {
           {/* SECTION 3: RÉSERVATIONS GLOBALES */}
           {/* ========================================================================= */}
           {currentSection === 'reservations' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-4 rounded-2xl border border-foreground/10">
-                <div className="relative flex-1 max-w-md">
-                  <FontAwesomeIcon
-                    icon={faMagnifyingGlass}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40"
-                  />
-                  <input
-                    type="text"
-                    value={bookingSearch}
-                    onChange={(e) => setBookingSearch(e.target.value)}
-                    placeholder="Rechercher par client, référence ou bien..."
-                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
-                  />
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Recherche et filtres */}
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="relative w-full sm:max-w-sm">
+                    <FontAwesomeIcon
+                      icon={faMagnifyingGlass}
+                      className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35"
+                    />
+                    <input
+                      type="text"
+                      value={bookingSearch}
+                      onChange={(e) => setBookingSearch(e.target.value)}
+                      placeholder="Rechercher par client, référence ou bien..."
+                      className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[
+                      { key: 'all', label: `Toutes (${bookings.length})` },
+                      { key: 'confirmed', label: 'Confirmées' },
+                      { key: 'pending', label: 'En attente' }
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setBookingFilter(tab.key)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          bookingFilter === tab.key
+                            ? 'bg-foreground text-background'
+                            : 'text-foreground/55 hover:bg-muted hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setBookingFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      bookingFilter === 'all'
-                        ? 'bg-primary text-white'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
-                    }`}
-                  >
-                    Toutes ({bookings.length})
-                  </button>
-                  <button
-                    onClick={() => setBookingFilter('confirmed')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      bookingFilter === 'confirmed'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
-                    }`}
-                  >
-                    Confirmées
-                  </button>
-                  <button
-                    onClick={() => setBookingFilter('pending')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      bookingFilter === 'pending'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-muted text-foreground/70 hover:text-foreground'
-                    }`}
-                  >
-                    En Attente
-                  </button>
-                </div>
-              </div>
-
-              {/* Bookings Table */}
-              <div className="rounded-2xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                       <tr>
-                        <th className="p-4">Réf & Voyageur</th>
-                        <th className="p-4">Prestation réservée</th>
-                        <th className="p-4">Dates</th>
-                        <th className="p-4">Brut Client</th>
-                        <th className="p-4">Com. Bénin Beyond (10%)</th>
-                        <th className="p-4">Net Hôte (90%)</th>
-                        <th className="p-4">Statut</th>
-                        <th className="p-4 text-right">Actions</th>
+                        <th className="px-5 py-3 font-medium">Voyageur</th>
+                        <th className="px-5 py-3 font-medium">Prestation</th>
+                        <th className="px-5 py-3 font-medium">Dates</th>
+                        <th className="px-5 py-3 font-medium">Montant</th>
+                        <th className="px-5 py-3 font-medium">Commission</th>
+                        <th className="px-5 py-3 font-medium">Net hôte</th>
+                        <th className="px-5 py-3 font-medium">Statut</th>
+                        <th className="px-5 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-foreground/5">
+                    <tbody className="divide-y divide-foreground/[0.07]">
                       {filteredBookings.map((b) => {
                         const gross = Number(b.gross_amount) || 0;
                         const comm = Number(b.commission_amount) || Math.round(gross * 0.10);
                         const net = gross - comm;
 
                         return (
-                          <tr key={b.id || b.booking_ref} className="hover:bg-muted/20 transition-colors">
-                            <td className="p-4">
-                              <p className="font-bold text-foreground">
+                          <tr key={b.id || b.booking_ref} className="transition-colors hover:bg-muted/40">
+                            <td className="px-5 py-3">
+                              <p className="font-medium text-foreground">
                                 {b.customer_name}
                               </p>
-                              <p className="text-[11px] text-foreground/60">
-                                {b.customer_phone}
+                              <p className="text-xs text-foreground/45">
+                                {b.customer_phone}{b.customer_phone && b.booking_ref ? ' · ' : ''}<span className="font-mono">{b.booking_ref}</span>
                               </p>
-                              <span className="font-mono text-[10px] text-accent font-bold">
-                                {b.booking_ref}
-                              </span>
                             </td>
-                            <td className="p-4 font-medium text-foreground">
+                            <td className="px-5 py-3 text-foreground/75">
                               {b.listing_title}
                             </td>
-                            <td className="p-4 text-foreground/70 whitespace-nowrap">
+                            <td className="whitespace-nowrap px-5 py-3 text-foreground/60">
                               {b.dates || 'Séjour à venir'}
                             </td>
-                            <td className="p-4 font-bold text-foreground">
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground">
                               {formatPrice(gross)}
                             </td>
-                            <td className="p-4 font-bold text-accent">
-                              +{formatPrice(comm)}
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground/60">
+                              {formatPrice(comm)}
                             </td>
-                            <td className="p-4 font-bold text-emerald-700">
+                            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground/60">
                               {formatPrice(net)}
                             </td>
-                            <td className="p-4">
+                            <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
                               {b.status === 'confirmed' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faCircleCheck} className="h-2.5 w-2.5" />
-                                  Confirmée
-                                </span>
+                                <span className="text-emerald-600">Confirmée</span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
-                                  En attente
-                                </span>
+                                <span className="text-amber-600">En attente</span>
                               )}
                             </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => setSelectedBookingModal(b)}
-                                  className="p-1.5 rounded-lg border border-foreground/10 text-foreground/70 hover:text-primary transition-colors"
-                                  title="Voir le reçu détaillé"
-                                >
-                                  <FontAwesomeIcon icon={faReceipt} className="h-3.5 w-3.5" />
-                                </button>
+                            <td className="px-5 py-3 text-right">
+                              <div className="flex items-center justify-end gap-0.5">
                                 {b.status === 'pending' && (
                                   <button
                                     onClick={() => handleUpdateBooking(b.id || b.booking_ref, 'confirmed')}
-                                    className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition-colors"
+                                    className="mr-1 rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                                   >
                                     Valider
                                   </button>
                                 )}
                                 <button
+                                  onClick={() => setSelectedBookingModal(b)}
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                                  title="Voir le reçu détaillé"
+                                >
+                                  <FontAwesomeIcon icon={faReceipt} className="h-3 w-3" />
+                                </button>
+                                <button
                                   onClick={() => handleDeleteBookingItem(b.id || b.booking_ref, b.booking_ref)}
-                                  className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 transition-colors"
+                                  className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                                   title="Supprimer la réservation"
                                 >
-                                  <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                                  <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                                 </button>
                               </div>
                             </td>
@@ -3248,8 +2827,11 @@ export function AdminDashboardPage() {
                       })}
                     </tbody>
                   </table>
+                  {filteredBookings.length === 0 && (
+                    <p className="px-5 py-10 text-center text-sm text-foreground/50">Aucune réservation.</p>
+                  )}
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
@@ -3257,180 +2839,105 @@ export function AdminDashboardPage() {
           {/* SECTION 4: HÔTES, PARTENAIRES & VÉRIFICATION KYC */}
           {/* ========================================================================= */}
           {currentSection === 'partners' && (
-            <div className="space-y-8 animate-section-stagger">
-              {/* Header & KPI Summary */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/30 text-accent-foreground text-[11px] font-bold uppercase tracking-wider mb-2">
-                    <FontAwesomeIcon icon={faBuilding} className="h-3 w-3 text-accent" />
-                    Gouvernance des Propriétaires & Audits
-                  </div>
-                  <h2 className="font-heading text-2xl font-black text-foreground">
-                    Hôtes, Partenaires & Certification KYC
-                  </h2>
-                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
-                    Validez la conformité réglementaire (IFU, RCCM, CIP) des propriétaires d'hébergements et de véhicules.
-                  </p>
-                </div>
+            <div className="space-y-6">
+              <p className="text-xs leading-relaxed text-foreground/50">
+                Dès qu'un propriétaire est certifié, ses annonces en attente sont publiées automatiquement, et ses nouvelles annonces sont mises en ligne sans approbation manuelle.
+              </p>
 
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-700">
-                    <FontAwesomeIcon icon={faShieldHalved} className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>{partnerMetrics.verified} Partenaires Certifiés Actifs</span>
-                  </span>
-                </div>
+              {/* Onglets */}
+              <div className="flex items-center gap-5 border-b border-foreground/10">
+                {[
+                  { key: 'verifications', label: 'Dossiers KYC', count: verifMetrics.pending },
+                  { key: 'directory', label: 'Annuaire', count: null }
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setPartnerActiveTab(tab.key)}
+                    className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors ${
+                      partnerActiveTab === tab.key
+                        ? 'border-foreground text-foreground'
+                        : 'border-transparent text-foreground/50 hover:text-foreground'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    {tab.key === 'directory' ? (
+                      <span className="text-xs tabular-nums text-foreground/40">{partnerMetrics.total}</span>
+                    ) : tab.count > 0 ? (
+                      <span className="min-w-[22px] rounded-full bg-accent/20 px-1.5 py-0.5 text-center text-xs font-semibold tabular-nums text-foreground">
+                        {tab.count}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
               </div>
 
-              {/* Information Banner on Auto-Publishing */}
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
-                <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <div className="text-xs text-foreground/80 space-y-1">
-                  <p className="font-bold text-foreground">
-                    Règle de Publication Automatique des Annonces :
-                  </p>
-                  <p className="text-foreground/70 text-[11.5px]">
-                    Dès qu'un propriétaire est passé en statut <strong>"Certifié Conforme (Actif)"</strong>, toutes ses annonces actuellement en attente sont publiées automatiquement sur le site public. Par la suite, toutes ses nouvelles annonces seront également <strong>mises en ligne instantanément</strong> sans exiger d'approbation manuelle à chaque publication.
-                  </p>
-                </div>
-              </div>
-
-              {/* Navigation Tabs: Dossiers KYC/KYB Onboarding vs Annuaire Partenaires */}
-              <div className="flex flex-wrap items-center gap-2 border-b border-foreground/10 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setPartnerActiveTab('verifications')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
-                    partnerActiveTab === 'verifications'
-                      ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                      : 'bg-card border border-foreground/10 text-foreground/70 hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <FontAwesomeIcon icon={faFileContract} className="h-3.5 w-3.5" />
-                  <span>Dossiers de Vérification Propriétaires (KYC/KYB)</span>
-                  {verifMetrics.pending > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
-                      {verifMetrics.pending}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPartnerActiveTab('directory')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
-                    partnerActiveTab === 'directory'
-                      ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                      : 'bg-card border border-foreground/10 text-foreground/70 hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <FontAwesomeIcon icon={faUsers} className="h-3.5 w-3.5" />
-                  <span>Annuaire Général des Partenaires ({partnerMetrics.total})</span>
-                </button>
-              </div>
-
-              {/* VIEW 1: DOSSIERS DE VÉRIFICATION ONBOARDING (KYC/KYB MULTI-PIÈCES) */}
+              {/* VUE 1 : DOSSIERS DE VÉRIFICATION (KYC/KYB) */}
               {partnerActiveTab === 'verifications' && (
                 <div className="space-y-6">
-                  {/* Verification KPI Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
-                        Total Demandes
-                      </span>
-                      <p className="font-heading text-2xl font-black text-foreground">{verifMetrics.total}</p>
-                      <p className="text-[10px] text-foreground/50 mt-0.5">Dossiers d'onboarding enregistrés</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 block mb-1">
-                        En Attente d'Audit
-                      </span>
-                      <p className="font-heading text-2xl font-black text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                        <span>{verifMetrics.pending}</span>
-                        {verifMetrics.pending > 0 && (
-                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                        )}
-                      </p>
-                      <p className="text-[10px] text-amber-600/80 mt-0.5">Nouveaux dossiers à traiter</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-orange-700 dark:text-orange-300 block mb-1">
-                        Complément Requis
-                      </span>
-                      <p className="font-heading text-2xl font-black text-orange-700 dark:text-orange-300">
-                        {verifMetrics.additionalInfo}
-                      </p>
-                      <p className="text-[10px] text-orange-600/80 mt-0.5">Pièces à remplacer demandées</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
-                        Dossiers Approuvés
-                      </span>
-                      <p className="font-heading text-2xl font-black text-emerald-700">{verifMetrics.approved}</p>
-                      <p className="text-[10px] text-emerald-600/70 mt-0.5">Partenaires vérifiés & actifs</p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                    {[
+                      { label: 'Demandes', value: verifMetrics.total, hint: 'Dossiers enregistrés' },
+                      { label: "En attente d'audit", value: verifMetrics.pending, hint: 'À traiter' },
+                      { label: 'Complément requis', value: verifMetrics.additionalInfo, hint: 'Pièces à remplacer' },
+                      { label: 'Approuvés', value: verifMetrics.approved, hint: 'Partenaires vérifiés' }
+                    ].map((kpi) => (
+                      <div key={kpi.label} className="bg-card p-5">
+                        <p className="text-xs text-foreground/50">{kpi.label}</p>
+                        <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                        <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Verification Applications Management Card */}
-                  <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-                    <div className="p-6 border-b border-foreground/10 space-y-4">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <section className="rounded-2xl border border-foreground/10 bg-card">
+                    <div className="space-y-3 border-b border-foreground/10 px-5 py-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <h3 className="font-heading text-base font-bold text-foreground">
-                            Dossiers d'Onboarding & Justificatifs Réglementaires
-                          </h3>
-                          <p className="text-xs text-foreground/60 mt-0.5">
-                            Audit pièce par pièce : RCCM, IFU, Titre Foncier, Cartes Grises et Mandats.
-                          </p>
+                          <h3 className="text-sm font-semibold text-foreground">Dossiers d'onboarding</h3>
+                          <p className="mt-0.5 text-xs text-foreground/50">RCCM, IFU, titre foncier, cartes grises et mandats.</p>
                         </div>
-
-                        {/* Search Input */}
-                        <div className="relative w-full sm:w-72">
-                          <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 h-3 w-3" />
+                        <div className="relative w-full md:w-72">
+                          <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
                           <input
                             type="text"
                             value={partnerSearch}
                             onChange={(e) => setPartnerSearch(e.target.value)}
                             placeholder="Rechercher nom, email, société, IFU..."
-                            className="w-full pl-8 pr-3 py-2 rounded-xl bg-background border border-foreground/15 text-xs text-foreground placeholder:text-foreground/40 focus:ring-1 focus:ring-primary focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                       </div>
 
-                      {/* Filter Row: Status Tabs + Selectors */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                        {/* Status Tabs */}
-                        <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-muted p-1">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-1">
                           {[
-                            { key: 'all', label: `Tous (${verifMetrics.total})` },
-                            { key: 'pending', label: `⏳ En attente (${verifMetrics.pending})` },
-                            { key: 'additional_info_required', label: `⚠️ Complément (${verifMetrics.additionalInfo})` },
-                            { key: 'approved', label: `✓ Certifiés (${verifMetrics.approved})` },
-                            { key: 'rejected', label: `✕ Rejetés (${verifMetrics.rejected})` }
+                            { key: 'all', label: 'Tous', count: verifMetrics.total },
+                            { key: 'pending', label: 'En attente', count: verifMetrics.pending },
+                            { key: 'additional_info_required', label: 'Complément', count: verifMetrics.additionalInfo },
+                            { key: 'approved', label: 'Certifiés', count: verifMetrics.approved },
+                            { key: 'rejected', label: 'Rejetés', count: verifMetrics.rejected }
                           ].map((tab) => (
                             <button
                               key={tab.key}
                               type="button"
                               onClick={() => setVerificationStatusFilter(tab.key)}
-                              className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold transition-all shrink-0 ${
+                              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                                 verificationStatusFilter === tab.key
-                                  ? 'bg-card text-foreground shadow-xs font-bold'
-                                  : 'text-foreground/60 hover:text-foreground'
+                                  ? 'bg-muted text-foreground'
+                                  : 'text-foreground/50 hover:text-foreground'
                               }`}
                             >
-                              {tab.label}
+                              {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
                             </button>
                           ))}
                         </div>
 
-                        {/* Selectors for Type & Asset Category */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <select
                             value={verificationTypeFilter}
                             onChange={(e) => setVerificationTypeFilter(e.target.value)}
-                            className="px-2.5 py-1 rounded-xl bg-background border border-foreground/15 text-xs text-foreground focus:outline-none"
+                            className="rounded-lg border border-foreground/10 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                           >
                             <option value="all">Tous profils</option>
                             <option value="individual">Particulier</option>
@@ -3441,7 +2948,7 @@ export function AdminDashboardPage() {
                           <select
                             value={verificationCategoryFilter}
                             onChange={(e) => setVerificationCategoryFilter(e.target.value)}
-                            className="px-2.5 py-1 rounded-xl bg-background border border-foreground/15 text-xs text-foreground focus:outline-none"
+                            className="rounded-lg border border-foreground/10 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                           >
                             <option value="all">Toutes catégories</option>
                             <option value="hotel">Hôtels</option>
@@ -3454,27 +2961,25 @@ export function AdminDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Applications Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                           <tr>
-                            <th className="p-4">Demandeur & Contact</th>
-                            <th className="p-4">Cadre Juridique</th>
-                            <th className="p-4">Actifs Déclarés</th>
-                            <th className="p-4">Complétude Documents</th>
-                            <th className="p-4">Statut Global</th>
-                            <th className="p-4">Date de Dépôt</th>
-                            <th className="p-4 text-right">Actions</th>
+                            <th className="px-5 py-3 font-medium">Demandeur</th>
+                            <th className="px-5 py-3 font-medium">Cadre juridique</th>
+                            <th className="px-5 py-3 font-medium">Actifs déclarés</th>
+                            <th className="px-5 py-3 font-medium">Documents</th>
+                            <th className="px-5 py-3 font-medium">Statut</th>
+                            <th className="px-5 py-3 font-medium">Dépôt</th>
+                            <th className="px-5 py-3 text-right font-medium">Actions</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-foreground/5">
+                        <tbody className="divide-y divide-foreground/[0.07]">
                           {filteredVerifications.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="p-12 text-center text-foreground/50">
-                                <FontAwesomeIcon icon={faFileContract} className="h-8 w-8 mx-auto mb-2 text-foreground/30" />
-                                <p className="font-semibold text-xs">Aucun dossier de vérification trouvé.</p>
-                                <p className="text-[11px] text-foreground/40 mt-0.5">
+                              <td colSpan={7} className="px-5 py-10 text-center">
+                                <p className="text-sm text-foreground/50">Aucun dossier de vérification trouvé.</p>
+                                <p className="mt-1 text-xs text-foreground/40">
                                   Les demandes soumises par les propriétaires s'afficheront ici pour examen.
                                 </p>
                               </td>
@@ -3495,98 +3000,55 @@ export function AdminDashboardPage() {
                               const statusInfo = getVerificationStatusBadge(app.status);
 
                               return (
-                                <tr key={app.id} className="hover:bg-muted/20 transition-colors">
-                                  {/* Applicant & Contact */}
-                                  <td className="p-4">
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-9 w-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0">
-                                        {(app.owner_full_name || 'P')[0]}
-                                      </div>
-                                      <div>
-                                        <p className="font-bold text-foreground text-xs">{app.owner_full_name}</p>
-                                        <p className="text-[11px] text-foreground/60">{app.owner_email}</p>
-                                        <p className="text-[10px] text-foreground/40 font-mono mt-0.5">{app.owner_phone}</p>
-                                      </div>
+                                <tr key={app.id} className="transition-colors hover:bg-muted/40">
+                                  <td className="px-5 py-3">
+                                    <p className="font-medium text-foreground">{app.owner_full_name}</p>
+                                    <p className="text-xs text-foreground/45">{app.owner_email}</p>
+                                    {app.owner_phone && <p className="text-xs text-foreground/40">{app.owner_phone}</p>}
+                                  </td>
+
+                                  <td className="px-5 py-3">
+                                    <p className="text-foreground/75">{typeLabel}</p>
+                                    {app.company_name && (
+                                      <p className="text-xs text-foreground/60">{app.company_name}</p>
+                                    )}
+                                    <div className="space-y-0.5 font-mono text-xs text-foreground/45">
+                                      {app.tax_id && <p>IFU : {app.tax_id}</p>}
+                                      {app.rccm_number && <p>RCCM : {app.rccm_number}</p>}
+                                      {app.id_number && <p>ID : {app.id_number}</p>}
                                     </div>
                                   </td>
 
-                                  {/* Owner Legal Framework */}
-                                  <td className="p-4">
-                                    <div className="space-y-1">
-                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-muted text-foreground/80 border border-foreground/10">
-                                        {typeLabel}
-                                      </span>
-                                      {app.company_name && (
-                                        <p className="text-xs font-semibold text-primary">{app.company_name}</p>
-                                      )}
-                                      <div className="text-[10px] text-foreground/60 font-mono space-y-0.5">
-                                        {app.tax_id && <p>IFU : {app.tax_id}</p>}
-                                        {app.rccm_number && <p>RCCM : {app.rccm_number}</p>}
-                                        {app.id_number && <p>ID : {app.id_number}</p>}
-                                      </div>
-                                    </div>
+                                  <td className="max-w-[200px] px-5 py-3 text-xs text-foreground/60">
+                                    {(app.asset_categories || []).map((cat) =>
+                                      cat === 'hotel'
+                                        ? 'Hôtel'
+                                        : cat === 'apartment'
+                                        ? 'Appartement'
+                                        : cat === 'villa_house'
+                                        ? 'Villa'
+                                        : cat === 'vehicle'
+                                        ? 'Véhicule'
+                                        : 'Terrain'
+                                    ).join(', ')}
                                   </td>
 
-                                  {/* Declared Assets */}
-                                  <td className="p-4">
-                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                      {(app.asset_categories || []).map((cat) => (
-                                        <span
-                                          key={cat}
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-semibold"
-                                        >
-                                          {cat === 'hotel'
-                                            ? '🏨 Hôtel'
-                                            : cat === 'apartment'
-                                            ? '🏡 Appart.'
-                                            : cat === 'villa_house'
-                                            ? '🏰 Villa'
-                                            : cat === 'vehicle'
-                                            ? '🚗 Véhicule'
-                                            : '📐 Terrain'}
-                                        </span>
-                                      ))}
-                                    </div>
+                                  <td className="whitespace-nowrap px-5 py-3">
+                                    <p className={`text-xs font-medium tabular-nums ${docsCount >= requiredCount ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      {docsCount} / {requiredCount} pièces
+                                    </p>
+                                    <p className="text-xs text-foreground/40">
+                                      {docsCount >= requiredCount ? 'Complet' : 'Partiel'}
+                                    </p>
                                   </td>
 
-                                  {/* Documents Completeness */}
-                                  <td className="p-4">
-                                    <div>
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`text-xs font-bold ${docsCount >= requiredCount ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                          {docsCount} / {requiredCount} pièces
-                                        </span>
-                                        {docsCount >= requiredCount && (
-                                          <FontAwesomeIcon icon={faCheckCircle} className="h-3 w-3 text-emerald-600" />
-                                        )}
-                                      </div>
-                                      <p className="text-[10px] text-foreground/50 mt-0.5">
-                                        {docsCount >= requiredCount ? 'Dossier complet' : 'Dossier partiel'}
-                                      </p>
-                                    </div>
-                                  </td>
-
-                                  {/* Status */}
-                                  <td className="p-4">
-                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusInfo.bgClass} ${statusInfo.textClass}`}>
-                                      <FontAwesomeIcon
-                                        icon={
-                                          app.status === 'approved'
-                                            ? faCheckCircle
-                                            : app.status === 'rejected'
-                                            ? faBan
-                                            : app.status === 'additional_info_required'
-                                            ? faTriangleExclamation
-                                            : faClock
-                                        }
-                                        className="h-3 w-3"
-                                      />
-                                      <span>{statusInfo.label}</span>
+                                  <td className="whitespace-nowrap px-5 py-3">
+                                    <span className={`text-xs font-medium ${statusInfo.textClass}`}>
+                                      {statusInfo.label}
                                     </span>
                                   </td>
 
-                                  {/* Submission Date */}
-                                  <td className="p-4 text-foreground/60 text-[11px]">
+                                  <td className="whitespace-nowrap px-5 py-3 text-xs text-foreground/50">
                                     {app.submitted_at
                                       ? new Date(app.submitted_at).toLocaleDateString('fr-FR', {
                                           day: '2-digit',
@@ -3596,19 +3058,17 @@ export function AdminDashboardPage() {
                                       : 'Non soumis'}
                                   </td>
 
-                                  {/* Actions */}
-                                  <td className="p-4 text-right">
+                                  <td className="px-5 py-3 text-right">
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setSelectedVerifAppModal(app);
                                         setVerifAuditTab('documents');
                                       }}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-xs hover:opacity-95 transition-all"
+                                      className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                                       title="Examiner les pièces et statuer sur le dossier"
                                     >
-                                      <FontAwesomeIcon icon={faFileContract} className="h-3 w-3" />
-                                      <span>Examiner</span>
+                                      Examiner
                                     </button>
                                   </td>
                                 </tr>
@@ -3618,319 +3078,250 @@ export function AdminDashboardPage() {
                         </tbody>
                       </table>
                     </div>
-                  </div>
+                  </section>
                 </div>
               )}
 
-              {/* VIEW 2: ANNUAIRE GÉNÉRAL DES PARTENAIRES (EXISTANT) */}
+              {/* VUE 2 : ANNUAIRE DES PARTENAIRES */}
               {partnerActiveTab === 'directory' && (
                 <>
-                  {/* Stat Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
-                        Total Partenaires
-                      </span>
-                      <p className="font-heading text-2xl font-black text-foreground">{partnerMetrics.total}</p>
-                      <p className="text-[10px] text-foreground/50 mt-0.5">Propriétaires enregistrés</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 block mb-1">
-                        En attente d'audit
-                      </span>
-                      <p className="font-heading text-2xl font-black text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                        <span>{partnerMetrics.pending}</span>
-                        {partnerMetrics.pending > 0 && (
-                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                        )}
-                      </p>
-                      <p className="text-[10px] text-amber-600/80 mt-0.5">Dossiers à valider</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
-                        Certifiés Conformes
-                      </span>
-                      <p className="font-heading text-2xl font-black text-emerald-700">{partnerMetrics.verified}</p>
-                      <p className="text-[10px] text-emerald-600/70 mt-0.5">Publications directes actives</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 shadow-sm">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-accent-foreground block mb-1">
-                        Versements en Attente
-                      </span>
-                      <p className="font-heading text-2xl font-black text-accent-foreground">
-                        {payouts.filter((p) => p.status === 'pending').length}
-                      </p>
-                      <p className="text-[10px] text-accent-foreground/70 mt-0.5">Demandes de retraits</p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                    {[
+                      { label: 'Partenaires', value: partnerMetrics.total, hint: 'Propriétaires enregistrés' },
+                      { label: "En attente d'audit", value: partnerMetrics.pending, hint: 'Dossiers à valider' },
+                      { label: 'Certifiés', value: partnerMetrics.verified, hint: 'Publication directe' },
+                      { label: 'Versements en attente', value: payouts.filter((p) => p.status === 'pending').length, hint: 'Demandes de retrait' }
+                    ].map((kpi) => (
+                      <div key={kpi.label} className="bg-card p-5">
+                        <p className="text-xs text-foreground/50">{kpi.label}</p>
+                        <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                        <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Partners Directory & KYC Audit */}
-              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
-                <div className="p-6 border-b border-foreground/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Annuaire des Hôtes & Audits Légaux (KYC)
-                    </h3>
-                    <p className="text-xs text-foreground/60 mt-0.5">
-                      Vérification des titres fonciers, cartes grises et pièces d'identité
-                    </p>
-                  </div>
+                  <section className="rounded-2xl border border-foreground/10 bg-card">
+                    <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">Annuaire des hôtes</h3>
+                        <p className="mt-0.5 text-xs text-foreground/50">Titres fonciers, cartes grises et pièces d'identité.</p>
+                      </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    {/* Search Input */}
-                    <div className="relative w-full sm:w-64">
-                      <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 h-3 w-3" />
-                      <input
-                        type="text"
-                        value={partnerSearch}
-                        onChange={(e) => setPartnerSearch(e.target.value)}
-                        placeholder="Rechercher nom, enseigne, IFU..."
-                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-background border border-foreground/15 text-xs text-foreground placeholder:text-foreground/40 focus:ring-1 focus:ring-primary focus:outline-none"
-                      />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div className="relative w-full sm:w-60">
+                          <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
+                          <input
+                            type="text"
+                            value={partnerSearch}
+                            onChange={(e) => setPartnerSearch(e.target.value)}
+                            placeholder="Rechercher nom, enseigne, IFU..."
+                            className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1">
+                          {[
+                            { key: 'all', label: 'Tous', count: partnerMetrics.total },
+                            { key: 'pending', label: 'En attente', count: partnerMetrics.pending },
+                            { key: 'verified', label: 'Certifiés', count: partnerMetrics.verified },
+                            { key: 'rejected', label: 'Rejetés', count: partnerMetrics.rejected }
+                          ].map((tab) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setPartnerKycFilter(tab.key)}
+                              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                partnerKycFilter === tab.key
+                                  ? 'bg-muted text-foreground'
+                                  : 'text-foreground/50 hover:text-foreground'
+                              }`}
+                            >
+                              {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Filter Tabs */}
-                    <div className="flex items-center gap-1 rounded-2xl bg-muted p-1">
-                      {[
-                        { key: 'all', label: `Tous (${partnerMetrics.total})` },
-                        { key: 'pending', label: `⏳ En attente (${partnerMetrics.pending})` },
-                        { key: 'verified', label: `✓ Certifiés (${partnerMetrics.verified})` },
-                        { key: 'rejected', label: `✕ Rejetés (${partnerMetrics.rejected})` }
-                      ].map((tab) => (
-                        <button
-                          key={tab.key}
-                          type="button"
-                          onClick={() => setPartnerKycFilter(tab.key)}
-                          className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold transition-all shrink-0 ${
-                            partnerKycFilter === tab.key
-                              ? 'bg-card text-foreground shadow-xs font-bold'
-                              : 'text-foreground/60 hover:text-foreground'
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
-                      <tr>
-                        <th className="p-4">Hôte / Représentant</th>
-                        <th className="p-4">Enseigne commerciale</th>
-                        <th className="p-4">Contact</th>
-                        <th className="p-4">Conformité Bénin (IFU & Pièce)</th>
-                        <th className="p-4">Statut KYC</th>
-                        <th className="p-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-foreground/5">
-                      {filteredPartners.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-8 text-center text-xs text-foreground/50">
-                            Aucun partenaire trouvé avec ces filtres.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredPartners.map((p) => (
-                          <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="p-4">
-                              <p className="font-bold text-foreground">{p.name}</p>
-                              <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                                {p.partnerType === 'stay' ? '🏡 Hébergements' : p.partnerType === 'drive' ? '🚗 Mobilité VIP' : '🌟 Stay & Drive'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-foreground/80 font-medium">
-                              {p.company}
-                            </td>
-                            <td className="p-4">
-                              <p className="text-foreground/80 font-mono text-[11px]">{p.phone}</p>
-                              <p className="text-[11px] text-foreground/50">{p.email}</p>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-mono text-[11px] font-bold text-foreground">
-                                  IFU: {p.taxId || 'Non renseigné'}
-                                </span>
-                                {p.rccm && (
-                                  <span className="font-mono text-[10px] text-foreground/70">
-                                    RCCM: {p.rccm}
-                                  </span>
-                                )}
-                                {p.cip && (
-                                  <span className="font-mono text-[10px] text-foreground/70">
-                                    CIP: {p.cip}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-foreground/50 italic truncate max-w-[180px]">
-                                  {p.docType}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              {p.kycStatus === 'verified' ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                  <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3" />
-                                  Certifié Conforme (Actif)
-                                </span>
-                              ) : p.kycStatus === 'rejected' ? (
-                                <span
-                                  className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold cursor-help"
-                                  title={p.rejectionReason || 'Dossier non conforme'}
-                                >
-                                  <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                                  Non conforme (Rejeté)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-[10px] font-bold animate-pulse">
-                                  <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
-                                  Audit en attente (Pending)
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedKycModal(p)}
-                                  className="rounded-lg border border-foreground/20 bg-background px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition-colors flex items-center gap-1.5 shadow-xs"
-                                  title="Inspecter le dossier KYC complet"
-                                >
-                                  <FontAwesomeIcon icon={faEye} className="h-3 w-3 text-primary" />
-                                  <span>Dossier</span>
-                                </button>
-                                {p.kycStatus === 'verified' ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleResetPartnerKyc(p.id, p.email)}
-                                      className="rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-700 transition-colors flex items-center gap-1 shadow-xs"
-                                      title="Suspendre ce partenaire et le remettre en attente (retire ses annonces de la marketplace)"
-                                    >
-                                      <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
-                                      <span>Suspendre (En attente)</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenRejectKycModal(p)}
-                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-xs flex items-center gap-1"
-                                      title="Refuser ou révoquer le dossier KYC avec motif"
-                                    >
-                                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                                      <span>Refuser</span>
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
-                                      className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1 active:scale-95"
-                                      title="Valider la conformité et passer en actif (active automatiquement toutes les annonces)"
-                                    >
-                                      <FontAwesomeIcon icon={faCircleCheck} className="h-3 w-3" />
-                                      <span>Activer (Vérifié)</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenRejectKycModal(p)}
-                                      className="rounded-lg bg-rose-600 hover:bg-rose-700 px-2.5 py-1 text-xs font-bold text-white transition-colors shadow-xs flex items-center gap-1"
-                                      title="Refuser le dossier KYC avec motif"
-                                    >
-                                      <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                                      <span>Refuser</span>
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-foreground/10 text-xs text-foreground/50">
+                          <tr>
+                            <th className="px-5 py-3 font-medium">Hôte</th>
+                            <th className="px-5 py-3 font-medium">Enseigne</th>
+                            <th className="px-5 py-3 font-medium">Contact</th>
+                            <th className="px-5 py-3 font-medium">Conformité</th>
+                            <th className="px-5 py-3 font-medium">Statut KYC</th>
+                            <th className="px-5 py-3 text-right font-medium">Actions</th>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
+                        </thead>
+                        <tbody className="divide-y divide-foreground/[0.07]">
+                          {filteredPartners.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-5 py-10 text-center text-sm text-foreground/50">
+                                Aucun partenaire trouvé avec ces filtres.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredPartners.map((p) => (
+                              <tr key={p.id} className="transition-colors hover:bg-muted/40">
+                                <td className="px-5 py-3">
+                                  <p className="font-medium text-foreground">{p.name}</p>
+                                  <p className="text-xs text-foreground/45">
+                                    {p.partnerType === 'stay' ? 'Hébergements' : p.partnerType === 'drive' ? 'Mobilité' : 'Stay & Drive'}
+                                  </p>
+                                </td>
+                                <td className="px-5 py-3 text-foreground/70">
+                                  {p.company}
+                                </td>
+                                <td className="px-5 py-3">
+                                  <p className="text-xs text-foreground/70">{p.phone}</p>
+                                  <p className="text-xs text-foreground/45">{p.email}</p>
+                                </td>
+                                <td className="px-5 py-3">
+                                  <div className="flex flex-col gap-0.5 font-mono text-xs">
+                                    <span className="text-foreground/75">IFU : {p.taxId || 'Non renseigné'}</span>
+                                    {p.rccm && <span className="text-foreground/45">RCCM : {p.rccm}</span>}
+                                    {p.cip && <span className="text-foreground/45">CIP : {p.cip}</span>}
+                                    <span className="max-w-[180px] truncate font-sans text-foreground/40">{p.docType}</span>
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
+                                  {p.kycStatus === 'verified' ? (
+                                    <span className="text-emerald-600">Certifié</span>
+                                  ) : p.kycStatus === 'rejected' ? (
+                                    <span className="cursor-help text-rose-600" title={p.rejectionReason || 'Dossier non conforme'}>
+                                      Rejeté
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600">En attente</span>
+                                  )}
+                                </td>
+                                <td className="px-5 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedKycModal(p)}
+                                      className="rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                                      title="Inspecter le dossier KYC complet"
+                                    >
+                                      Dossier
+                                    </button>
+                                    {p.kycStatus === 'verified' ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleResetPartnerKyc(p.id, p.email)}
+                                          className="rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                                          title="Suspendre ce partenaire et le remettre en attente (retire ses annonces de la marketplace)"
+                                        >
+                                          Suspendre
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenRejectKycModal(p)}
+                                          className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
+                                          title="Refuser ou révoquer le dossier KYC avec motif"
+                                        >
+                                          Refuser
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleVerifyPartnerKyc(p.id, p.email)}
+                                          className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                          title="Valider la conformité et passer en actif (active automatiquement toutes les annonces)"
+                                        >
+                                          Activer
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenRejectKycModal(p)}
+                                          className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
+                                          title="Refuser le dossier KYC avec motif"
+                                        >
+                                          Refuser
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
+              )}
 
-              {/* Payout Requests Pending Admin Approval */}
-              <div className="rounded-3xl border border-accent/40 bg-card p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/10">
-                  <div className="flex items-center gap-2">
-                    <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4 text-accent" />
-                    <h3 className="font-heading text-base font-bold text-foreground">
-                      Demandes de Versement Partenaires (Mobile Money & Banque)
-                    </h3>
-                  </div>
-                  <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-bold text-accent-foreground">
+              {/* Demandes de versement */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-foreground">Demandes de versement</h3>
+                  <span className="text-xs text-foreground/50">
                     {payouts.filter((p) => p.status === 'pending').length} en attente
                   </span>
                 </div>
 
-                <div className="space-y-3">
-                  {payouts.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-foreground/50 border border-dashed border-foreground/10 rounded-2xl">
-                      Aucune demande de reversement en attente.
-                    </div>
-                  ) : (
-                    payouts.map((po) => (
-                      <div
+                {payouts.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-sm text-foreground/50">
+                    Aucune demande de reversement en attente.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {payouts.map((po) => (
+                      <li
                         key={po.id}
-                        className="rounded-2xl border border-foreground/10 bg-background/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        className="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-foreground">{po.partnerName || po.partner_name || 'Partenaire'}</span>
-                            <span className="text-xs text-foreground/60">({po.company || 'Hôte / Loueur'})</span>
-                          </div>
-                          <p className="text-xs text-foreground/70 mt-1">
-                            Canal : <strong className="text-primary">{po.method}</strong> • Bénéficiaire : <span className="font-mono">{po.recipient}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {po.partnerName || po.partner_name || 'Partenaire'}
+                            <span className="font-normal text-foreground/45"> · {po.company || 'Hôte / Loueur'}</span>
                           </p>
-                          <p className="text-[11px] text-foreground/40 mt-0.5">
-                            Date demande : {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
+                          <p className="mt-0.5 break-words text-xs text-foreground/50">
+                            {po.method} · <span className="font-mono">{po.recipient}</span> · {po.date || (po.created_at ? new Date(po.created_at).toLocaleDateString('fr-FR') : 'Récemment')}
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex shrink-0 items-center gap-4">
                           <div className="text-right">
-                            <p className="font-heading text-base font-black text-foreground">
+                            <p className="text-sm font-medium tabular-nums text-foreground">
                               {formatPrice(po.amount)}
                             </p>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                              po.status === 'approved' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
+                            <p className={`text-xs ${
+                              po.status === 'completed' ? 'text-emerald-600' : po.status === 'rejected' ? 'text-rose-600' : 'text-amber-600'
                             }`}>
-                              {po.status === 'approved' ? '✓ Virement Exécuté' : po.status === 'rejected' ? '✕ Rejeté' : '⏳ En attente validation'}
-                            </span>
+                              {po.status === 'completed' ? 'Virement exécuté' : po.status === 'rejected' ? 'Refusé' : 'En attente'}
+                            </p>
                           </div>
 
                           {po.status === 'pending' && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <button
                                 onClick={() => handleApprovePayout(po.id)}
-                                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                                className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                               >
-                                Approuver
+                                Marquer payé
                               </button>
                               <button
                                 onClick={() => handleRejectPayout(po.id)}
-                                className="rounded-xl border border-rose-500/30 hover:bg-rose-50 text-rose-600 px-3 py-1.5 text-xs font-bold transition-all"
+                                className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
                               >
                                 Refuser
                               </button>
                             </div>
                           )}
                         </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -3938,24 +3329,12 @@ export function AdminDashboardPage() {
           {/* SECTION: GESTION DES UTILISATEURS & HABILITATIONS (SUPER-ADMIN ONLY) */}
           {/* ========================================================================= */}
           {currentSection === 'users' && isSuperAdmin && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
-                    <FontAwesomeIcon icon={faUsers} className="h-3 w-3" />
-                    Répertoire & Gouvernance
-                  </div>
-                  <h2 className="font-heading text-2xl font-black text-foreground">
-                    Gestion des Utilisateurs & Équipe
-                  </h2>
-                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
-                    Pilotez tous les comptes de la plateforme (voyageurs, partenaires hôtes, assistants opérationnels et administrateurs). 
-                    Créez des Assistants Admin avec droits opérationnels délégués ou ajustez les accès.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div className="space-y-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-foreground/50">
+                  Voyageurs, partenaires, assistants et administrateurs de la plateforme.
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
                     onClick={async () => {
@@ -3967,10 +3346,10 @@ export function AdminDashboardPage() {
                         showToast('Erreur lors de la synchronisation.');
                       }
                     }}
-                    className="flex items-center gap-2 rounded-2xl border border-foreground/15 bg-card/80 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition-all active:scale-95 shadow-xs"
+                    className="inline-flex items-center gap-2 rounded-lg border border-foreground/10 px-3 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
                     title="Synchroniser immédiatement avec la base de données Supabase"
                   >
-                    <FontAwesomeIcon icon={faRotateRight} className="h-3.5 w-3.5" />
+                    <FontAwesomeIcon icon={faRotateRight} className="h-3 w-3" />
                     <span>Actualiser</span>
                   </button>
 
@@ -3982,138 +3361,108 @@ export function AdminDashboardPage() {
                       setNewAssistantPhone('');
                       setShowAddAssistantModal(true);
                     }}
-                    className="flex items-center gap-2 rounded-2xl bg-accent px-4 py-2.5 text-xs font-black text-black shadow-md hover:bg-white hover:text-black transition-all active:scale-95"
+                    className="inline-flex items-center gap-2 rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                   >
-                    <FontAwesomeIcon icon={faUserShield} className="h-3.5 w-3.5" />
-                    <span>+ Ajouter un Assistant Admin</span>
+                    <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                    <span>Ajouter un assistant</span>
                   </button>
                 </div>
               </div>
 
-              {/* Stat Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/60 block mb-1">
-                    Total Utilisateurs
-                  </span>
-                  <p className="font-heading text-2xl font-black text-foreground">{userMetrics.total}</p>
-                  <p className="text-[10px] text-foreground/50 mt-0.5">Comptes enregistrés</p>
-                </div>
-
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
-                    Clients Voyageurs
-                  </span>
-                  <p className="font-heading text-2xl font-black text-emerald-700">{userMetrics.clients}</p>
-                  <p className="text-[10px] text-emerald-600/70 mt-0.5">Comptes actifs</p>
-                </div>
-
-                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent-foreground block mb-1">
-                    Hôtes & Partenaires
-                  </span>
-                  <p className="font-heading text-2xl font-black text-accent-foreground">{userMetrics.owners}</p>
-                  <p className="text-[10px] text-accent-foreground/70 mt-0.5">Gestionnaires d'annonces</p>
-                </div>
-
-                <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 block mb-1">
-                    Assistants Admin
-                  </span>
-                  <p className="font-heading text-2xl font-black text-indigo-700 dark:text-indigo-300">{userMetrics.subadmins}</p>
-                  <p className="text-[10px] text-indigo-600/70 dark:text-indigo-400/70 mt-0.5">Opérations & Modération</p>
-                </div>
-
-                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 block mb-1">
-                    Comptes Suspendus
-                  </span>
-                  <p className="font-heading text-2xl font-black text-rose-600">{userMetrics.suspended}</p>
-                  <p className="text-[10px] text-rose-500/70 mt-0.5">Accès désactivé</p>
-                </div>
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-5">
+                {[
+                  { label: 'Utilisateurs', value: userMetrics.total, hint: 'Comptes enregistrés' },
+                  { label: 'Voyageurs', value: userMetrics.clients, hint: 'Comptes clients' },
+                  { label: 'Hôtes', value: userMetrics.owners, hint: "Gestionnaires d'annonces" },
+                  { label: 'Assistants', value: userMetrics.subadmins, hint: 'Opérations & modération' },
+                  { label: 'Suspendus', value: userMetrics.suspended, hint: 'Accès désactivé' }
+                ].map((kpi, i) => (
+                  <div key={kpi.label} className={`bg-card p-5 ${i === 4 ? 'col-span-2 lg:col-span-1' : ''}`}>
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
+                  </div>
+                ))}
               </div>
 
-              {/* Filters & Search Toolbar */}
-              <div className="rounded-2xl border border-foreground/10 bg-card p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
-                <div className="relative w-full md:w-80">
-                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/40 h-3.5 w-3.5" />
-                  <input
-                    type="text"
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    placeholder="Rechercher par nom, email, société..."
-                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-background border border-foreground/15 text-xs text-foreground placeholder:text-foreground/40 focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Recherche et filtres */}
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="relative w-full lg:w-72">
+                    <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Rechercher par nom, email, société..."
+                      className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
-                  {/* Role filter buttons that wrap neatly on mobile so no category is cut off */}
-                  <div className="w-full sm:w-auto">
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-1.5 rounded-2xl bg-muted p-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="flex flex-wrap items-center gap-1">
                       {[
                         { key: 'all', label: 'Tous' },
                         { key: 'client', label: 'Clients' },
                         { key: 'owner', label: 'Propriétaires' },
                         { key: 'subadmin', label: 'Assistants' },
-                        { key: 'admin', label: 'Super-Admin' }
+                        { key: 'admin', label: 'Super-admin' }
                       ].map((tab) => (
                         <button
                           key={tab.key}
                           onClick={() => setUserRoleFilter(tab.key)}
-                          className={`rounded-xl px-2.5 sm:px-3 py-1.5 text-[11px] font-semibold transition-all shrink-0 ${
-                            userRoleFilter === tab.key ? 'bg-card text-foreground shadow-sm font-bold' : 'text-foreground/60 hover:text-foreground'
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            userRoleFilter === tab.key ? 'bg-muted text-foreground' : 'text-foreground/50 hover:text-foreground'
                           }`}
                         >
                           {tab.label}
                         </button>
                       ))}
                     </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={userStatusFilter}
+                        onChange={(e) => setUserStatusFilter(e.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none sm:flex-none"
+                      >
+                        <option value="all">Tous les accès</option>
+                        <option value="active">Actifs uniquement</option>
+                        <option value="suspended">Suspendus uniquement</option>
+                      </select>
+
+                      <select
+                        value={userKycFilter}
+                        onChange={(e) => setUserKycFilter(e.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none sm:flex-none"
+                      >
+                        <option value="all">Tous statuts KYC</option>
+                        <option value="verified">Hôtes certifiés</option>
+                        <option value="pending">Hôtes en attente</option>
+                        <option value="rejected">Hôtes rejetés</option>
+                      </select>
+                    </div>
                   </div>
-
-                  {/* Status filter */}
-                  <select
-                    value={userStatusFilter}
-                    onChange={(e) => setUserStatusFilter(e.target.value)}
-                    className="w-full sm:w-auto rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
-                  >
-                    <option value="all">Tous les accès</option>
-                    <option value="active">✓ Actifs uniquement</option>
-                    <option value="suspended">✕ Suspendus uniquement</option>
-                  </select>
-
-                  {/* KYC filter */}
-                  <select
-                    value={userKycFilter}
-                    onChange={(e) => setUserKycFilter(e.target.value)}
-                    className="w-full sm:w-auto rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none shrink-0"
-                  >
-                    <option value="all">Toutes certifications KYC</option>
-                    <option value="verified">✓ Hôtes Certifiés (Actifs)</option>
-                    <option value="pending">⏳ Hôtes en Attente (Pending)</option>
-                    <option value="rejected">✕ Hôtes Rejetés</option>
-                  </select>
                 </div>
-              </div>
 
-              {/* Users Table */}
-              <div className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/60 text-foreground/70 border-b border-foreground/10 uppercase tracking-wider text-[10px]">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-foreground/10 text-xs text-foreground/50">
                       <tr>
-                        <th className="p-4">Utilisateur</th>
-                        <th className="p-4">Rôle</th>
-                        <th className="p-4">Société / Pôle</th>
-                        <th className="p-4">Téléphone</th>
-                        <th className="p-4">Statut Compte</th>
-                        <th className="p-4">Conformité KYC</th>
-                        <th className="p-4 text-right">Actions</th>
+                        <th className="px-5 py-3 font-medium">Utilisateur</th>
+                        <th className="px-5 py-3 font-medium">Rôle</th>
+                        <th className="px-5 py-3 font-medium">Société</th>
+                        <th className="px-5 py-3 font-medium">Téléphone</th>
+                        <th className="px-5 py-3 font-medium">Compte</th>
+                        <th className="px-5 py-3 font-medium">KYC</th>
+                        <th className="px-5 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-foreground/5">
+                    <tbody className="divide-y divide-foreground/[0.07]">
                       {filteredUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-xs text-foreground/50">
+                          <td colSpan={7} className="px-5 py-10 text-center text-sm text-foreground/50">
                             Aucun utilisateur trouvé avec ces critères de recherche.
                           </td>
                         </tr>
@@ -4124,184 +3473,125 @@ export function AdminDashboardPage() {
                           const isActive = u.is_active !== false;
 
                           return (
-                            <tr key={u.id} className="hover:bg-muted/20 transition-colors">
-                              <td className="p-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-8 w-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                                    {u.name?.[0] || u.email?.[0] || 'U'}
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-foreground flex items-center gap-1.5">
-                                      <span>{u.name}</span>
-                                      {isRowSuperAdmin && (
-                                        <span className="text-[9px] rounded-full bg-accent/25 text-accent border border-accent/40 px-1.5 py-0.2 font-black uppercase">
-                                          Super-Admin
-                                        </span>
-                                      )}
-                                      {(isRowSubAdmin || (!isRowSuperAdmin && u.role === 'admin')) && (
-                                        <span className="text-[9px] rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.2 font-bold uppercase">
-                                          Assistant
-                                        </span>
-                                      )}
-                                    </p>
-                                    <p className="text-[11px] text-foreground/50">{u.email}</p>
-                                  </div>
-                                </div>
+                            <tr key={u.id} className="transition-colors hover:bg-muted/40">
+                              <td className="px-5 py-3">
+                                <p className="font-medium text-foreground">{u.name}</p>
+                                <p className="text-xs text-foreground/45">{u.email}</p>
                               </td>
 
-                              <td className="p-4">
-                                {isRowSuperAdmin ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-accent/25 text-accent-foreground border border-accent/50 px-2.5 py-0.5 text-[10px] font-black uppercase">
-                                    <FontAwesomeIcon icon={faCrown} className="h-2.5 w-2.5 text-accent" />
-                                    Super-Admin
-                                  </span>
-                                ) : isRowSubAdmin || u.role === 'admin' || u.role === 'subadmin' ? (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[10px] font-black uppercase">
-                                    <FontAwesomeIcon icon={faUserShield} className="h-2.5 w-2.5 text-indigo-400" />
-                                    Assistant Admin (Sub-Admin)
-                                  </span>
-                                ) : u.role === 'owner' || u.role === 'partner' ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 text-[10px] font-bold uppercase">
-                                    <FontAwesomeIcon icon={faBuilding} className="h-2.5 w-2.5" />
-                                    Propriétaire / Hôte
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-muted text-foreground/70 px-2.5 py-0.5 text-[10px] font-semibold">
-                                    Voyageur Client
-                                  </span>
-                                )}
+                              <td className="whitespace-nowrap px-5 py-3 text-foreground/70">
+                                {isRowSuperAdmin
+                                  ? 'Super-admin'
+                                  : isRowSubAdmin || u.role === 'admin' || u.role === 'subadmin'
+                                  ? 'Assistant admin'
+                                  : u.role === 'owner' || u.role === 'partner'
+                                  ? 'Propriétaire'
+                                  : 'Voyageur'}
                               </td>
 
-                              <td className="p-4 text-foreground/80">
-                                {u.company || <span className="text-foreground/40 italic">Particulier</span>}
+                              <td className="px-5 py-3 text-foreground/70">
+                                {u.company || <span className="text-foreground/40">Particulier</span>}
                               </td>
 
-                              <td className="p-4 text-foreground/80">
+                              <td className="whitespace-nowrap px-5 py-3 text-foreground/60">
                                 {u.phone}
                               </td>
 
-                              <td className="p-4">
+                              <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
                                 {isActive ? (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                    Actif
-                                  </span>
+                                  <span className="text-emerald-600">Actif</span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                                    Suspendu / Désactivé
-                                  </span>
+                                  <span className="text-rose-600">Suspendu</span>
                                 )}
                               </td>
 
-                              <td className="p-4">
+                              <td className="px-5 py-3">
                                 {u.role === 'owner' || u.role === 'partner' ? (
                                   u.kyc_status === 'verified' || u.verified ? (
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                        ✓ Certifié
-                                      </span>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="mr-1 text-xs font-medium text-emerald-600">Certifié</span>
                                       <button
                                         type="button"
                                         onClick={() => handleResetPartnerKyc(u.id, u.email)}
-                                        className="rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/25 text-amber-700 text-[10px] font-bold px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        className="rounded-md px-2 py-0.5 text-xs text-foreground/55 transition-colors hover:bg-muted hover:text-foreground"
                                         title="Suspendre ce partenaire et le remettre en attente (retire ses annonces de la mise en ligne)"
                                       >
-                                        <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
-                                        <span>Suspendre</span>
+                                        Suspendre
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => handleOpenRejectKycModal(u)}
-                                        className="rounded-md border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 transition-colors flex items-center gap-1"
+                                        className="rounded-md px-2 py-0.5 text-xs text-rose-600 transition-colors hover:bg-rose-500/10"
                                         title="Refuser ou révoquer le dossier KYC de ce partenaire"
                                       >
-                                        <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
-                                        <span>Refuser</span>
+                                        Refuser
                                       </button>
                                     </div>
                                   ) : u.kyc_status === 'rejected' ? (
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 text-rose-700 px-2.5 py-0.5 text-[10px] font-bold">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                                        ✕ Rejeté
-                                      </span>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="mr-1 text-xs font-medium text-rose-600">Rejeté</span>
                                       <button
                                         type="button"
                                         onClick={() => handleVerifyPartnerKyc(u.id, u.email)}
-                                        className="rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        className="rounded-md px-2 py-0.5 text-xs text-foreground/55 transition-colors hover:bg-muted hover:text-foreground"
                                         title="Réhabiliter et certifier ce propriétaire (publie ses annonces)"
                                       >
-                                        <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                                        <span>Activer</span>
+                                        Activer
                                       </button>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 px-2.5 py-0.5 text-[10px] font-bold animate-pulse">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                        ⏳ En attente
-                                      </span>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="mr-1 text-xs font-medium text-amber-600">En attente</span>
                                       <button
                                         type="button"
                                         onClick={() => handleVerifyPartnerKyc(u.id, u.email)}
-                                        className="rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 shadow-xs transition-colors flex items-center gap-1"
+                                        className="rounded-md px-2 py-0.5 text-xs text-foreground/55 transition-colors hover:bg-muted hover:text-foreground"
                                         title="Activer et certifier immédiatement ce propriétaire (publie ses annonces)"
                                       >
-                                        <FontAwesomeIcon icon={faCheck} className="h-2.5 w-2.5" />
-                                        <span>Valider</span>
+                                        Valider
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => handleOpenRejectKycModal(u)}
-                                        className="rounded-md border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 transition-colors flex items-center gap-1"
+                                        className="rounded-md px-2 py-0.5 text-xs text-rose-600 transition-colors hover:bg-rose-500/10"
                                         title="Refuser le dossier KYC"
                                       >
-                                        <FontAwesomeIcon icon={faBan} className="h-2.5 w-2.5" />
-                                        <span>Refuser</span>
+                                        Refuser
                                       </button>
                                     </div>
                                   )
                                 ) : (
-                                  <span className="text-foreground/40 text-[11px]">—</span>
+                                  <span className="text-xs text-foreground/35">—</span>
                                 )}
                               </td>
 
-                              <td className="p-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {/* Toggle Active / Suspended (Protected for Super-Admin) */}
+                              <td className="px-5 py-3 text-right">
+                                <div className="flex items-center justify-end gap-0.5">
                                   {!isRowSuperAdmin && (
                                     <button
                                       type="button"
                                       onClick={() => handleToggleUserActive(u)}
-                                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all shadow-sm ${
-                                        isActive
-                                          ? 'border border-amber-500/30 text-amber-700 hover:bg-amber-500/10'
-                                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                      }`}
+                                      className="mr-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
                                       title={isActive ? "Suspendre l'accès de cet utilisateur" : "Réactiver l'accès"}
                                     >
                                       {isActive ? 'Désactiver' : 'Réactiver'}
                                     </button>
                                   )}
 
-                                  {/* Edit User Button */}
                                   <button
                                     type="button"
                                     onClick={() => handleOpenEditUser(u)}
-                                    className="p-1.5 rounded-lg border border-foreground/15 text-foreground/70 hover:text-primary hover:bg-primary/5 transition-colors"
+                                    className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
                                     title="Modifier les informations ou changer le rôle"
                                   >
                                     <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
                                   </button>
 
-                                  {/* Delete User Button (Protected for Super-Admin) */}
                                   {!isRowSuperAdmin && (
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteUserRecord(u)}
-                                      className="p-1.5 rounded-lg border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 transition-colors"
+                                      className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                                       title="Supprimer définitivement ce compte"
                                     >
                                       <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
@@ -4316,7 +3606,7 @@ export function AdminDashboardPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
@@ -4324,102 +3614,66 @@ export function AdminDashboardPage() {
           {/* SECTION 5: TRÉSORERIE & COMMISSIONS */}
           {/* ========================================================================= */}
           {currentSection === 'finances' && (
-            <div className="space-y-8 animate-section-stagger">
-              {/* Financial Breakdown Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <div className="flex items-center gap-2 text-primary mb-2">
-                    <FontAwesomeIcon icon={faMoneyBillWave} className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Total Encaissé</span>
+            <div className="space-y-6">
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  { label: 'Total encaissé', value: formatPrice(platformMetrics.gmv), hint: 'Réservations payées' },
+                  { label: 'Commissions (10 %)', value: formatPrice(platformMetrics.commissions), hint: "Chiffre d'affaires net" },
+                  { label: 'Reversé aux hôtes', value: formatPrice(platformMetrics.disbursed), hint: 'Virements exécutés' },
+                  { label: 'Reste à reverser', value: formatPrice(platformMetrics.remainingToHosts), hint: 'Dû aux propriétaires' }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  <p className="font-heading text-3xl font-black text-foreground">
-                    {formatPrice(platformMetrics.gmv)}
-                  </p>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    Volume Brut de réservations perçu sur la plateforme
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-accent/40 bg-accent/15 p-6 shadow-sm">
-                  <div className="flex items-center gap-2 text-accent-foreground mb-2">
-                    <FontAwesomeIcon icon={faPercent} className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Commissions Bénin Beyond (10%)</span>
-                  </div>
-                  <p className="font-heading text-3xl font-black text-foreground">
-                    {formatPrice(platformMetrics.commissions)}
-                  </p>
-                  <p className="text-xs text-foreground/70 mt-1">
-                    Chiffre d'Affaires Net de la plateforme
-                  </p>
-                </div>
-
-                <div className="rounded-3xl border border-foreground/10 bg-card p-6 shadow-sm">
-                  <div className="flex items-center gap-2 text-emerald-700 mb-2">
-                    <FontAwesomeIcon icon={faHandHoldingDollar} className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Reversements Hôtes (90%)</span>
-                  </div>
-                  <p className="font-heading text-3xl font-black text-foreground">
-                    {formatPrice(platformMetrics.disbursed)}
-                  </p>
-                  <p className="text-xs text-foreground/60 mt-1">
-                    Fonds transférés ou à transférer aux propriétaires
-                  </p>
-                </div>
+                ))}
               </div>
 
-              {/* Payment Methods Breakdown */}
-              <div className="rounded-3xl border border-foreground/10 bg-card p-6 md:p-8 shadow-sm">
-                <h3 className="font-heading text-base font-bold text-foreground mb-4">
-                  Répartition des Canaux de Paiement
-                </h3>
+              {/* Canaux de paiement */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Canaux de paiement</h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">Réservations payées uniquement</p>
+                  </div>
+                  <button
+                    onClick={handleExportStatement}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                  >
+                    <FontAwesomeIcon icon={faDownload} className="h-3 w-3" />
+                    <span>Exporter (CSV)</span>
+                  </button>
+                </div>
 
                 {!paymentBreakdown ? (
-                  <div className="py-10 text-center text-xs text-foreground/50 border border-dashed border-foreground/15 rounded-2xl bg-muted/20">
-                    <FontAwesomeIcon icon={faWallet} className="h-6 w-6 text-foreground/30 mb-2" />
-                    <p className="font-semibold text-foreground/75">Aucun flux financier de réservation enregistré pour l'instant</p>
-                    <p className="mt-1 max-w-md mx-auto">
-                      La répartition par canal (MTN MoMo, Moov Money, Celtiis Cash, Carte Visa) se calculera automatiquement à mesure des réservations effectives des voyageurs.
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucun flux de réservation enregistré pour l'instant.</p>
+                    <p className="mx-auto mt-1 max-w-md text-xs text-foreground/40">
+                      La répartition par canal (MTN MoMo, Moov Money, Celtiis Cash, carte bancaire) se calculera à mesure des réservations.
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                      <span className="text-xs font-bold text-amber-500">MTN Mobile Money</span>
-                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.mtn}%</p>
-                      <p className="text-[11px] text-foreground/50">Canal N°1 au Bénin</p>
-                    </div>
-                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                      <span className="text-xs font-bold text-blue-600">Carte Visa / Mastercard</span>
-                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.card}%</p>
-                      <p className="text-[11px] text-foreground/50">Cartes Bancaires Internationales</p>
-                    </div>
-                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                      <span className="text-xs font-bold text-emerald-600">Celtiis Cash</span>
-                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.celtiis}%</p>
-                      <p className="text-[11px] text-foreground/50">Réseau national</p>
-                    </div>
-                    <div className="rounded-2xl border border-foreground/10 bg-background/50 p-4">
-                      <span className="text-xs font-bold text-blue-400">Moov Money</span>
-                      <p className="font-heading text-xl font-bold text-foreground mt-1">{paymentBreakdown.moov}%</p>
-                      <p className="text-[11px] text-foreground/50">Opérateur Flooz</p>
-                    </div>
-                  </div>
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {[
+                      { label: 'MTN Mobile Money', value: paymentBreakdown.mtn },
+                      { label: 'Carte Visa / Mastercard', value: paymentBreakdown.card },
+                      { label: 'Celtiis Cash', value: paymentBreakdown.celtiis },
+                      { label: 'Moov Money', value: paymentBreakdown.moov },
+                      { label: 'Nyole (canal non précisé)', value: paymentBreakdown.other }
+                    ].map((row) => (
+                      <li key={row.label} className="flex items-center gap-4 px-5 py-3.5">
+                        <span className="w-28 shrink-0 text-sm text-foreground/75 sm:w-52">{row.label}</span>
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-foreground/60" style={{ width: `${Math.min(Number(row.value) || 0, 100)}%` }} />
+                        </div>
+                        <span className="w-12 shrink-0 text-right text-sm font-medium tabular-nums text-foreground">{row.value}%</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-
-                <div className="mt-8 pt-6 border-t border-foreground/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-xs text-foreground/60">
-                    <FontAwesomeIcon icon={faFileContract} className="text-accent h-3.5 w-3.5 shrink-0" />
-                    <span className="font-medium">Synthèse certifiée OHADA</span>
-                  </div>
-                  <button
-                    onClick={() => showToast('Relevé comptable mensuel (PDF/CSV) généré avec succès.')}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-primary/90 transition-all active:scale-95 shrink-0"
-                  >
-                    <FontAwesomeIcon icon={faDownload} className="h-3.5 w-3.5" />
-                    <span>Télécharger le relevé</span>
-                  </button>
-                </div>
-              </div>
+              </section>
             </div>
           )}
 
@@ -4427,142 +3681,87 @@ export function AdminDashboardPage() {
           {/* SECTION 6: FORMULES & PACKS SIGNATURE (EXCLUSIVITÉ SUPER-ADMIN) */}
           {/* ========================================================================= */}
           {currentSection === 'packs' && (
-            <div className="space-y-6 animate-section-stagger">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-accent/20 px-2.5 py-0.5 text-[10px] font-bold text-accent uppercase">
-                      Exclusivité Direction
-                    </span>
-                    <span className="text-xs text-foreground/50">
-                      {packs.length} pack{packs.length > 1 ? 's' : ''} en ligne
-                    </span>
-                  </div>
-                  <h3 className="font-heading text-lg font-bold text-foreground mt-1">
-                    Gestion des Formules & Packs Signature
-                  </h3>
-                  <p className="text-xs text-foreground/60 mt-0.5">
-                    Seul le Super-Administrateur peut composer et publier des offres tout-en-un réunissant villa, véhicule VIP et chauffeur
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setShowNewPackModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all self-start sm:self-auto"
-                >
-                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                  <span>+ Créer un nouveau Pack</span>
-                </button>
-              </div>
-
-              {/* Empty state when 0 packs */}
-              {packs.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-foreground/20 bg-card/60 p-10 text-center max-w-xl mx-auto space-y-4">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/20 text-accent font-bold">
-                    <FontAwesomeIcon icon={faLayerGroup} className="h-6 w-6" />
-                  </div>
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h4 className="font-heading text-base font-bold text-foreground">
-                      Aucun pack combiné pour le moment
-                    </h4>
-                    <p className="text-xs text-foreground/60 mt-1 leading-relaxed">
-                      Le catalogue démarre à zéro comme neuf. Cliquez ci-dessous pour concevoir votre première offre signature combinant résidence privée et mobilité.
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Packs signature <span className="font-normal tabular-nums text-foreground/40">{packs.length}</span>
+                    </h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      Offres tout-en-un réunissant villa, véhicule et chauffeur. Réservé au super-administrateur.
                     </p>
                   </div>
                   <button
                     onClick={() => setShowNewPackModal(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                    className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
                   >
-                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                    <span>Créer le Premier Pack Signature</span>
+                    <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                    <span>Nouveau pack</span>
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {packs.map((pk) => (
-                    <div
-                      key={pk.id}
-                      className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm flex flex-col justify-between hover:border-foreground/25 transition-all"
-                    >
-                      <div>
-                        <div className="relative h-44 w-full overflow-hidden bg-muted">
+
+                {packs.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucun pack pour le moment.</p>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/40">
+                      Composez une première offre combinant résidence privée et mobilité.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {packs.map((pk) => (
+                      <li key={pk.id} className="flex items-center gap-3 px-5 py-3">
+                        <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
                           <img
                             src={pk.included?.[0]?.image || pk.gallery?.[0] || 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=600&q=80'}
-                            alt={pk.title}
+                            alt=""
                             className="h-full w-full object-cover"
                           />
-                          <div className="absolute top-3 left-3 rounded-full bg-black/70 backdrop-blur-md px-3 py-1 text-[10px] font-bold text-accent uppercase">
-                            {pk.location}
-                          </div>
-                          {pk.badge && (
-                            <div className="absolute top-3 right-3 rounded-full bg-primary/90 px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
-                              {pk.badge}
-                            </div>
-                          )}
                         </div>
-
-                        <div className="p-5">
-                          <h4 className="font-heading text-base font-bold text-foreground">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
                             {pk.title}
-                          </h4>
-                          <p className="text-xs text-foreground/70 mt-1 line-clamp-2">
-                            {pk.tagline}
+                            {pk.badge && <span className="font-normal text-foreground/40"> · {pk.badge}</span>}
                           </p>
-
-                          <div className="mt-4 pt-4 border-t border-foreground/10 space-y-2 text-xs text-foreground/80">
-                            {pk.included?.map((it, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <FontAwesomeIcon icon={faCheck} className="h-3 w-3 text-accent shrink-0" />
-                                <span className="line-clamp-1"><strong>{it.type} :</strong> {it.title}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-5 pt-0 border-t border-foreground/10 mt-4 flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] text-foreground/50 uppercase">Tarif combiné</span>
-                          <p className="font-heading text-base font-black text-primary">
-                            {formatPrice(pk.price)} <span className="text-xs font-normal text-foreground/60">/ {pk.priceUnit || 'jour'}</span>
+                          <p className="truncate text-xs text-foreground/45">
+                            {[pk.location, ...(pk.included || []).map((it) => it.title)].filter(Boolean).join(' · ')}
                           </p>
                         </div>
-
-                        <div className="flex items-center gap-2">
+                        <p className="hidden shrink-0 text-right text-sm font-medium tabular-nums text-foreground sm:block">
+                          {formatPrice(pk.price)} <span className="text-xs font-normal text-foreground/45">/ {pk.priceUnit || 'jour'}</span>
+                        </p>
+                        <div className="flex shrink-0 items-center gap-0.5">
                           <Link
                             to={`/pack/${pk.id}`}
-                            className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                            title="Voir le pack"
                           >
-                            Voir
+                            <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
                           </Link>
                           <button
                             onClick={() => handleDeletePack(pk.id, pk.title)}
-                            className="rounded-xl border border-destructive/20 bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                             title="Supprimer ce pack"
                           >
                             <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-              {/* Modal de Création de Pack Exclusif Admin */}
+              {/* Modal de création de pack */}
               {showNewPackModal && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in overflow-hidden">
-                  <div className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-[28px] sm:rounded-3xl bg-card border border-foreground/15 shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
-                    <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-foreground/10 shrink-0 bg-card z-10">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Formule Tout-en-un</span>
-                        <h3 className="font-heading text-base sm:text-lg font-bold text-foreground">
-                          Créer un Pack Signature Bénin Beyond
-                        </h3>
-                      </div>
+                <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/50 p-0 sm:items-center sm:p-4">
+                  <div className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-foreground/10 bg-card sm:max-h-[88vh] sm:rounded-2xl">
+                    <div className="z-10 flex shrink-0 items-center justify-between border-b border-foreground/10 bg-card px-5 py-4">
+                      <h3 className="text-sm font-semibold text-foreground">Nouveau pack signature</h3>
                       <button
                         onClick={() => setShowNewPackModal(false)}
-                        className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
                         title="Fermer"
                         aria-label="Fermer"
                       >
@@ -4570,13 +3769,12 @@ export function AdminDashboardPage() {
                       </button>
                     </div>
 
-                    <form onSubmit={handleCreatePack} className="flex flex-col flex-1 overflow-hidden min-h-0">
-                      <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 space-y-4">
-                      {/* Titre & Accroche */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <form onSubmit={handleCreatePack} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                            Titre du Pack *
+                          <label className="mb-1 block text-xs text-foreground/60">
+                            Titre du pack *
                           </label>
                           <input
                             type="text"
@@ -4584,11 +3782,11 @@ export function AdminDashboardPage() {
                             placeholder="ex: Pack Riviera & Évasion 4x4"
                             value={packTitle}
                             onChange={(e) => setPackTitle(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Accroche commerciale
                           </label>
                           <input
@@ -4596,15 +3794,14 @@ export function AdminDashboardPage() {
                             placeholder="ex: Villa d'exception + SUV 7 places tout terrain"
                             value={packTagline}
                             onChange={(e) => setPackTagline(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                       </div>
 
-                      {/* Tarification & Localisation */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Tarif remisé (FCFA) *
                           </label>
                           <input
@@ -4613,11 +3810,11 @@ export function AdminDashboardPage() {
                             placeholder="115000"
                             value={packPrice}
                             onChange={(e) => setPackPrice(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Tarif normal barré (FCFA)
                           </label>
                           <input
@@ -4625,17 +3822,17 @@ export function AdminDashboardPage() {
                             placeholder="130000"
                             value={packRegularPrice}
                             onChange={(e) => setPackRegularPrice(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Unité de tarification
                           </label>
                           <select
                             value={packPriceUnit}
                             onChange={(e) => setPackPriceUnit(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           >
                             <option value="jour">Par jour</option>
                             <option value="forfait">Forfait total</option>
@@ -4643,9 +3840,9 @@ export function AdminDashboardPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Localisation
                           </label>
                           <input
@@ -4653,11 +3850,11 @@ export function AdminDashboardPage() {
                             placeholder="ex: Cotonou & Littoral"
                             value={packLocation}
                             onChange={(e) => setPackLocation(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                          <label className="mb-1 block text-xs text-foreground/60">
                             Badge
                           </label>
                           <input
@@ -4665,72 +3862,65 @@ export function AdminDashboardPage() {
                             placeholder="ex: Offre Privilège, Coup de Cœur..."
                             value={packBadge}
                             onChange={(e) => setPackBadge(e.target.value)}
-                            className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:outline-none"
+                            className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                           />
                         </div>
                       </div>
 
-                      {/* Hébergement Inclus */}
-                      <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-3">
-                        <span className="text-xs font-bold uppercase tracking-wider text-foreground block">
-                          1. Hébergement Inclus dans le Pack
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-3 border-t border-foreground/10 pt-4">
+                        <p className="text-sm font-semibold text-foreground">Hébergement inclus</p>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div>
-                            <label className="text-[11px] text-foreground/70 block mb-1">Titre de la villa ou suite</label>
+                            <label className="mb-1 block text-xs text-foreground/60">Titre de la villa ou suite</label>
                             <input
                               type="text"
                               placeholder="ex: Villa Cotonou Riviera (4 Chambres)"
                               value={packStayTitle}
                               onChange={(e) => setPackStayTitle(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] text-foreground/70 block mb-1">URL photo de l'hébergement</label>
+                            <label className="mb-1 block text-xs text-foreground/60">URL photo de l'hébergement</label>
                             <input
                               type="text"
                               placeholder="https://images.unsplash.com/photo-..."
                               value={packStayImage}
                               onChange={(e) => setPackStayImage(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                         </div>
                       </div>
 
-                      {/* Véhicule Inclus */}
-                      <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-3">
-                        <span className="text-xs font-bold uppercase tracking-wider text-foreground block">
-                          2. Véhicule Inclus dans le Pack
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-3 border-t border-foreground/10 pt-4">
+                        <p className="text-sm font-semibold text-foreground">Véhicule inclus</p>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div>
-                            <label className="text-[11px] text-foreground/70 block mb-1">Modèle du véhicule</label>
+                            <label className="mb-1 block text-xs text-foreground/60">Modèle du véhicule</label>
                             <input
                               type="text"
                               placeholder="ex: SUV Toyota Fortuner 7 Places VIP"
                               value={packDriveTitle}
                               onChange={(e) => setPackDriveTitle(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] text-foreground/70 block mb-1">URL photo du véhicule</label>
+                            <label className="mb-1 block text-xs text-foreground/60">URL photo du véhicule</label>
                             <input
                               type="text"
                               placeholder="https://images.unsplash.com/photo-..."
                               value={packDriveImage}
                               onChange={(e) => setPackDriveImage(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                         </div>
                       </div>
 
-                      {/* Avantages & Description */}
-                      <div>
-                        <label className="text-xs font-semibold text-foreground/80 block mb-1">
+                      <div className="border-t border-foreground/10 pt-4">
+                        <label className="mb-1 block text-xs text-foreground/60">
                           Avantages clés (un par ligne)
                         </label>
                         <textarea
@@ -4738,38 +3928,38 @@ export function AdminDashboardPage() {
                           value={packAdvantages}
                           onChange={(e) => setPackAdvantages(e.target.value)}
                           placeholder="Prise en charge aéroport VIP&#10;Plein de carburant offert&#10;Conciergerie 24/7"
-                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background p-3 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         />
                       </div>
 
                       <div>
-                        <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                          Description détaillée du pack
+                        <label className="mb-1 block text-xs text-foreground/60">
+                          Description détaillée
                         </label>
                         <textarea
                           rows={3}
                           value={packDescription}
                           onChange={(e) => setPackDescription(e.target.value)}
                           placeholder="Décrivez l'expérience unique proposée aux voyageurs..."
-                          className="w-full rounded-xl border border-foreground/15 bg-background p-3 text-xs text-foreground focus:outline-none"
+                          className="w-full rounded-lg border border-foreground/10 bg-background p-3 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         />
                       </div>
 
                       </div>
 
-                      <div className="shrink-0 px-5 py-3.5 sm:px-6 sm:py-4 border-t border-foreground/10 flex items-center justify-end gap-3 bg-card/95 backdrop-blur-sm z-10 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+                      <div className="z-10 flex shrink-0 items-center justify-end gap-2 border-t border-foreground/10 bg-card px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
                         <button
                           type="button"
                           onClick={() => setShowNewPackModal(false)}
-                          className="rounded-xl border border-foreground/15 px-4 py-2 text-xs font-semibold text-foreground/70 hover:bg-muted transition-colors"
+                          className="rounded-lg px-3.5 py-2 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
                         >
                           Annuler
                         </button>
                         <button
                           type="submit"
-                          className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-white shadow-md hover:bg-primary/90 transition-all"
+                          className="rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
                         >
-                          Publier le Pack en Ligne
+                          Publier le pack
                         </button>
                       </div>
                     </form>
@@ -4783,142 +3973,82 @@ export function AdminDashboardPage() {
           {/* SECTION: ÉVÉNEMENTS & AGENDA CULTUREL DU BÉNIN */}
           {/* ========================================================================= */}
           {currentSection === 'events' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
-                    <FontAwesomeIcon icon={faCalendarCheck} className="h-3 w-3" />
-                    Bénin Live & Agenda
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Événements en ligne <span className="font-normal tabular-nums text-foreground/40">{events.length}</span>
+                    </h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      {events.length > 3
+                        ? "Carrousel automatique actif sur la page d'accueil."
+                        : "Grille statique sur la page d'accueil ; le carrousel s'active au-delà de 3 événements."}
+                    </p>
                   </div>
-                  <h2 className="font-heading text-2xl font-black text-foreground">
-                    Gestion des Événements Culturels
-                  </h2>
-                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
-                    Ajoutez, modifiez ou retirez les célébrations et festivals affichés sur la page d'accueil de Bénin Beyond. 
-                    Si le catalogue compte <strong>plus de 3 événements</strong>, un carrousel rotatif automatique avec transition fluide s'active pour les visiteurs.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenCreateEvent}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 shrink-0"
-                >
-                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                  Ajouter un Événement
-                </button>
-              </div>
-
-              {/* Status info banner */}
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-center justify-between gap-4 text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
-                  <p className="text-foreground/80">
-                    <strong className="text-foreground">{events.length} événement{events.length > 1 ? 's' : ''}</strong> en ligne.{' '}
-                    {events.length > 3 ? (
-                      <span className="text-primary font-semibold">
-                        ✓ Switcher carrousel automatique actif sur la page d'accueil (&gt; 3 événements).
-                      </span>
-                    ) : (
-                      <span className="text-foreground/60">
-                        (Affichage en grille statique jusqu'à 3 événements. Ajoutez-en un 4ème pour activer le carrousel rotatif).
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {/* Events Cards Grid */}
-              {events.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card/40">
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-foreground/40">
-                    <FontAwesomeIcon icon={faCalendarCheck} className="h-6 w-6" />
-                  </div>
-                  <h3 className="font-heading text-base font-bold text-foreground">
-                    Aucun événement culturel configuré
-                  </h3>
-                  <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/60">
-                    Mettez en avant le Vodun Days, la Gani, le Festival Masques ou d'autres temps forts touristiques du Bénin.
-                  </p>
                   <button
                     type="button"
                     onClick={handleOpenCreateEvent}
-                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90"
+                    className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
                   >
-                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                    Créer le premier événement
+                    <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                    Ajouter un événement
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {events.map((evt) => (
-                    <div
-                      key={evt.id}
-                      className="group relative rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-xl hover:border-primary/30 transition-all flex flex-col"
-                    >
-                      {/* Image Header with Badge */}
-                      <div className="relative h-48 w-full overflow-hidden bg-muted">
-                        <img
-                          src={evt.image}
-                          alt={evt.title}
-                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
-                          <span className="rounded-full bg-accent/90 backdrop-blur px-2.5 py-1 text-[10px] font-black uppercase text-black tracking-wider shadow">
-                            {evt.badge || 'Événement'}
-                          </span>
-                          <span className="rounded-full bg-black/60 backdrop-blur border border-white/20 px-2 py-0.5 text-[10px] font-medium text-white/90">
-                            {evt.tag || 'Culture'}
-                          </span>
-                        </div>
-                        <div className="absolute bottom-3 left-3 right-3 text-white">
-                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-accent mb-0.5">
-                            <FontAwesomeIcon icon={faClock} className="h-3 w-3" />
-                            <span>{evt.period}</span>
-                          </div>
-                          <h3 className="font-heading text-lg font-bold text-white line-clamp-1">
-                            {evt.title}
-                          </h3>
-                        </div>
-                      </div>
 
-                      {/* Content Body */}
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-1.5 text-xs text-foreground/70">
-                            <FontAwesomeIcon icon={faLocationDot} className="h-3.5 w-3.5 text-primary shrink-0" />
-                            <span className="font-semibold">{evt.location}</span>
-                          </div>
-                          <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
-                            {evt.description}
+                {events.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucun événement configuré.</p>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/40">
+                      Mettez en avant le Vodun Days, la Gani, le Festival Masques ou d'autres temps forts du Bénin.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {events.map((evt) => (
+                      <li key={evt.id} className="flex items-center gap-3 px-5 py-3">
+                        <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                          {evt.image && (
+                            <img
+                              src={evt.image}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {evt.title}
+                            <span className="font-normal text-foreground/40"> · {evt.badge || 'Événement'}</span>
+                          </p>
+                          <p className="truncate text-xs text-foreground/45">
+                            {[evt.period, evt.location, evt.tag || 'Culture'].filter(Boolean).join(' · ')}
                           </p>
                         </div>
-
-                        {/* Actions */}
-                        <div className="pt-3 border-t border-foreground/10 flex items-center justify-between gap-2">
+                        <div className="flex shrink-0 items-center gap-0.5">
                           <button
                             type="button"
                             onClick={() => handleOpenEditEvent(evt)}
-                            className="flex-1 rounded-xl border border-foreground/15 hover:border-primary hover:bg-primary/5 py-2 text-xs font-semibold text-foreground hover:text-primary transition-colors flex items-center justify-center gap-2"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                            title="Modifier l'événement"
                           >
                             <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
-                            Modifier
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteEvent(evt.id, evt.title)}
-                            className="rounded-xl border border-rose-500/20 hover:bg-rose-500/10 p-2 text-xs font-semibold text-rose-500 transition-colors"
+                            className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
                             title="Supprimer l'événement"
                           >
-                            <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
+                            <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -4926,258 +4056,166 @@ export function AdminDashboardPage() {
           {/* SECTION: DÉCOUVERTES, GASTRONOMIE & SERVICES À DOMICILE */}
           {/* ========================================================================= */}
           {currentSection === 'discoveries' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card/60 backdrop-blur border border-foreground/10 p-6 rounded-3xl">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
-                    <FontAwesomeIcon icon={faCompass} className="h-3 w-3" />
-                    Guide Découvertes & Répertoire Partenaires
+            <div className="space-y-6">
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10">
+                {[
+                  { label: 'Fiches', value: discoveriesList.length, hint: 'Référencées' },
+                  { label: 'Gastronomie', value: discoveriesList.filter(d => d.category === 'restaurants').length, hint: 'Tables' },
+                  { label: 'Services', value: discoveriesList.filter(d => d.category === 'services').length, hint: 'Prestataires à domicile' }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
                   </div>
-                  <h2 className="font-heading text-2xl font-black text-foreground">
-                    Gestion des Découvertes & Services
-                  </h2>
-                  <p className="text-xs text-foreground/60 max-w-2xl mt-1">
-                    Gérez les tables gastronomiques, les prestataires à domicile (coiffure, onglerie, soins) et les sites touristiques du Bénin. 
-                    <strong className="text-primary font-bold"> Privilège Admin :</strong> Vous pouvez créer et référencer n'importe quel établissement ou service <strong>gratuitement (0 FCFA)</strong>.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenCreateDiscovery}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 shrink-0"
-                >
-                  <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                  <span>Ajouter une Découverte (0 FCFA)</span>
-                </button>
+                ))}
               </div>
 
-              {/* Status info & Metrics Banner */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50">Total Fiches</span>
-                  <p className="text-xl font-black text-foreground mt-1">{discoveriesList.length}</p>
-                </div>
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Gastronomie (Tables)</span>
-                  <p className="text-xl font-black text-foreground mt-1">
-                    {discoveriesList.filter(d => d.category === 'restaurants').length} tables
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Services en Villa</span>
-                  <p className="text-xl font-black text-foreground mt-1">
-                    {discoveriesList.filter(d => d.category === 'services').length} prestataires
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">Total Référencé</span>
-                  <p className="text-xl font-black text-foreground mt-1">
-                    {discoveriesList.length} fiches actives
-                  </p>
-                </div>
-              </div>
-
-              {/* Filters & Search */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card/40 p-3 rounded-2xl border border-foreground/10">
-                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-                  {[
-                    { key: 'all', label: 'Toutes' },
-                    { key: 'restaurants', label: 'Gastronomie (0F Gratuit)' },
-                    { key: 'services', label: 'Services à domicile (500F)' }
-                  ].map(tab => (
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="space-y-3 border-b border-foreground/10 px-5 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Découvertes et services</h3>
+                      <p className="mt-0.5 text-xs text-foreground/50">
+                        Tables, prestataires à domicile et sites touristiques. Référencement gratuit pour l'admin.
+                      </p>
+                    </div>
                     <button
-                      key={tab.key}
-                      onClick={() => setDiscFilterCategory(tab.key)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                        discFilterCategory === tab.key
-                          ? 'bg-primary text-white shadow-sm font-bold'
-                          : 'text-foreground/70 hover:bg-muted'
-                      }`}
+                      type="button"
+                      onClick={handleOpenCreateDiscovery}
+                      className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:self-auto"
                     >
-                      {tab.label}
+                      <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                      <span>Ajouter une fiche</span>
                     </button>
-                  ))}
-                </div>
-
-                <div className="w-full sm:w-64">
-                  <input
-                    type="text"
-                    placeholder="Rechercher par nom ou ville..."
-                    value={discSearch}
-                    onChange={(e) => setDiscSearch(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Discovery Grid */}
-              {discoveriesList.filter(d => {
-                if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
-                if (discSearch) {
-                  const q = discSearch.toLowerCase();
-                  return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
-                }
-                return true;
-              }).length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card/40">
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-foreground/40">
-                    <FontAwesomeIcon icon={faCompass} className="h-6 w-6" />
                   </div>
-                  <h3 className="font-heading text-base font-bold text-foreground">
-                    Aucune fiche trouvée
-                  </h3>
-                  <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/60">
-                    Ajoutez une table gastronomique, un prestataire de service à domicile (coiffure, onglerie) ou un monument.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleOpenCreateDiscovery}
-                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary/90"
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="h-3.5 w-3.5" />
-                    <span>Créer une fiche</span>
-                  </button>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { key: 'all', label: 'Toutes' },
+                        { key: 'restaurants', label: 'Gastronomie' },
+                        { key: 'services', label: 'Services à domicile' }
+                      ].map(tab => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setDiscFilterCategory(tab.key)}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            discFilterCategory === tab.key
+                              ? 'bg-muted text-foreground'
+                              : 'text-foreground/50 hover:text-foreground'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative w-full sm:w-60">
+                      <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
+                      <input
+                        type="text"
+                        placeholder="Rechercher par nom ou ville..."
+                        value={discSearch}
+                        onChange={(e) => setDiscSearch(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {discoveriesList
-                    .filter(d => {
-                      if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
-                      if (discSearch) {
-                        const q = discSearch.toLowerCase();
-                        return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
-                      }
-                      return true;
-                    })
-                    .map((disc) => (
-                      <div
-                        key={disc.id}
-                        className="group relative rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-xl hover:border-primary/30 transition-all flex flex-col"
-                      >
-                        {/* Image Header with Badge */}
-                        <div className="relative h-44 w-full overflow-hidden bg-muted">
-                          <img
-                            src={disc.image}
-                            alt={disc.title}
-                            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-                            <span className="rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
-                              {disc.badge}
-                            </span>
-                            {disc.inHomeService && (
-                              <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm flex items-center gap-1">
-                                <FontAwesomeIcon icon={faHouse} className="h-2.5 w-2.5" />
-                                <span>En Villa</span>
-                              </span>
+                {discoveriesList.filter(d => {
+                  if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
+                  if (discSearch) {
+                    const q = discSearch.toLowerCase();
+                    return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
+                  }
+                  return true;
+                }).length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucune fiche trouvée.</p>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-foreground/40">
+                      Ajoutez une table, un prestataire de service à domicile ou un monument.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {discoveriesList
+                      .filter(d => {
+                        if (discFilterCategory !== 'all' && d.category !== discFilterCategory) return false;
+                        if (discSearch) {
+                          const q = discSearch.toLowerCase();
+                          return d.title?.toLowerCase().includes(q) || d.location?.toLowerCase().includes(q);
+                        }
+                        return true;
+                      })
+                      .map((disc) => (
+                        <li key={disc.id} className="flex items-center gap-3 px-5 py-3">
+                          <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                            {disc.image && (
+                              <img
+                                src={disc.image}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
                             )}
                           </div>
-
-                          <div className="absolute right-3 top-3">
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border backdrop-blur-md ${
-                              disc.status === 'active'
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                            }`}>
-                              {disc.status === 'active' ? 'En ligne' : 'Suspendu'}
-                            </span>
-                          </div>
-
-                          <div className="absolute bottom-2.5 left-3 text-[11px] font-medium text-white/90 flex items-center gap-1">
-                            <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-accent" />
-                            <span>{disc.location}</span>
-                          </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="p-5 flex flex-col flex-1 justify-between">
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] text-foreground/50 mb-1">
-                              <span className="uppercase font-bold tracking-wider text-primary">
-                                {disc.category === 'restaurants' ? 'Gastronomie' : 'Service en Villa'}
-                              </span>
-                              {disc.creator_role === 'provider' ? (
-                                <span className="text-emerald-600 font-semibold">• Prestataire inscrit (500F)</span>
-                              ) : disc.creator_role === 'restaurant_partner' ? (
-                                <span className="text-amber-600 font-semibold">• Restaurateur (0F Offert)</span>
-                              ) : (
-                                <span className="text-foreground/50">• Admin (0F)</span>
-                              )}
-                            </div>
-
-                            <h3 className="font-heading text-base font-bold text-foreground line-clamp-1">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">
                               {disc.title}
-                            </h3>
-
-                            <p className="text-xs text-foreground/65 line-clamp-2 mt-2 leading-relaxed">
-                              {disc.description}
+                              {disc.badge && <span className="font-normal text-foreground/40"> · {disc.badge}</span>}
                             </p>
-
-                            {(disc.phone || disc.whatsapp) && (
-                              <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground/80">
-                                {disc.phone && (
-                                  <span className="flex items-center gap-1 text-[11px] text-foreground/70">
-                                    <FontAwesomeIcon icon={faPhone} className="h-3 w-3 text-primary" />
-                                    <span>{disc.phone}</span>
-                                  </span>
-                                )}
-                                {disc.whatsapp && (
-                                  <span className="flex items-center gap-1 text-[11px] text-emerald-600">
-                                    <FontAwesomeIcon icon={faWhatsapp} className="h-3.5 w-3.5" />
-                                    <span>WhatsApp</span>
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            {disc.pricing && (
-                              <div className="mt-2 text-[11px] font-semibold text-accent">
-                                {disc.pricing}
-                              </div>
-                            )}
+                            <p className="truncate text-xs text-foreground/45">
+                              <button type="button" onClick={() => handleToggleDiscoveryStatus(disc)} className={`sm:hidden ${disc.status === 'active' ? 'text-emerald-600' : disc.status === 'pending' ? 'text-amber-600' : 'text-rose-600'}`}>
+                                {disc.status === 'active' ? 'En ligne' : disc.status === 'pending' ? 'À valider' : 'Suspendu'} ·{' '}
+                              </button>
+                              {disc.category === 'restaurants' ? 'Gastronomie' : 'Service en villa'}
+                              {disc.location ? ` · ${disc.location}` : ''}
+                              {' · '}
+                              {disc.creator_role === 'provider'
+                                ? 'Prestataire (500 F)'
+                                : disc.creator_role === 'restaurant_partner'
+                                ? 'Restaurateur (offert)'
+                                : 'Admin'}
+                              {disc.phone ? ` · ${disc.phone}` : ''}
+                              {disc.pricing ? ` · ${disc.pricing}` : ''}
+                            </p>
                           </div>
-
-                          {/* Actions */}
-                          <div className="mt-4 pt-3 border-t border-foreground/10 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDiscoveryStatus(disc)}
+                            className={`hidden shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-muted sm:block ${
+                              disc.status === 'active' ? 'text-emerald-600' : disc.status === 'pending' ? 'text-amber-600' : 'text-rose-600'
+                            }`}
+                            title={disc.status === 'active' ? 'Suspendre cette fiche' : disc.status === 'pending' ? 'Valider et publier cette fiche' : 'Activer cette fiche'}
+                          >
+                            {disc.status === 'active' ? 'En ligne' : disc.status === 'pending' ? 'À valider' : 'Suspendu'}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-0.5">
                             <button
                               type="button"
-                              onClick={() => handleToggleDiscoveryStatus(disc)}
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
-                                disc.status === 'active'
-                                  ? 'border-amber-500/30 text-amber-600 hover:bg-amber-500/10'
-                                  : 'border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10'
-                              }`}
+                              onClick={() => handleOpenEditDiscovery(disc)}
+                              className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                              title="Modifier cette fiche"
                             >
-                              {disc.status === 'active' ? 'Suspendre' : 'Activer'}
+                              <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
                             </button>
-
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditDiscovery(disc)}
-                                className="h-8 w-8 rounded-xl border border-foreground/15 text-foreground hover:bg-muted hover:text-primary flex items-center justify-center transition-colors"
-                                title="Modifier cette fiche"
-                              >
-                                <FontAwesomeIcon icon={faPen} className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDiscovery(disc)}
-                                className="h-8 w-8 rounded-xl border border-rose-500/25 text-rose-500 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
-                                title="Supprimer définitivement"
-                              >
-                                <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDiscovery(disc)}
+                              className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
+                              title="Supprimer définitivement"
+                            >
+                              <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                            </button>
                           </div>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -5185,118 +4223,57 @@ export function AdminDashboardPage() {
           {/* SECTION 7: PUBLIER UNE NOUVELLE ANNONCE (SUPER-ADMIN & PROPRIÉTAIRE) */}
           {/* ========================================================================= */}
           {currentSection === 'publish' && (
-            <div className="max-w-3xl mx-auto space-y-6 animate-section-stagger">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground">
-                    Publier une Nouvelle Annonce
-                  </h2>
-                  <p className="text-xs text-foreground/60">
-                    Ajoutez un hébergement de prestige ou un véhicule d'exception directement au catalogue Bénin Beyond
-                  </p>
-                </div>
-                
+            <div className="mx-auto max-w-3xl space-y-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-foreground/50">
+                  Ajoutez un hébergement ou un véhicule directement au catalogue.
+                </p>
                 <button
                   type="button"
                   onClick={() => setCurrentSection('catalog_inventory')}
-                  className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground/75 hover:bg-muted self-start sm:self-auto"
+                  className="self-start text-xs font-medium text-foreground/55 hover:text-foreground sm:self-auto"
                 >
-                  <FontAwesomeIcon icon={faHouse} className="mr-1.5 text-accent" />
-                  <span>Voir l'inventaire ({listings.length})</span>
+                  Voir l'inventaire ({listings.length})
                 </button>
               </div>
 
-              {/* Super-Admin Direct Publication Power Switch */}
-              <div className="rounded-3xl border border-accent/40 bg-gradient-to-r from-accent/15 via-accent/10 to-transparent p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-2xl bg-accent text-black font-bold flex items-center justify-center shrink-0 shadow-sm">
-                      <FontAwesomeIcon icon={faCrown} className="text-sm" />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold tracking-wider text-accent-foreground">Privilège Direction</span>
-                      <h4 className="font-heading text-sm font-bold text-foreground">
-                        Mode de Publication Instantané
-                      </h4>
-                    </div>
+              {/* Mode de publication */}
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                <div className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground">Publication instantanée</h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      {adminInstantPublish
+                        ? "L'annonce sera directement réservable dès l'enregistrement."
+                        : "L'annonce sera enregistrée « En attente » pour un audit ultérieur."}
+                    </p>
                   </div>
-
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="relative inline-flex shrink-0 cursor-pointer items-center">
                     <input
                       type="checkbox"
                       checked={adminInstantPublish}
                       onChange={(e) => setAdminInstantPublish(e.target.checked)}
-                      className="sr-only peer"
+                      className="peer sr-only"
                     />
-                    <div className="w-11 h-6 bg-foreground/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                    <div className="peer h-6 w-11 rounded-full bg-foreground/15 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-primary peer-checked:after:translate-x-full peer-focus:outline-none"></div>
                   </label>
                 </div>
-
-                <p className="text-xs text-foreground/75 leading-relaxed">
-                  {adminInstantPublish ? (
-                    <span className="text-emerald-800 font-medium">
-                      ✓ <strong>Mise en ligne immédiate activée</strong> : Cette annonce sera certifiée conforme et directement réservable par les voyageurs dès l'enregistrement.
-                    </span>
-                  ) : (
-                    <span className="text-amber-800 font-medium">
-                      ⏳ <strong>Mise en attente de modération</strong> : L'annonce sera enregistrée avec le statut « En attente » pour un audit ultérieur.
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              {/* Charte d'excellence visuelle */}
-              <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-5 sm:p-6 space-y-4 shadow-sm">
-                <div className="flex items-center gap-3 text-amber-900 font-bold text-sm">
-                  <div className="h-9 w-9 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
-                    <FontAwesomeIcon icon={faShieldHalved} className="text-base" />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] uppercase tracking-widest text-amber-800 font-bold">Standard de Luxe Bénin Beyond</span>
-                    <h3 className="font-heading text-sm sm:text-base font-bold text-amber-950">
-                      Critères d'Excellence & Médias Requis
-                    </h3>
-                  </div>
+                <div className="border-t border-foreground/10 px-5 py-3 text-xs text-foreground/50">
+                  Photos nettes et horizontales (1080p, en plein jour) · vidéo d'aperçu de 15 à 45 secondes (25 Mo max).
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-amber-950">
-                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 space-y-1">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <FontAwesomeIcon icon={faCamera} className="text-amber-700 text-xs" />
-                      <span>Photos Nettes 1080p (Horizontales)</span>
-                    </div>
-                    <p className="text-foreground/70 leading-snug">
-                      Clichés lumineux en plein jour. Pas de captures floues ou sombres.
-                    </p>
-                  </div>
-
-                  <div className="bg-card/70 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-500/20 space-y-1">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <FontAwesomeIcon icon={faVideo} className="text-amber-700 text-xs" />
-                      <span>Vidéo Courte d'Aperçu (25 Mo max)</span>
-                    </div>
-                    <p className="text-foreground/70 leading-snug">
-                      Visite immersive de 15 à 45 secondes pour maximiser le taux de réservation.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              </section>
 
               {publishSuccess && (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-3 animate-fadeIn">
-                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-lg shrink-0" />
-                  <span>{publishSuccess}</span>
-                </div>
+                <p className="rounded-2xl border border-foreground/10 bg-card px-5 py-3.5 text-sm text-emerald-600">
+                  {publishSuccess}
+                </p>
               )}
 
-              <form onSubmit={handleAdminPublishSubmit} className="rounded-3xl border border-foreground/10 bg-card p-6 sm:p-8 shadow-sm space-y-6">
-                
-                {/* 1. Sélection de Catégorie */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 block mb-3">
-                    1. Catégorie du bien
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <form onSubmit={handleAdminPublishSubmit} className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Catégorie */}
+                <div className="space-y-4 px-5 py-5">
+                  <h3 className="text-sm font-semibold text-foreground">Catégorie</h3>
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => {
@@ -5306,19 +4283,14 @@ export function AdminDashboardPage() {
                         setRoomsCount(1);
                         setFormSpecs('Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7');
                       }}
-                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
+                      className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
                         formType === 'stay'
-                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
-                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                          ? 'border-foreground/60 bg-muted/40'
+                          : 'border-foreground/10 hover:border-foreground/25'
                       }`}
                     >
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <FontAwesomeIcon icon={faHouse} className="text-primary text-base" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm text-foreground">Hébergement</p>
-                        <p className="text-[11px] text-foreground/60 leading-snug">Villa, Appartement, Loft lagune</p>
-                      </div>
+                      <p className="text-sm font-medium text-foreground">Hébergement</p>
+                      <p className="mt-0.5 text-xs text-foreground/50">Villa, appartement, loft</p>
                     </button>
 
                     <button
@@ -5330,67 +4302,52 @@ export function AdminDashboardPage() {
                         setRoomsCount(0);
                         setFormSpecs('Climatisation, Boîte automatique, Bluetooth, Caméra de recul, GPS');
                       }}
-                      className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl border text-left transition-all ${
+                      className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
                         formType === 'drive'
-                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 text-primary'
-                          : 'border-foreground/15 bg-background text-foreground/75 hover:border-foreground/30'
+                          ? 'border-foreground/60 bg-muted/40'
+                          : 'border-foreground/10 hover:border-foreground/25'
                       }`}
                     >
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <FontAwesomeIcon icon={faCar} className="text-primary text-base" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm text-foreground">Véhicule</p>
-                        <p className="text-[11px] text-foreground/60 leading-snug">SUV VIP, Berline ou Vente certifiée</p>
-                      </div>
+                      <p className="text-sm font-medium text-foreground">Véhicule</p>
+                      <p className="mt-0.5 text-xs text-foreground/50">SUV, berline ou vente</p>
                     </button>
                   </div>
-                </div>
 
-                {/* 1b. Sous-catégorie Hébergement & Disponibilités Hôtel */}
-                {formType === 'stay' && (
-                  <div className="p-4 rounded-2xl bg-muted/30 border border-foreground/10 space-y-4">
-                    <div>
-                      <label className="text-xs font-semibold text-foreground/80 block mb-2">
-                        Type d'établissement
-                      </label>
+                  {formType === 'stay' && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-foreground/60">Type d'établissement</p>
                       <div className="grid grid-cols-2 gap-3">
                         <button
                           type="button"
                           onClick={() => setFormSubcategory('villa')}
-                          className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all ${
+                          className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
                             formSubcategory === 'villa'
-                              ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
-                              : 'border-foreground/15 bg-card text-foreground/70'
+                              ? 'border-foreground/60 bg-muted/40'
+                              : 'border-foreground/10 hover:border-foreground/25'
                           }`}
                         >
-                          <div className="font-bold">Villa / Loft Privé</div>
-                          <div className="text-[10px] text-foreground/50 mt-0.5">Location exclusive d'un bien entier</div>
+                          <p className="text-sm font-medium text-foreground">Villa / loft privé</p>
+                          <p className="mt-0.5 text-xs text-foreground/50">Bien entier</p>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setFormSubcategory('hotel')}
-                          className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all ${
+                          className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
                             formSubcategory === 'hotel'
-                              ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
-                              : 'border-foreground/15 bg-card text-foreground/70'
+                              ? 'border-foreground/60 bg-muted/40'
+                              : 'border-foreground/10 hover:border-foreground/25'
                           }`}
                         >
-                          <div className="font-bold">Chambre d'Hôtel / Suite</div>
-                          <div className="text-[10px] text-foreground/50 mt-0.5">Établissement avec chambres & dates de dispo</div>
+                          <p className="text-sm font-medium text-foreground">Chambre d'hôtel</p>
+                          <p className="mt-0.5 text-xs text-foreground/50">Chambres et disponibilités</p>
                         </button>
                       </div>
-                    </div>
 
-                    {formSubcategory === 'hotel' && (
-                      <div className="pt-3 border-t border-foreground/10 space-y-3">
-                        <span className="text-xs font-bold text-accent uppercase tracking-wider block">
-                          Disponibilités & Stock Hôtelier
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {formSubcategory === 'hotel' && (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                           <div>
-                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                            <label className="mb-1 block text-xs text-foreground/60">
                               Stock de chambres
                             </label>
                             <input
@@ -5398,83 +4355,112 @@ export function AdminDashboardPage() {
                               min="1"
                               value={roomsCount}
                               onChange={(e) => setRoomsCount(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                            <label className="mb-1 block text-xs text-foreground/60">
                               Disponible à partir du
                             </label>
                             <input
                               type="date"
                               value={availableFrom}
                               onChange={(e) => setAvailableFrom(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-semibold text-foreground/80 block mb-1">
+                            <label className="mb-1 block text-xs text-foreground/60">
                               Disponible jusqu'au
                             </label>
                             <input
                               type="date"
                               value={availableTo}
                               onChange={(e) => setAvailableTo(e.target.value)}
-                              className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                              className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                             />
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                {/* 2. Titre & Localisation */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Informations */}
+                <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                  <h3 className="text-sm font-semibold text-foreground">Informations</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Titre de l'annonce *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={formType === 'stay' ? 'ex: Villa Royale Cotonou Lagune' : 'ex: SUV Toyota Fortuner 7 Places VIP'}
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Ville et quartier *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="ex: Cotonou, Haie Vive ou Ouidah Plage"
+                        value={formLocation}
+                        onChange={(e) => setFormLocation(e.target.value)}
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                      Titre de l'annonce *
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Caractéristiques clés (séparées par des virgules)
                     </label>
                     <input
                       type="text"
-                      required
-                      placeholder={formType === 'stay' ? 'ex: Villa Royale Cotonou Lagune' : 'ex: SUV Toyota Fortuner 7 Places VIP'}
-                      value={formTitle}
-                      onChange={(e) => setFormTitle(e.target.value)}
-                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      value={formSpecs}
+                      onChange={(e) => setFormSpecs(e.target.value)}
+                      placeholder={
+                        formType === 'stay'
+                          ? 'Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7'
+                          : 'Climatisation, Boîte automatique, GPS, Bluetooth, Caméra de recul'
+                      }
+                      className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                      Ville & Quartier *
+                    <label className="mb-1 block text-xs text-foreground/60">
+                      Description
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ex: Cotonou, Haie Vive ou Ouidah Plage"
-                      value={formLocation}
-                      onChange={(e) => setFormLocation(e.target.value)}
-                      className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    <textarea
+                      rows={3}
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                      placeholder="Décrivez les atouts majeurs, les finitions, l'accès sécurisé et le niveau de confort..."
+                      className="w-full resize-none rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                {/* 3. Tarification */}
-                <div className="p-4 rounded-2xl bg-muted/40 border border-foreground/10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      2. Tarification & Commission Plateforme (10%)
-                    </span>
-                    <span className="text-[11px] text-accent-foreground font-semibold bg-accent/20 px-2 py-0.5 rounded-full">
-                      Commission standard : 10%
-                    </span>
+                {/* Tarification */}
+                <div className="space-y-4 border-t border-foreground/10 px-5 py-5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-foreground">Tarification</h3>
+                    <span className="text-xs text-foreground/50">Commission 10 %</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div>
-                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                        Tarif brut public (FCFA) *
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Tarif public (FCFA) *
                       </label>
                       <input
                         type="number"
@@ -5482,18 +4468,18 @@ export function AdminDashboardPage() {
                         placeholder={formType === 'stay' ? '85000' : '45000'}
                         value={formPrice}
                         onChange={(e) => setFormPrice(e.target.value)}
-                        className="w-full rounded-xl border border-foreground/15 bg-card px-3.5 py-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-foreground/80 block mb-1">
-                        Fréquence / Modalité
+                      <label className="mb-1 block text-xs text-foreground/60">
+                        Modalité
                       </label>
                       <select
                         value={formPriceUnit}
                         onChange={(e) => setFormPriceUnit(e.target.value)}
-                        className="w-full rounded-xl border border-foreground/15 bg-card px-3 py-2 text-xs text-foreground focus:outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                       >
                         {formType === 'stay' ? (
                           <>
@@ -5511,69 +4497,30 @@ export function AdminDashboardPage() {
                       </select>
                     </div>
 
-                    <div className="bg-card p-2.5 rounded-xl border border-foreground/10 flex flex-col justify-center">
-                      <p className="text-[10px] text-foreground/60">Marge plateforme (10%) :</p>
-                      <p className="font-heading text-sm font-bold text-accent font-mono">
+                    <div>
+                      <p className="mb-1 text-xs text-foreground/60">Marge plateforme</p>
+                      <p className="py-2 text-sm font-medium tabular-nums text-foreground">
                         {formPrice ? formatPrice(Math.round(parseInt(formPrice, 10) * 0.10)) : '0 FCFA'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Caractéristiques & Description */}
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                    Caractéristiques clés (séparées par des virgules)
-                  </label>
-                  <input
-                    type="text"
-                    value={formSpecs}
-                    onChange={(e) => setFormSpecs(e.target.value)}
-                    placeholder={
-                      formType === 'stay'
-                        ? 'Wi-Fi Fibre, Climatisation, Groupe électrogène, Sécurité 24/7'
-                        : 'Climatisation, Boîte automatique, GPS, Bluetooth, Caméra de recul'
-                    }
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
-                    Description détaillée du bien
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder="Décrivez les atouts majeurs, les finitions, l'accès sécurisé et le niveau de confort..."
-                    className="w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
-                  />
-                </div>
-
-                {/* 5. Photos Upload */}
-                <div className="space-y-3 pt-2">
+                {/* Photos */}
+                <div className="space-y-3 border-t border-foreground/10 px-5 py-5">
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                      3. Photos Haute Définition *
-                    </label>
-                    <p className="text-[11px] text-foreground/60">
-                      Sélectionnez les photos du bien (1 photo minimum requise)
-                    </p>
+                    <h3 className="text-sm font-semibold text-foreground">Photos *</h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">Au moins une photo.</p>
                   </div>
 
                   {photoError && (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs flex items-center gap-2">
-                      <FontAwesomeIcon icon={faTriangleExclamation} />
-                      <span>{photoError}</span>
-                    </div>
+                    <p className="text-xs text-rose-600">{photoError}</p>
                   )}
 
-                  {/* Dropzone */}
-                  <div className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-colors ${
-                    compressingPhotos 
-                      ? 'border-primary bg-primary/5 cursor-wait' 
-                      : 'border-foreground/20 hover:border-primary bg-muted/20'
+                  <div className={`relative rounded-lg border border-dashed px-4 py-6 text-center transition-colors ${
+                    compressingPhotos
+                      ? 'cursor-wait border-foreground/30 bg-muted/30'
+                      : 'border-foreground/15 hover:border-foreground/35'
                   }`}>
                     <input
                       type="file"
@@ -5582,70 +4529,63 @@ export function AdminDashboardPage() {
                       disabled={compressingPhotos}
                       accept="image/jpeg,image/png,image/webp"
                       onChange={handlePhotoUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                     />
-                    <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
-                      <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-lg">
-                        <FontAwesomeIcon icon={compressingPhotos ? faSpinner : faUpload} className={compressingPhotos ? 'animate-spin' : ''} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-foreground">
-                          {compressingPhotos ? 'Optimisation et chargement des photos en cours…' : 'Cliquez pour sélectionner vos photos ou glissez-déposez'}
-                        </p>
-                        <p className="text-[10px] text-foreground/50 mt-0.5">
-                          {compressingPhotos ? 'Compression haute résolution automatique (2048x1536 HD)' : 'JPG, PNG, WebP — Résolution recommandée : 1920x1080px'}
-                        </p>
-                      </div>
+                    <div className="pointer-events-none flex flex-col items-center gap-1.5">
+                      <FontAwesomeIcon icon={compressingPhotos ? faSpinner : faUpload} className={`h-4 w-4 text-foreground/40 ${compressingPhotos ? 'animate-spin' : ''}`} />
+                      <p className="text-sm text-foreground/75">
+                        {compressingPhotos ? 'Optimisation des photos en cours…' : 'Sélectionnez ou glissez-déposez vos photos'}
+                      </p>
+                      <p className="text-xs text-foreground/40">
+                        {compressingPhotos ? 'Compression automatique (2048x1536)' : 'JPG, PNG, WebP · 1920x1080 recommandé'}
+                      </p>
                     </div>
                   </div>
 
-                  {/* URL Input */}
                   <div className="flex items-center gap-2">
                     <input
                       type="url"
-                      placeholder="Ou collez un lien URL d'image web..."
+                      placeholder="Ou collez un lien d'image..."
                       value={photoUrlInput}
                       onChange={(e) => setPhotoUrlInput(e.target.value)}
-                      className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                      className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleAddPhotoUrl}
-                      className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                      className="shrink-0 rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground hover:bg-muted"
                     >
                       Ajouter
                     </button>
                   </div>
 
-                  {/* Preview Grid */}
                   {uploadedPhotos.length > 0 && (
-                    <div className="space-y-2 pt-2">
-                      <div className="flex items-center justify-between text-xs text-foreground/70">
-                        <span className="font-semibold">{uploadedPhotos.length} photo(s) sélectionnée(s)</span>
-                        <span className="text-[11px] text-accent font-medium">La photo avec le badge doré est la couverture</span>
-                      </div>
+                    <div className="space-y-2 pt-1">
+                      <p className="text-xs text-foreground/50">
+                        {uploadedPhotos.length} photo{uploadedPhotos.length > 1 ? 's' : ''} · la photo encadrée sert de couverture
+                      </p>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                         {uploadedPhotos.map((photo, index) => (
                           <div
                             key={index}
-                            className={`group relative aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all ${
+                            className={`group relative aspect-[16/10] overflow-hidden rounded-lg border-2 transition-colors ${
                               featuredPhotoIndex === index
-                                ? 'border-accent ring-2 ring-accent/40'
-                                : 'border-foreground/10 hover:border-foreground/30'
+                                ? 'border-foreground/70'
+                                : 'border-transparent hover:border-foreground/20'
                             }`}
                           >
                             <img src={photo} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
 
                             {featuredPhotoIndex === index ? (
-                              <span className="absolute top-1.5 left-1.5 bg-accent text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md">
-                                ★ Couverture
+                              <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
+                                Couverture
                               </span>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => setFeaturedPhotoIndex(index)}
-                                className="absolute top-1.5 left-1.5 bg-black/70 hover:bg-black text-white text-[9px] font-semibold px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
                               >
                                 Définir couverture
                               </button>
@@ -5654,7 +4594,7 @@ export function AdminDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleRemovePhoto(index)}
-                              className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/70 hover:bg-rose-600 text-white text-xs flex items-center justify-center transition-colors"
+                              className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded bg-black/70 text-xs text-white hover:bg-black"
                               title="Supprimer"
                             >
                               <FontAwesomeIcon icon={faXmark} />
@@ -5666,124 +4606,103 @@ export function AdminDashboardPage() {
                   )}
                 </div>
 
-                {/* 6. Video Tour Upload (Super-Admin Exclusive) */}
-                <div className="space-y-3 pt-3 border-t border-foreground/10">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/80 block">
-                        4. Visite Vidéo d'Aperçu (Exclusivité Super-Admin)
-                      </label>
-                      <p className="text-[11px] text-foreground/60">
-                        Téléversez un clip vidéo (MP4/WebM jusqu'à 50 Mo) ou collez un lien vidéo direct (Google Drive, YouTube, Vimeo, MP4 public).
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 border border-accent/30 px-3 py-1 text-[10px] font-bold text-accent-foreground self-start sm:self-auto">
-                      <FontAwesomeIcon icon={faShieldHalved} className="text-accent" />
-                      <span>Publication Réservée aux Admins</span>
-                    </span>
+                {/* Vidéo */}
+                <div className="space-y-3 border-t border-foreground/10 px-5 py-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Visite vidéo</h3>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      Réservée aux admins. Fichier MP4/WebM jusqu'à 50 Mo, ou lien Google Drive, YouTube, Vimeo, MP4 public.
+                    </p>
                   </div>
 
                   {videoError && (
-                    <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                    <p className={`text-xs ${
                       videoError.includes('Note :') || videoError.includes('ℹ️')
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
-                        : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                        ? 'text-amber-600'
+                        : 'text-rose-600'
                     }`}>
-                      <FontAwesomeIcon icon={videoError.includes('Note :') || videoError.includes('ℹ️') ? faCircleInfo : faTriangleExclamation} className="mt-0.5 shrink-0" />
-                      <span>{videoError}</span>
-                    </div>
+                      {videoError}
+                    </p>
                   )}
 
                   {!uploadedVideo ? (
                     <div className="space-y-3">
-                      <div className="relative border-2 border-dashed border-foreground/20 hover:border-primary rounded-2xl p-5 text-center transition-colors bg-muted/10">
+                      <div className="relative rounded-lg border border-dashed border-foreground/15 px-4 py-5 text-center transition-colors hover:border-foreground/35">
                         <input
                           type="file"
                           id="admin-video-upload"
                           accept="video/mp4,video/webm,video/quicktime,.mov,.mkv"
                           disabled={isUploadingVideo}
                           onChange={handleVideoUpload}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                         />
-                        <div className="flex flex-col items-center justify-center gap-1.5 pointer-events-none">
-                          <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent-foreground text-lg">
-                            <FontAwesomeIcon icon={isUploadingVideo ? faSpinner : faVideo} className={isUploadingVideo ? 'animate-spin' : ''} />
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-foreground">
-                              {isUploadingVideo ? 'Traitement et téléversement de la vidéo…' : 'Sélectionner une vidéo d\'aperçu (.MP4, .WebM, .MOV)'}
-                            </p>
-                            <p className="text-[10px] text-foreground/50">
-                              {isUploadingVideo ? 'Veuillez patienter pendant l\'envoi...' : 'Fichier vidéo jusqu\'à 50 Mo max (dossier structuré)'}
-                            </p>
-                          </div>
+                        <div className="pointer-events-none flex flex-col items-center gap-1.5">
+                          <FontAwesomeIcon icon={isUploadingVideo ? faSpinner : faVideo} className={`h-4 w-4 text-foreground/40 ${isUploadingVideo ? 'animate-spin' : ''}`} />
+                          <p className="text-sm text-foreground/75">
+                            {isUploadingVideo ? 'Téléversement de la vidéo…' : 'Sélectionner une vidéo (.mp4, .webm, .mov)'}
+                          </p>
+                          <p className="text-xs text-foreground/40">
+                            {isUploadingVideo ? 'Veuillez patienter pendant l\'envoi...' : '50 Mo maximum'}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Video URL Input */}
                       <div className="flex items-center gap-2">
                         <input
                           type="url"
-                          placeholder="Ou collez un lien Google Drive, YouTube, Vimeo, MP4 public..."
+                          placeholder="Ou collez un lien vidéo..."
                           value={videoUrlInput}
                           onChange={(e) => setVideoUrlInput(e.target.value)}
-                          className="flex-1 rounded-xl border border-foreground/15 bg-background px-3.5 py-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/30 focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={handleAddVideoUrl}
-                          className="rounded-xl border border-foreground/15 bg-muted px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted/80"
+                          className="shrink-0 rounded-lg border border-foreground/15 px-3 py-2 text-xs font-medium text-foreground hover:bg-muted"
                         >
-                          Ajouter lien
+                          Ajouter
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-2xl border border-foreground/10 bg-background space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FontAwesomeIcon icon={faVideo} className="text-accent text-sm" />
-                          <span className="text-xs font-bold text-foreground">{uploadedVideo.name}</span>
-                          <span className="text-[10px] text-foreground/50 font-mono">({uploadedVideo.sizeMB} Mo)</span>
-                          {uploadedVideo.isCloud && (
-                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                              ✓ En ligne
-                            </span>
-                          )}
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm text-foreground">
+                          {uploadedVideo.name}
+                          <span className="text-xs text-foreground/45"> · {uploadedVideo.sizeMB} Mo</span>
+                          {uploadedVideo.isCloud && <span className="text-xs text-emerald-600"> · en ligne</span>}
+                        </p>
                         <button
                           type="button"
                           onClick={handleRemoveVideo}
-                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
+                          className="shrink-0 text-xs font-medium text-rose-600 hover:underline"
                         >
-                          <FontAwesomeIcon icon={faTrash} />
-                          <span>Supprimer la vidéo</span>
+                          Supprimer
                         </button>
                       </div>
 
-                      <div className="w-full max-w-xl mx-auto rounded-xl overflow-hidden bg-black shadow">
+                      <div className="mx-auto w-full max-w-xl overflow-hidden rounded-lg bg-black">
                         <ListingVideoPlayer videoUrl={uploadedVideo.url} compact={true} />
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Submit Action */}
-                <div className="pt-4 border-t border-foreground/10 flex items-center justify-end gap-3">
+                {/* Validation */}
+                <div className="flex flex-col-reverse gap-2 border-t border-foreground/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setCurrentSection('catalog_inventory')}
-                    className="rounded-xl border border-foreground/15 px-5 py-2.5 text-xs font-semibold text-foreground/75 hover:bg-muted"
+                    className="rounded-lg px-3.5 py-2 text-xs font-medium text-foreground/60 hover:bg-muted hover:text-foreground"
                   >
                     Annuler
                   </button>
 
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95"
+                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
                   >
-                    <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>{adminInstantPublish ? 'Mettre en ligne immédiatement' : 'Enregistrer en attente de modération'}</span>
+                    {adminInstantPublish ? 'Mettre en ligne' : 'Enregistrer en attente'}
                   </button>
                 </div>
               </form>
@@ -5794,265 +4713,164 @@ export function AdminDashboardPage() {
           {/* SECTION 8: INVENTAIRE GLOBAL DES BIENS & PROPRIÉTÉS */}
           {/* ========================================================================= */}
           {currentSection === 'catalog_inventory' && (
-            <div className="space-y-6 animate-section-stagger">
-              
-              {/* Header & Quick Action */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground">
-                    Inventaire Global des Biens & Flotte
-                  </h2>
-                  <p className="text-xs text-foreground/60">
-                    Gérez l'ensemble des hébergements et véhicules enregistrés sur Bénin Beyond ({listings.length} biens au total)
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setCurrentSection('publish')}
-                  className="rounded-xl bg-accent text-black px-4 py-2 text-xs font-bold shadow-md hover:bg-accent/90 transition-all flex items-center gap-2 self-start sm:self-auto"
-                >
-                  <FontAwesomeIcon icon={faCirclePlus} />
-                  <span>+ Publier un nouveau bien</span>
-                </button>
-              </div>
-
-              {/* Inventory Filter Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-foreground/10">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setListingTypeFilter('all');
-                      setListingStatusFilter('all');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'all' && listingStatusFilter === 'all'
-                        ? 'bg-primary text-white shadow-sm'
-                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
-                    }`}
-                  >
-                    Tous ({listings.length})
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setListingTypeFilter('stay');
-                      setListingStatusFilter('all');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'stay' && listingStatusFilter === 'all'
-                        ? 'bg-primary text-white shadow-sm'
-                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
-                    }`}
-                  >
-                    Hébergements ({listings.filter((l) => l.type === 'stay').length})
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setListingTypeFilter('drive');
-                      setListingStatusFilter('all');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      listingTypeFilter === 'drive' && listingStatusFilter === 'all'
-                        ? 'bg-primary text-white shadow-sm'
-                        : 'bg-muted/60 text-foreground/75 hover:bg-muted'
-                    }`}
-                  >
-                    Véhicules ({listings.filter((l) => l.type === 'drive').length})
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setListingTypeFilter('all');
-                      setListingStatusFilter('active');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      listingStatusFilter === 'active'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
-                    }`}
-                  >
-                    En ligne ({listings.filter((l) => l.status === 'active' || !l.status).length})
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setListingTypeFilter('all');
-                      setListingStatusFilter('pending');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                      listingStatusFilter === 'pending'
-                        ? 'bg-amber-600 text-white shadow-sm'
-                        : 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20'
-                    }`}
-                  >
-                    En attente ({listings.filter((l) => l.status === 'pending').length})
-                  </button>
-                </div>
-
-                {/* Search */}
-                <div className="relative min-w-[220px]">
-                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-foreground/40" />
-                  <input
-                    type="text"
-                    placeholder="Rechercher par titre ou ville..."
-                    value={listingSearch}
-                    onChange={(e) => setListingSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-foreground/15 bg-background text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Listings Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredListings.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-3xl border border-foreground/10 bg-card overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Image Header with Badges */}
-                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted">
-                        <img
-                          src={item.gallery?.[0] || item.image}
-                          alt={item.title}
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                          <span className="rounded-full bg-black/60 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold text-white uppercase">
-                            {item.type === 'stay' ? 'Hébergement' : 'Véhicule'}
-                          </span>
-                          {item.video_url && (
-                            <span className="rounded-full bg-accent text-black px-2 py-0.5 text-[10px] font-bold flex items-center gap-1 shadow">
-                              <FontAwesomeIcon icon={faVideo} className="text-[9px]" />
-                              <span>Vidéo</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="absolute top-3 right-3">
-                          {(!item.status || item.status === 'active') && (
-                            <span className="rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                              ✓ En ligne
-                            </span>
-                          )}
-                          {item.status === 'pending' && (
-                            <span className="rounded-full bg-amber-500 text-black px-2.5 py-0.5 text-[10px] font-bold shadow">
-                              ⏳ En attente
-                            </span>
-                          )}
-                          {item.status === 'refused' && (
-                            <span className="rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                              ✕ Refusé
-                            </span>
-                          )}
-                          {item.status === 'suspended' && (
-                            <span className="rounded-full bg-gray-600 text-white px-2.5 py-0.5 text-[10px] font-bold shadow">
-                              ⏸ Suspendu
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Card Content */}
-                      <div className="p-5 space-y-2.5">
-                        <h4 className="font-heading text-base font-bold text-foreground line-clamp-1">
-                          {item.title}
-                        </h4>
-                        <p className="text-xs text-foreground/60 flex items-center gap-1">
-                          <FontAwesomeIcon icon={faLocationDot} className="text-accent" />
-                          <span className="truncate">{item.location}</span>
-                        </p>
-
-                        <div className="pt-2 flex items-center justify-between border-t border-foreground/10 text-xs">
-                          <span className="font-heading font-black text-primary text-sm">
-                            {formatPrice(item.price)} <span className="text-[10px] font-normal text-foreground/60">/ {item.price_unit || (item.type === 'stay' ? 'nuit' : 'jour')}</span>
-                          </span>
-                          <span className="text-[11px] text-foreground/50 truncate max-w-[120px]">
-                            {item.owner_name || 'Direction'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions Row */}
-                    <div className="p-4 pt-0 border-t border-foreground/10 mt-3 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <Link
-                          to={`/listing/${item.id}`}
-                          className="rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary transition-colors flex items-center gap-1.5"
-                        >
-                          <FontAwesomeIcon icon={faEye} className="text-xs" />
-                          <span>Fiche</span>
-                        </Link>
-
-                        <button
-                          onClick={() => handleOpenEditListing(item)}
-                          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors flex items-center gap-1.5"
-                          title="Modifier le nom, prix, photos et informations du bien"
-                        >
-                          <FontAwesomeIcon icon={faPen} className="text-xs" />
-                          <span>Modifier</span>
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        {item.status === 'pending' || item.status === 'suspended' || item.status === 'refused' ? (
-                          <button
-                            onClick={() => {
-                              handleApproveListing(item.id);
-                              showToast(`Bien "${item.title}" activé et mis en ligne !`);
-                            }}
-                            className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-sm"
-                            title="Mettre en ligne"
-                          >
-                            <FontAwesomeIcon icon={faCheck} className="mr-1" />
-                            <span>Mettre en ligne</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              handleSuspendListing(item.id);
-                              showToast(`Bien "${item.title}" suspendu.`);
-                            }}
-                            className="rounded-xl bg-muted px-2.5 py-1.5 text-xs font-semibold text-foreground/75 hover:bg-muted/80"
-                            title="Suspendre"
-                          >
-                            <FontAwesomeIcon icon={faBan} />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => handleDeleteListingItem(item.id)}
-                          className="h-8 w-8 rounded-xl border border-rose-500/20 text-rose-600 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
-                          title="Supprimer définitivement"
-                        >
-                          <FontAwesomeIcon icon={faTrash} className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Filtres et recherche */}
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[
+                      {
+                        label: 'Tous',
+                        count: listings.length,
+                        active: listingTypeFilter === 'all' && listingStatusFilter === 'all',
+                        onClick: () => { setListingTypeFilter('all'); setListingStatusFilter('all'); }
+                      },
+                      {
+                        label: 'Hébergements',
+                        count: listings.filter((l) => l.type === 'stay').length,
+                        active: listingTypeFilter === 'stay' && listingStatusFilter === 'all',
+                        onClick: () => { setListingTypeFilter('stay'); setListingStatusFilter('all'); }
+                      },
+                      {
+                        label: 'Véhicules',
+                        count: listings.filter((l) => l.type === 'drive').length,
+                        active: listingTypeFilter === 'drive' && listingStatusFilter === 'all',
+                        onClick: () => { setListingTypeFilter('drive'); setListingStatusFilter('all'); }
+                      },
+                      {
+                        label: 'En ligne',
+                        count: listings.filter((l) => l.status === 'active' || !l.status).length,
+                        active: listingStatusFilter === 'active',
+                        onClick: () => { setListingTypeFilter('all'); setListingStatusFilter('active'); }
+                      },
+                      {
+                        label: 'En attente',
+                        count: listings.filter((l) => l.status === 'pending').length,
+                        active: listingStatusFilter === 'pending',
+                        onClick: () => { setListingTypeFilter('all'); setListingStatusFilter('pending'); }
+                      }
+                    ].map((tab) => (
+                      <button
+                        key={tab.label}
+                        onClick={tab.onClick}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          tab.active ? 'bg-muted text-foreground' : 'text-foreground/50 hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label} <span className="tabular-nums text-foreground/40">{tab.count}</span>
+                      </button>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {filteredListings.length === 0 && (
-                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
-                  <FontAwesomeIcon icon={faHouse} className="h-10 w-10 text-foreground/20 mb-3" />
-                  <h4 className="font-heading text-base font-bold text-foreground">
-                    Aucun bien correspondant
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
-                    Aucun hébergement ou véhicule ne correspond aux critères de recherche actuels.
-                  </p>
-                  <button
-                    onClick={() => setCurrentSection('publish')}
-                    className="mt-4 rounded-xl bg-accent text-black px-4 py-2 text-xs font-bold shadow-md hover:bg-accent/90 transition-all inline-flex items-center gap-2"
-                  >
-                    <FontAwesomeIcon icon={faCirclePlus} />
-                    <span>Publier un nouveau bien</span>
-                  </button>
+                  <div className="relative w-full lg:w-60">
+                    <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par titre ou ville..."
+                      value={listingSearch}
+                      onChange={(e) => setListingSearch(e.target.value)}
+                      className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
                 </div>
-              )}
+
+                {filteredListings.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucun bien ne correspond aux critères.</p>
+                    <button
+                      onClick={() => setCurrentSection('publish')}
+                      className="mt-2 text-xs font-medium text-foreground/55 hover:text-foreground"
+                    >
+                      Publier un bien
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {filteredListings.map((item) => {
+                      const isOnline = !item.status || item.status === 'active';
+                      return (
+                        <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:flex-nowrap">
+                          <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                            {(item.gallery?.[0] || item.image) && (
+                              <img
+                                src={item.gallery?.[0] || item.image}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1 basis-[calc(100%-60px)] sm:basis-auto">
+                            <Link
+                              to={`/listing/${item.id}`}
+                              className="block truncate text-sm font-medium text-foreground hover:text-primary"
+                            >
+                              {item.title}
+                            </Link>
+                            <p className="truncate text-xs text-foreground/45">
+                              {item.type === 'stay' ? 'Hébergement' : 'Véhicule'} · {item.location}
+                              {item.owner_name ? ` · ${item.owner_name}` : ''}
+                              {item.video_url ? ' · vidéo' : ''}
+                            </p>
+                          </div>
+                          <div className="shrink-0 pl-[60px] text-left sm:pl-0 sm:text-right">
+                            <p className="text-sm font-medium tabular-nums text-foreground">
+                              {formatPrice(item.price)}
+                              <span className="text-xs font-normal text-foreground/45"> / {item.price_unit || (item.type === 'stay' ? 'nuit' : 'jour')}</span>
+                            </p>
+                            <p className={`text-xs ${
+                              isOnline ? 'text-emerald-600' : item.status === 'pending' ? 'text-amber-600' : item.status === 'refused' ? 'text-rose-600' : 'text-foreground/50'
+                            }`}>
+                              {isOnline ? 'En ligne' : item.status === 'pending' ? 'En attente' : item.status === 'refused' ? 'Refusé' : item.status === 'suspended' ? 'Suspendu' : item.status}
+                            </p>
+                          </div>
+                          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:ml-0">
+                            {item.status === 'pending' || item.status === 'suspended' || item.status === 'refused' ? (
+                              <button
+                                onClick={() => {
+                                  handleApproveListing(item.id);
+                                  showToast(`Bien "${item.title}" activé et mis en ligne !`);
+                                }}
+                                className="rounded-md p-2 text-emerald-600 transition-colors hover:bg-emerald-500/10"
+                                title="Mettre en ligne"
+                              >
+                                <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleSuspendListing(item.id);
+                                  showToast(`Bien "${item.title}" suspendu.`);
+                                }}
+                                className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                                title="Suspendre"
+                              >
+                                <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleOpenEditListing(item)}
+                              className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-muted hover:text-foreground"
+                              title="Modifier le nom, prix, photos et informations du bien"
+                            >
+                              <FontAwesomeIcon icon={faPen} className="h-3 w-3" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteListingItem(item.id)}
+                              className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
+                              title="Supprimer définitivement"
+                            >
+                              <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -6060,327 +4878,189 @@ export function AdminDashboardPage() {
           {/* SECTION: AVIS & RETOURS CLIENTS (AUTHENTIQUES ET MODÉRABLES) */}
           {/* ========================================================================= */}
           {currentSection === 'reviews' && (
-            <div className="space-y-6 animate-section-stagger">
-              {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="font-heading text-xl font-bold text-foreground flex items-center gap-2">
-                    <FontAwesomeIcon icon={faStar} className="text-amber-400" />
-                    <span>Avis & Modération des Retours Clients</span>
-                  </h2>
-                  <p className="text-xs text-foreground/60">
-                    Modérez les avis voyageurs et contrôlez leur publication. Les 8 à 10 meilleurs avis validés (5★ et 4★) défilent automatiquement en carrousel sur la page d'accueil ({reviewsList.length} avis au total).
-                  </p>
-                </div>
+            <div className="space-y-6">
+              {/* Chiffres clés */}
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/10 lg:grid-cols-4">
+                {[
+                  { label: 'Avis reçus', value: reviewsList.length, hint: 'Base globale' },
+                  { label: 'À modérer', value: reviewsList.filter(r => r.status === 'pending').length, hint: 'En attente de validation' },
+                  { label: "En vedette sur l'accueil", value: `${featuredHomepageReviewIds.size} / 10`, hint: 'Meilleures notes' },
+                  {
+                    label: 'Note moyenne',
+                    value: reviewsList.length > 0
+                      ? `${(reviewsList.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviewsList.length).toFixed(1)} / 5`
+                      : '—',
+                    hint: reviewsList.length > 0
+                      ? `${Math.round((reviewsList.filter(r => (Number(r.rating) || 0) >= 4).length / reviewsList.length) * 100)} % de satisfaction`
+                      : 'Calcul en temps réel'
+                  }
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-card p-5">
+                    <p className="text-xs text-foreground/50">{kpi.label}</p>
+                    <p className="mt-2 font-heading text-xl font-bold tracking-tight text-foreground tabular-nums sm:text-2xl">{kpi.value}</p>
+                    <p className="mt-1 text-xs text-foreground/40">{kpi.hint}</p>
+                  </div>
+                ))}
               </div>
 
-              {/* KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Total Avis Reçus</span>
-                  <div className="mt-1 text-2xl font-bold text-foreground font-heading">{reviewsList.length}</div>
-                  <span className="text-[11px] text-foreground/50">Base globale des retours</span>
+              <section className="rounded-2xl border border-foreground/10 bg-card">
+                {/* Recherche et filtres */}
+                <div className="flex flex-col gap-3 border-b border-foreground/10 px-5 py-4 md:flex-row md:items-center">
+                  <div className="relative flex-1">
+                    <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/35" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher par voyageur, email, annonce ou commentaire..."
+                      value={reviewSearch}
+                      onChange={(e) => setReviewSearch(e.target.value)}
+                      className="w-full rounded-lg border border-foreground/10 bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-foreground/40 focus:border-foreground/30 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={reviewStatusFilter}
+                      onChange={(e) => setReviewStatusFilter(e.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-2.5 py-2 text-xs text-foreground focus:outline-none md:flex-none"
+                    >
+                      <option value="all">Tous les statuts ({reviewsList.length})</option>
+                      <option value="pending">En attente ({reviewsList.filter(r => r.status === 'pending').length})</option>
+                      <option value="approved">Publiés ({reviewsList.filter(r => (r.status || 'approved') === 'approved').length})</option>
+                      <option value="rejected">Rejetés ({reviewsList.filter(r => r.status === 'rejected').length})</option>
+                    </select>
+
+                    <select
+                      value={reviewRatingFilter}
+                      onChange={(e) => setReviewRatingFilter(e.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-foreground/10 bg-background px-2.5 py-2 text-xs text-foreground focus:outline-none md:flex-none"
+                    >
+                      <option value="all">Toutes les notes</option>
+                      <option value="5">5 étoiles</option>
+                      <option value="4">4 étoiles</option>
+                      <option value="3">3 étoiles</option>
+                      <option value="2">2 étoiles</option>
+                      <option value="1">1 étoile</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className={`rounded-2xl border p-4 ${
-                  reviewsList.some(r => r.status === 'pending')
-                    ? 'border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/10'
-                    : 'border-foreground/10 bg-card'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">En Attente de Modération</span>
-                    {reviewsList.filter(r => r.status === 'pending').length > 0 && (
-                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                {filteredReviews.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm text-foreground/50">Aucun avis ne correspond aux filtres.</p>
+                    {(reviewSearch || reviewStatusFilter !== 'all' || reviewRatingFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setReviewSearch('');
+                          setReviewStatusFilter('all');
+                          setReviewRatingFilter('all');
+                        }}
+                        className="mt-2 text-xs font-medium text-foreground/55 hover:text-foreground"
+                      >
+                        Réinitialiser les filtres
+                      </button>
                     )}
                   </div>
-                  <div className="mt-1 text-2xl font-bold text-amber-500 font-heading">
-                    {reviewsList.filter(r => r.status === 'pending').length}
-                  </div>
-                  <span className="text-[11px] text-foreground/50">Nécessite votre validation</span>
-                </div>
+                ) : (
+                  <ul className="divide-y divide-foreground/[0.07]">
+                    {filteredReviews.map((rev) => {
+                      const status = rev.status || 'approved';
+                      const isPending = status === 'pending';
+                      const isRejected = status === 'rejected';
+                      const isApproved = status === 'approved';
+                      const isFeaturedOnHome = isApproved && featuredHomepageReviewIds.has(rev.id);
 
-                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-primary uppercase tracking-wider">Carrousel Accueil (Top 10)</span>
-                    <FontAwesomeIcon icon={faStar} className="text-amber-400 text-xs" />
-                  </div>
-                  <div className="mt-1 text-2xl font-bold text-primary font-heading">
-                    {featuredHomepageReviewIds.size} <span className="text-sm font-normal text-foreground/50">/ 10 max</span>
-                  </div>
-                  <span className="text-[11px] text-foreground/50">Meilleures notes (5★ & 4★)</span>
-                </div>
-
-                <div className="rounded-2xl border border-foreground/10 bg-card p-4">
-                  <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider">Note Moyenne Globale</span>
-                  <div className="mt-1 text-2xl font-bold text-amber-500 font-heading flex items-center gap-1.5">
-                    {reviewsList.length > 0
-                      ? `${(reviewsList.reduce((acc, r) => acc + (Number(r.rating) || 5), 0) / reviewsList.length).toFixed(1)} / 5`
-                      : '—'}
-                    {reviewsList.length > 0 && <FontAwesomeIcon icon={faStar} className="text-amber-400 text-base" />}
-                  </div>
-                  <span className="text-[11px] text-emerald-500 font-medium">
-                    {reviewsList.length > 0
-                      ? `${Math.round((reviewsList.filter(r => (Number(r.rating) || 0) >= 4).length / reviewsList.length) * 100)}% de satisfaction`
-                      : 'Calcul en temps réel'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Filters & Search Toolbar */}
-              <div className="flex flex-col md:flex-row gap-3">
-                <div className="relative flex-1">
-                  <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/40 text-xs" />
-                  <input
-                    type="text"
-                    placeholder="Rechercher par voyageur, email, annonce ou commentaire..."
-                    value={reviewSearch}
-                    onChange={(e) => setReviewSearch(e.target.value)}
-                    className="w-full rounded-xl border border-foreground/15 bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="flex flex-wrap sm:flex-nowrap gap-2">
-                  <select
-                    value={reviewStatusFilter}
-                    onChange={(e) => setReviewStatusFilter(e.target.value)}
-                    className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-                  >
-                    <option value="all">Tous les statuts ({reviewsList.length})</option>
-                    <option value="pending">⏳ En attente ({reviewsList.filter(r => r.status === 'pending').length})</option>
-                    <option value="approved">✓ Validés & Publiés ({reviewsList.filter(r => (r.status || 'approved') === 'approved').length})</option>
-                    <option value="rejected">✕ Rejetés ({reviewsList.filter(r => r.status === 'rejected').length})</option>
-                  </select>
-
-                  <select
-                    value={reviewRatingFilter}
-                    onChange={(e) => setReviewRatingFilter(e.target.value)}
-                    className="rounded-xl border border-foreground/15 bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-                  >
-                    <option value="all">Toutes les notes</option>
-                    <option value="5">5 Étoiles (Excellent)</option>
-                    <option value="4">4 Étoiles (Très bien)</option>
-                    <option value="3">3 Étoiles (Moyen)</option>
-                    <option value="2">2 Étoiles (Décevant)</option>
-                    <option value="1">1 Étoile (Insatisfaisant)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Reviews List */}
-              {filteredReviews.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-foreground/20 p-12 text-center bg-card">
-                  <FontAwesomeIcon icon={faStar} className="h-10 w-10 text-foreground/20 mb-3" />
-                  <h4 className="font-heading text-base font-bold text-foreground">
-                    Aucun avis ne correspond aux filtres
-                  </h4>
-                  <p className="text-xs text-foreground/60 mt-1 max-w-sm mx-auto">
-                    Ajustez la recherche ou réinitialisez les filtres de statut et de note pour afficher les retours clients.
-                  </p>
-                  {(reviewSearch || reviewStatusFilter !== 'all' || reviewRatingFilter !== 'all') && (
-                    <button
-                      onClick={() => {
-                        setReviewSearch('');
-                        setReviewStatusFilter('all');
-                        setReviewRatingFilter('all');
-                      }}
-                      className="mt-4 rounded-xl border border-foreground/20 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/40 transition-all inline-flex items-center gap-1.5"
-                    >
-                      <span>Réinitialiser les filtres</span>
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredReviews.map((rev) => {
-                    const status = rev.status || 'approved';
-                    const isPending = status === 'pending';
-                    const isRejected = status === 'rejected';
-                    const isApproved = status === 'approved';
-                    const isFeaturedOnHome = isApproved && featuredHomepageReviewIds.has(rev.id);
-
-                    return (
-                      <div
-                        key={rev.id}
-                        className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition-all flex flex-col lg:flex-row lg:items-start justify-between gap-4 overflow-hidden ${
-                          isPending
-                            ? 'border-amber-500/40 bg-amber-500/[0.03] dark:bg-amber-500/[0.06]'
-                            : isRejected
-                            ? 'border-rose-500/30 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] opacity-80'
-                            : 'border-foreground/10 bg-card hover:border-foreground/20'
-                        }`}
-                      >
-                        <div className="space-y-2.5 flex-1 min-w-0">
-                          {/* Header row: Author + Status Badges */}
-                          <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0 overflow-hidden">
-                                {rev.author_avatar ? (
-                                  <img
-                                    src={rev.author_avatar}
-                                    alt={rev.author_name}
-                                    className="h-full w-full object-cover"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                ) : (
-                                  <span>{rev.author_name ? rev.author_name.charAt(0) : 'V'}</span>
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-heading text-sm font-bold text-foreground truncate">
-                                    {rev.author_name || 'Voyageur Bénin Beyond'}
-                                  </span>
-                                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                                    Client Vérifié
-                                  </span>
-                                </div>
-                                <span className="text-[11px] text-foreground/50 truncate block">
-                                  {rev.author_email || 'Email non renseigné'}
-                                </span>
-                              </div>
+                      return (
+                        <li key={rev.id} className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className={`min-w-0 flex-1 space-y-1.5 ${isRejected ? 'opacity-60' : ''}`}>
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                              <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                                {rev.author_name || 'Voyageur Bénin Beyond'}
+                                <span className="font-normal text-foreground/45"> · {rev.author_email || 'Email non renseigné'}</span>
+                              </p>
+                              <span className={`shrink-0 text-xs font-medium ${
+                                isPending ? 'text-amber-600' : isRejected ? 'text-rose-600' : 'text-emerald-600'
+                              }`}>
+                                {isPending ? 'À modérer' : isRejected ? 'Rejeté' : isFeaturedOnHome ? "Publié · en vedette sur l'accueil" : 'Publié'}
+                              </span>
                             </div>
 
-                            {/* Status Badges */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {isPending && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/40 px-2.5 py-0.5 text-[10.5px] font-bold text-amber-500 animate-pulse">
-                                  <FontAwesomeIcon icon={faClock} />
-                                  <span>En attente de modération</span>
-                                </span>
-                              )}
-                              {isRejected && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-0.5 text-[10.5px] font-bold text-rose-500">
-                                  <FontAwesomeIcon icon={faBan} />
-                                  <span>Rejeté / Masqué</span>
-                                </span>
-                              )}
-                              {isApproved && isFeaturedOnHome && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-primary/20 border border-amber-500/40 px-3 py-0.5 text-[10.5px] font-bold text-amber-400 shadow-sm">
-                                  <FontAwesomeIcon icon={faStar} className="text-amber-400 text-xs" />
-                                  <span>En vedette Accueil (Top 10)</span>
-                                </span>
-                              )}
-                              {isApproved && !isFeaturedOnHome && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
-                                  <FontAwesomeIcon icon={faCheck} />
-                                  <span>Validé (Catalogue)</span>
-                                </span>
-                              )}
+                            <div className="flex items-center gap-0.5 text-xs">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <FontAwesomeIcon
+                                  key={star}
+                                  icon={faStar}
+                                  className={`h-3 w-3 ${star <= (Number(rev.rating) || 5) ? 'text-amber-400' : 'text-foreground/15'}`}
+                                />
+                              ))}
+                              <span className="ml-1.5 tabular-nums text-foreground/50">{rev.rating} / 5</span>
                             </div>
+
+                            <p className="break-words text-sm leading-relaxed text-foreground/75">
+                              {rev.comment || 'Aucun commentaire écrit'}
+                            </p>
+
+                            <p className="break-words text-xs text-foreground/45">
+                              {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Récemment'}
+                              {rev.listing_title && ` · ${rev.listing_title}`}
+                              {rev.listing_id && !rev.listing_title && <span className="font-mono"> · Bien {rev.listing_id}</span>}
+                              {rev.booking_id && <span className="font-mono"> · Résa {rev.booking_id}</span>}
+                            </p>
                           </div>
 
-                          {/* Stars Rating */}
-                          <div className="flex items-center gap-1 text-amber-400 text-sm">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <FontAwesomeIcon
-                                key={star}
-                                icon={faStar}
-                                className={star <= (Number(rev.rating) || 5) ? 'text-amber-400' : 'text-foreground/20'}
-                              />
-                            ))}
-                            <span className="ml-2 text-xs font-bold text-foreground">
-                              {rev.rating} / 5
-                            </span>
-                            {Number(rev.rating) >= 5 && (
-                              <span className="text-[10px] text-emerald-500 font-semibold ml-1">
-                                (Excellent)
-                              </span>
+                          <div className="flex shrink-0 flex-wrap items-center gap-1 lg:justify-end">
+                            {isPending && (
+                              <>
+                                <button
+                                  onClick={() => handleApproveReview(rev)}
+                                  className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                  title="Valider cet avis et le rendre public"
+                                >
+                                  Publier
+                                </button>
+                                <button
+                                  onClick={() => handleRejectReview(rev)}
+                                  className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
+                                  title="Rejeter et masquer cet avis"
+                                >
+                                  Rejeter
+                                </button>
+                              </>
                             )}
-                          </div>
 
-                          {/* Comment Body */}
-                          <div className="text-xs text-foreground/85 leading-relaxed bg-muted/30 p-3 rounded-xl border border-foreground/5 break-words italic">
-                            "{rev.comment || 'Aucun commentaire écrit'}"
-                          </div>
-
-                          {/* Metadata row with experience title and dates */}
-                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10.5px] text-foreground/50 pt-1 max-w-full">
-                            <span className="shrink-0">
-                              Déposé le {rev.created_at ? new Date(rev.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Récemment'}
-                            </span>
-                            {rev.listing_title && (
-                              <span className="inline-flex items-center gap-1 bg-primary/10 border border-primary/25 text-primary px-2.5 py-0.5 rounded-md text-[10.5px] font-semibold truncate max-w-[220px]" title={rev.listing_title}>
-                                ★ {rev.listing_title}
-                              </span>
-                            )}
-                            {rev.listing_id && !rev.listing_title && (
-                              <span className="inline-flex items-center gap-1 bg-muted/50 border border-foreground/10 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[150px]" title={rev.listing_id}>
-                                Bien : {rev.listing_id}
-                              </span>
-                            )}
-                            {rev.booking_id && (
-                              <span className="inline-flex items-center gap-1 bg-muted/60 border border-foreground/10 text-foreground/70 px-2 py-0.5 rounded-md text-[10px] font-mono truncate max-w-[160px]" title={rev.booking_id}>
-                                Résa : {rev.booking_id}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Moderation Actions Column */}
-                        <div className="shrink-0 flex items-center lg:flex-col lg:items-end justify-end gap-2 border-t lg:border-t-0 pt-3 lg:pt-0 border-foreground/10">
-                          {/* If Pending: Approve or Reject */}
-                          {isPending && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <button
-                                onClick={() => handleApproveReview(rev)}
-                                className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 text-xs transition-all shadow-sm hover:shadow flex items-center gap-1.5"
-                                title="Valider cet avis et le rendre public"
-                              >
-                                <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
-                                <span>Valider & Publier</span>
-                              </button>
+                            {isApproved && (
                               <button
                                 onClick={() => handleRejectReview(rev)}
-                                className="rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5"
-                                title="Rejeter et masquer cet avis"
+                                className="rounded-md px-2.5 py-1 text-xs font-medium text-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+                                title="Masquer cet avis de la plateforme"
                               >
-                                <FontAwesomeIcon icon={faBan} className="h-3 w-3" />
-                                <span>Rejeter</span>
+                                Masquer
                               </button>
-                            </div>
-                          )}
+                            )}
 
-                          {/* If Approved: Option to unpublish / reject */}
-                          {isApproved && (
+                            {isRejected && (
+                              <button
+                                onClick={() => handleApproveReview(rev)}
+                                className="rounded-md border border-foreground/15 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                title="Réactiver et valider cet avis"
+                              >
+                                Republier
+                              </button>
+                            )}
+
                             <button
-                              onClick={() => handleRejectReview(rev)}
-                              className="rounded-xl border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5"
-                              title="Masquer cet avis de la plateforme"
+                              onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
+                              className="rounded-md p-2 text-foreground/45 transition-colors hover:bg-rose-500/10 hover:text-rose-600"
+                              title="Supprimer définitivement cet avis de la base"
                             >
-                              <FontAwesomeIcon icon={faEyeSlash} className="h-3 w-3" />
-                              <span>Masquer / Rejeter</span>
+                              <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                             </button>
-                          )}
-
-                          {/* If Rejected: Option to re-approve */}
-                          {isRejected && (
-                            <button
-                              onClick={() => handleApproveReview(rev)}
-                              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 text-xs transition-all shadow-sm flex items-center gap-1.5"
-                              title="Réactiver et valider cet avis"
-                            >
-                              <FontAwesomeIcon icon={faCheck} className="h-3 w-3" />
-                              <span>Réactiver & Publier</span>
-                            </button>
-                          )}
-
-                          {/* Permanent Delete */}
-                          <button
-                            onClick={() => handleDeleteReviewItem(rev.id, rev.author_name, rev.booking_id)}
-                            className="rounded-xl border border-rose-500/20 text-rose-500/80 hover:text-rose-600 hover:bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5"
-                            title="Supprimer définitivement cet avis de la base"
-                          >
-                            <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                            <span className="lg:hidden sm:inline">Supprimer</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
 
@@ -8531,7 +7211,7 @@ export function AdminDashboardPage() {
             <div className="px-6 py-3 bg-primary/5 border-b border-primary/15 flex items-center gap-2.5 text-[11.5px] text-foreground/80">
               <FontAwesomeIcon icon={faCircleInfo} className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>
-                <strong>Séparation des Pouvoirs :</strong> L'abonnement financier et la conformité légale sont étanches. La validation de ce dossier active la certification KYC et autorise la diffusion publique des annonces de ce propriétaire.
+                La validation de ce dossier certifie le propriétaire et publie automatiquement ses annonces.
               </span>
             </div>
 
