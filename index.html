@@ -3,12 +3,58 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <!-- Logo : icônes d'onglet, d'écran d'accueil et de moteur de recherche -->
+    <link rel="icon" href="/favicon.ico?v=4" sizes="any" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=4" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png?v=4" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=4" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=4" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="canonical" href="https://www.beninbeyond.com/" />
     <meta name="description" content="Bénin Beyond — Plateforme d'hospitalité et de voyage d'exception au Bénin. Sélection curatée de résidences de prestige, villas privées, véhicules avec chauffeur et circuits exclusifs." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Urbanist:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <title>Bénin Beyond — Résidences de Prestige, Véhicules & Expériences Exclusives</title>
+
+    <!-- Aperçu lors d'un partage (Google, WhatsApp, Facebook, X) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bénin Beyond" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://www.beninbeyond.com/" />
+    <meta property="og:title" content="Bénin Beyond — Résidences de Prestige, Véhicules & Expériences Exclusives" />
+    <meta property="og:description" content="Résidences de prestige, villas privées, véhicules avec chauffeur et expériences exclusives au Bénin." />
+    <meta property="og:image" content="https://www.beninbeyond.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Bénin Beyond" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bénin Beyond — Résidences de Prestige, Véhicules & Expériences Exclusives" />
+    <meta name="twitter:description" content="Résidences de prestige, villas privées, véhicules avec chauffeur et expériences exclusives au Bénin." />
+    <meta name="twitter:image" content="https://www.beninbeyond.com/og-image.png" />
+
+    <!-- Identité de la marque pour Google (nom du site et logo dans les résultats) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "Bénin Beyond",
+            "alternateName": "Benin Beyond",
+            "url": "https://www.beninbeyond.com/"
+          },
+          {
+            "@type": "Organization",
+            "name": "Bénin Beyond",
+            "url": "https://www.beninbeyond.com/",
+            "logo": "https://www.beninbeyond.com/logo.png",
+            "email": "contact@beninbeyond.com"
+          }
+        ]
+      }
+    </script>
   </head>
   <body class="bg-background text-foreground antialiased selection:bg-accent/30">
     <div id="root"></div>
