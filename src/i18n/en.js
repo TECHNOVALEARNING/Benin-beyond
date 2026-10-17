@@ -93,6 +93,7 @@ export const EN_TRANSLATIONS = {
   'Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.':
     'Traveller assistance & concierge available 7 days a week, 8am to 10pm WAT.',
   'Tous droits réservés.': 'All rights reserved.',
+  'Nos partenaires': 'Our partners',
 
   // Catalogue & cartes
   'Hébergements': 'Accommodation',

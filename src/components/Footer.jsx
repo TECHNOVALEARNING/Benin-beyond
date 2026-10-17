@@ -1,11 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPhone, faEnvelope } from '@fortawesome/free-solid-svg-icons';
+import { faPhone, faEnvelope, faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
 import { BrandLogo } from './BrandLogo';
 import { useHasPacks } from '../services/packService';
 import { useLanguage } from '../context/LanguageContext';
+
+// Partenaires affichés en bas de page : ajouter ici les prochains (nom + adresse du site)
+const PARTNERS = [{ name: 'TECHNOVA Learning', url: 'https://technovalearning.com/' }];
 
 export function Footer() {
   const { t } = useLanguage();
@@ -90,14 +93,35 @@ export function Footer() {
         </div>
       </div>
 
-      {/* 2. Copyright */}
+      {/* 2. Partenaires */}
+      {PARTNERS.length > 0 && (
+        <div className="border-t border-secondary-foreground/10">
+          <div className="mx-auto flex max-w-8xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 py-5 text-sm sm:justify-start md:px-12">
+            <span className="caption text-secondary-foreground/50">{t('Nos partenaires')}</span>
+            {PARTNERS.map((partner) => (
+              <a
+                key={partner.url}
+                href={partner.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 font-medium text-secondary-foreground/85 transition-colors hover:text-accent"
+              >
+                {partner.name}
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-2.5 w-2.5 opacity-60" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. Copyright */}
       <div className="border-t border-secondary-foreground/10">
         <p className="mx-auto max-w-8xl px-6 py-5 text-center text-xs text-secondary-foreground/50 sm:text-left md:px-12">
           © {currentYear} Bénin Beyond. {t('Tous droits réservés.')}
         </p>
       </div>
 
-      {/* 3. Signature monumentale : bandeau dédié, pleine largeur, lettres coupées en bas (aucun texte par-dessus) */}
+      {/* 4. Signature monumentale : bandeau dédié, pleine largeur, lettres coupées en bas (aucun texte par-dessus) */}
       <div className="pointer-events-none select-none px-4 pb-24 md:px-12" aria-hidden="true">
         <svg viewBox="0 0 1000 150" preserveAspectRatio="xMidYMax meet" className="mx-auto block h-auto w-full max-w-8xl">
           <defs>
