@@ -13,6 +13,7 @@ import { PackDetailPage } from './pages/PackDetailPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { TourismPage } from './pages/TourismPage';
+import { EventDetailPage } from './pages/EventDetailPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -66,7 +67,7 @@ export function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
+        <div className="flex min-h-screen flex-col overflow-x-clip bg-background">
           <ScrollToTop />
           <SyncErrorToast />
           {showPublicHeader && <PublicHeader />}
@@ -81,6 +82,7 @@ export function App() {
                 <Route path="/listing/:id" element={<ListingDetailPage />} />
                 <Route path="/packs" element={<PacksPage />} />
                 <Route path="/pack/:id" element={<PackDetailPage />} />
+                <Route path="/evenements/:id" element={<EventDetailPage />} />
                 <Route path="/decouvertes" element={<TourismPage />} />
                 <Route path="/tourisme" element={<TourismPage />} />
                 <Route path="/decouvrir" element={<TourismPage />} />

@@ -16,7 +16,7 @@ export function AuthLayout({ image, eyebrow, headline, points = [], children }) 
   return (
     <div className="grid min-h-screen w-full bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       {/* Panneau visuel */}
-      <aside className="relative hidden overflow-hidden lg:block">
+      <aside className="relative hidden overflow-hidden lg:sticky lg:top-0 lg:block lg:h-screen">
         <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/25" />
         <div className="relative flex h-full flex-col justify-between p-10 xl:p-14 text-white">

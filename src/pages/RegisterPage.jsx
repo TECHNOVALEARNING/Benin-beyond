@@ -2,24 +2,46 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faBuilding,
   faCircleInfo,
   faCircleCheck,
-  faEnvelope,
-  faLock,
   faEye,
   faEyeSlash,
   faArrowRight,
-  faSpinner,
-  faShieldHalved,
-  faUser,
-  faPhone,
-  faBriefcase
+  faArrowLeft,
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
-import { ScrollReveal } from '../components/ScrollReveal';
 import { AuthLayout } from '../components/AuthLayout';
 import { useLanguage } from '../context/LanguageContext';
+
+const CITIES = ['Cotonou', 'Abomey-Calavi', 'Porto-Novo', 'Ouidah', 'Grand-Popo', 'Parakou', 'Natitingou', 'Abomey', 'Bohicon', 'Lokossa', 'Djougou', 'Autre'];
+
+// Valeurs acceptées par profiles.partner_type
+const OFFERS = [
+  { id: 'villa', label: 'Logement' },
+  { id: 'hotel', label: 'Hôtel' },
+  { id: 'vehicle', label: 'Véhicule' },
+  { id: 'agency', label: 'Logements et véhicules' }
+];
+
+const INPUT =
+  'w-full rounded-xl border border-foreground/15 bg-background px-3.5 py-3 text-sm text-foreground placeholder:text-foreground/35 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15';
+const LABEL = 'mb-1.5 block text-sm font-medium text-foreground';
+
+function ChoiceButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-xl border px-3.5 py-3 text-left text-sm font-medium transition-colors ${
+        active ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-foreground/15 text-foreground/75 hover:border-foreground/35'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function RegisterPage() {
   const { t } = useLanguage();
@@ -27,10 +49,9 @@ export function RegisterPage() {
   const location = useLocation();
   const { register, loginWithGoogle, user } = useAuth();
 
-  const searchParams = new URLSearchParams(location.search);
-  const emailParam = searchParams.get('email') || '';
+  const emailParam = new URLSearchParams(location.search).get('email') || '';
 
-  // Champs d'inscription : identité, contact, type d'activité. Le propriétaire arrive ensuite sur son tableau de bord.
+  const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('+229 ');
   const [email, setEmail] = useState(() => emailParam);
@@ -38,7 +59,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [accountType, setAccountType] = useState('individual'); // 'individual' | 'business'
   const [companyName, setCompanyName] = useState('');
-  const [offer, setOffer] = useState('villa'); // valeurs acceptées par profiles.partner_type
+  const [offer, setOffer] = useState('villa');
   const [city, setCity] = useState('Cotonou');
   const [acceptTerms, setAcceptTerms] = useState(false);
 
@@ -47,51 +68,32 @@ export function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
 
+  const cleanPhone = phone.replace(/[^\d+]/g, '');
+
+  // Étape 1 : identité et accès au compte
+  const handleContinue = (e) => {
+    e.preventDefault();
+    setError('');
+    if (fullName.trim().length < 3) return setError('Veuillez renseigner votre nom complet.');
+    if (cleanPhone.replace(/\D/g, '').length < 8) return setError('Veuillez renseigner un numéro de téléphone valide.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Veuillez renseigner votre adresse e-mail.');
+    if (password.length < 6) return setError('Le mot de passe doit comporter au moins 6 caractères.');
+    setStep(2);
+  };
+
+  // Étape 2 : activité, puis création du compte
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
-
-    const cleanEmail = email.trim();
-    const cleanName = fullName.trim();
-    const cleanPhone = phone.replace(/[^\d+]/g, '');
-    if (cleanName.length < 3) {
-      setError('Veuillez renseigner votre nom complet.');
-      return;
-    }
-    if (cleanPhone.replace(/\D/g, '').length < 8) {
-      setError('Veuillez renseigner un numéro de téléphone valide.');
-      return;
-    }
-    if (!cleanEmail) {
-      setError('Veuillez renseigner votre adresse e-mail.');
-      return;
-    }
-    if (accountType === 'business' && !companyName.trim()) {
-      setError("Veuillez renseigner le nom de votre entreprise.");
-      return;
-    }
-
-    if (!password) {
-      setError('Veuillez définir un mot de passe de sécurité.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Le mot de passe doit comporter au moins 6 caractères.');
-      return;
-    }
-
-    if (!acceptTerms) {
-      setError("Veuillez accepter les conditions d'utilisation pour créer votre compte.");
-      return;
-    }
+    if (accountType === 'business' && !companyName.trim()) return setError("Veuillez renseigner le nom de votre entreprise.");
+    if (!acceptTerms) return setError("Veuillez accepter les conditions d'utilisation pour créer votre compte.");
 
     setLoading(true);
     try {
       const res = await register({
-        name: cleanName,
-        email: cleanEmail,
+        name: fullName.trim(),
+        email: email.trim(),
         phone: cleanPhone,
         password,
         role: 'owner',
@@ -105,13 +107,13 @@ export function RegisterPage() {
         try {
           localStorage.setItem('benin_beyond_just_registered', 'true');
         } catch {}
-        setTimeout(() => {
-          navigate('/dashboard/partner', { replace: true });
-        }, 600);
+        setTimeout(() => navigate('/dashboard/partner', { replace: true }), 600);
       } else {
         setError(res.error || "Impossible de créer votre compte partenaire.");
+        // Adresse déjà utilisée ou mot de passe refusé : retour à l'étape du compte
+        if (/e-mail|mot de passe/i.test(res.error || '')) setStep(1);
       }
-    } catch (err) {
+    } catch {
       setError("Une erreur inattendue est survenue lors de l'inscription.");
     } finally {
       setLoading(false);
@@ -126,9 +128,7 @@ export function RegisterPage() {
         localStorage.setItem('benin_beyond_just_registered', 'true');
       } catch {}
       const res = await loginWithGoogle('owner', 'Partenaire Bénin Beyond', '/dashboard/partner');
-      if (res?.error) {
-        setError(res.error);
-      }
+      if (res?.error) setError(res.error);
     } catch (err) {
       setError(err.message || 'Erreur lors de la connexion Google');
     } finally {
@@ -142,253 +142,220 @@ export function RegisterPage() {
       eyebrow="Espace propriétaires"
       headline="Louez votre logement ou votre véhicule aux voyageurs du monde entier."
     >
-      <div className="relative w-full">
-        <ScrollReveal delay={0} y={20}>
-          
-          {/* Session Banner if already connected */}
-          {user && (
-            <div className="mb-4 rounded-2xl bg-card border border-foreground/15 p-3.5 flex items-center justify-between gap-3 text-xs shadow-sm">
-              <div className="flex items-center gap-2 text-foreground/80">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="truncate">
-                  {t('Connecté :')} <strong>{user.name || user.email}</strong> ({user.role === 'admin' ? t("Superviseur Admin") : user.role === 'owner' || user.role === 'partner' ? t("Partenaire") : t("Voyageur")})
-                </span>
+      {user && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-foreground/10 bg-card px-4 py-3 text-xs">
+          <span className="truncate text-foreground/70">
+            {t('Connecté :')} <strong className="text-foreground">{user.name || user.email}</strong>
+          </span>
+          <Link
+            to={user.role === 'admin' || user.role === 'subadmin' ? '/admin' : user.role === 'owner' || user.role === 'partner' ? '/dashboard/partner' : '/dashboard/client'}
+            className="shrink-0 font-semibold text-primary hover:underline"
+          >
+            {t('Accéder à mon espace →')}
+          </Link>
+        </div>
+      )}
+
+      {/* En-tête et progression */}
+      <div className="mb-7">
+        <p className="text-xs font-medium text-foreground/50">{t('Étape {n} sur 2', { n: step })}</p>
+        <div className="mt-2 flex gap-1.5" aria-hidden="true">
+          <span className="h-1 flex-1 rounded-full bg-primary" />
+          <span className={`h-1 flex-1 rounded-full transition-colors duration-300 ${step === 2 ? 'bg-primary' : 'bg-foreground/10'}`} />
+        </div>
+        <h1 className="mt-5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          {step === 1 ? t('Créer votre compte Hôte') : t('Parlez-nous de votre activité')}
+        </h1>
+        <p className="mt-1.5 text-sm text-foreground/60">
+          {step === 1
+            ? t('Quelques informations pour sécuriser votre compte.')
+            : t('Ces informations nous aident à préparer votre espace propriétaire.')}
+        </p>
+      </div>
+
+      {error && (
+        <div role="alert" className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="flex items-start gap-2">
+            <FontAwesomeIcon icon={faCircleInfo} className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{t(error)}</span>
+          </span>
+          {error.includes('déjà associé') && (
+            <Link to="/login" className="shrink-0 font-semibold text-primary underline">
+              {t('Se connecter')}
+            </Link>
+          )}
+        </div>
+      )}
+
+      {successMsg && (
+        <div role="status" className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+          <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
+          <span>{t(successMsg)}</span>
+        </div>
+      )}
+
+      {step === 1 ? (
+        <div key="step-1" className="animate-fade-in">
+          <button
+            type="button"
+            onClick={handleGoogleRegister}
+            disabled={loadingGoogle || loading}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-foreground/15 bg-white py-3 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-60"
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            <span>{loadingGoogle ? t('Connexion Google...') : t("S'inscrire avec Google")}</span>
+          </button>
+
+          <div className="my-6 flex items-center gap-3 text-xs text-foreground/45">
+            <span className="h-px flex-1 bg-foreground/10" />
+            <span>{t('ou avec votre adresse e-mail')}</span>
+            <span className="h-px flex-1 bg-foreground/10" />
+          </div>
+
+          <form onSubmit={handleContinue} className="space-y-4" noValidate>
+            <div>
+              <label htmlFor="reg-name" className={LABEL}>{t('Nom complet')}</label>
+              <input id="reg-name" type="text" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t('Prénom et nom')} className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor="reg-phone" className={LABEL}>{t('Téléphone / WhatsApp')}</label>
+              <input id="reg-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+229 01 97 00 00 00" className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor="reg-email" className={LABEL}>{t('Adresse e-mail')}</label>
+              <input id="reg-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('vous@exemple.com')} className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor="reg-password" className={LABEL}>{t('Mot de passe')}</label>
+              <div className="relative">
+                <input
+                  id="reg-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('Au moins 6 caractères')}
+                  className={`${INPUT} pr-11`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? t('Masquer le mot de passe') : t('Afficher le mot de passe')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-foreground/40 transition-colors hover:text-foreground"
+                >
+                  <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="h-4 w-4" />
+                </button>
               </div>
-              <Link
-                to={user.role === 'admin' || user.role === 'subadmin' ? '/admin' : user.role === 'owner' || user.role === 'partner' ? '/dashboard/partner' : '/dashboard/client'}
-                className="font-bold text-primary hover:underline shrink-0 text-[11px]"
-              >
-                {t("Accéder à mon espace →")}
-              </Link>
+            </div>
+
+            <button
+              type="submit"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <span>{t('Continuer')}</span>
+              <FontAwesomeIcon icon={faArrowRight} className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
+      ) : (
+        <form key="step-2" onSubmit={handleSubmit} className="animate-fade-in space-y-5" noValidate>
+          <fieldset>
+            <legend className={LABEL}>{t('Vous êtes')}</legend>
+            <div className="grid grid-cols-2 gap-2.5">
+              <ChoiceButton active={accountType === 'individual'} onClick={() => setAccountType('individual')}>
+                {t('Particulier')}
+              </ChoiceButton>
+              <ChoiceButton active={accountType === 'business'} onClick={() => setAccountType('business')}>
+                {t('Professionnel')}
+              </ChoiceButton>
+            </div>
+          </fieldset>
+
+          {accountType === 'business' && (
+            <div className="animate-fade-in">
+              <label htmlFor="reg-company" className={LABEL}>{t("Nom de l'entreprise")}</label>
+              <input id="reg-company" type="text" autoComplete="organization" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('Ex : Résidence Les Cocotiers')} className={INPUT} />
             </div>
           )}
 
-          {/* Header Hôte */}
-          <div className="mb-8">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              {t("Créer votre compte Hôte")}
-            </h1>
-            <p className="mt-2 text-sm text-foreground/60">
-              {t("Rejoignez le réseau officiel de prestige au Bénin. Créez votre compte et publiez votre première annonce.")}
-            </p>
+          <fieldset>
+            <legend className={LABEL}>{t('Vous proposez')}</legend>
+            <div className="grid grid-cols-2 gap-2.5">
+              {OFFERS.map((o) => (
+                <ChoiceButton key={o.id} active={offer === o.id} onClick={() => setOffer(o.id)}>
+                  {t(o.label)}
+                </ChoiceButton>
+              ))}
+            </div>
+          </fieldset>
+
+          <div>
+            <label htmlFor="reg-city" className={LABEL}>{t('Ville principale')}</label>
+            <select id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} className={INPUT}>
+              {CITIES.map((c) => (
+                <option key={c} value={c}>{c === 'Autre' ? t('Autre ville') : c}</option>
+              ))}
+            </select>
           </div>
 
-          {/* Main Card */}
-          <div>
-            {error && (
-              <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center justify-between gap-2.5 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={faCircleInfo} className="h-4 w-4 shrink-0" />
-                  <span>{t(error)}</span>
-                </div>
-                {error.includes('déjà associé') && (
-                  <Link to="/login" className="font-bold underline text-primary shrink-0 ml-2">
-                    {t("Se connecter")}
-                  </Link>
-                )}
-              </div>
-            )}
+          <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed text-foreground/70">
+            <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-primary" />
+            <span>
+              {t("J'accepte les")}{' '}
+              <Link to="/cgu" target="_blank" className="font-medium text-primary hover:underline">{t("conditions d'utilisation")}</Link>
+              {' '}{t('et la')}{' '}
+              <Link to="/confidentialite" target="_blank" className="font-medium text-primary hover:underline">{t('politique de confidentialité')}</Link>
+              {' '}{t('de Bénin Beyond.')}
+            </span>
+          </label>
 
-            {successMsg && (
-              <div className="mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2.5 animate-fadeIn">
-                <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 shrink-0" />
-                <span>{t(successMsg)}</span>
-              </div>
-            )}
-
-            {/* Google Quick Button */}
+          <div className="flex gap-3 pt-1">
             <button
               type="button"
-              onClick={handleGoogleRegister}
-              disabled={loadingGoogle || loading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-foreground/15 bg-white text-gray-800 py-3 text-xs sm:text-sm font-semibold shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-60"
+              onClick={() => {
+                setError('');
+                setStep(1);
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-foreground/15 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <span>{loadingGoogle ? t("Connexion Google...") : t("S'inscrire avec Google")}</span>
+              <FontAwesomeIcon icon={faArrowLeft} className="h-3.5 w-3.5" />
+              <span>{t('Retour')}</span>
             </button>
-
-            <div className="relative my-5 flex items-center justify-center">
-              <div className="w-full border-t border-foreground/10" />
-              <span className="absolute bg-card px-3 text-[10px] font-medium uppercase tracking-wider text-foreground/50">
-                {t("ou avec votre adresse e-mail")}
-              </span>
-            </div>
-
-            {/* Formulaire d'inscription */}
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              <div>
-                <label htmlFor="reg-name" className="block text-xs font-bold text-foreground mb-1.5">{t('Nom complet *')}</label>
-                <div className="relative">
-                  <FontAwesomeIcon icon={faUser} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                  <input id="reg-name" type="text" autoComplete="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t('Prénom et nom')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="reg-phone" className="block text-xs font-bold text-foreground mb-1.5">{t('Téléphone / WhatsApp *')}</label>
-                  <div className="relative">
-                    <FontAwesomeIcon icon={faPhone} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                    <input id="reg-phone" type="tel" autoComplete="tel" inputMode="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+229 01 97 00 00 00" className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="reg-email" className="block text-xs font-bold text-foreground mb-1.5">{t('Adresse e-mail *')}</label>
-                  <div className="relative">
-                    <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                    <input id="reg-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('vous@exemple.com')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
-                  </div>
-                </div>
-              </div>
-
-              <fieldset>
-                <legend className="block text-xs font-bold text-foreground mb-1.5">{t('Vous êtes *')}</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'individual', label: 'Particulier' },
-                    { id: 'business', label: 'Professionnel (agence, hôtel, loueur)' }
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setAccountType(opt.id)}
-                      aria-pressed={accountType === opt.id}
-                      className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-colors ${
-                        accountType === opt.id ? 'border-primary bg-primary/10 text-primary' : 'border-foreground/15 text-foreground/70 hover:border-foreground/30'
-                      }`}
-                    >
-                      {t(opt.label)}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              {accountType === 'business' && (
-                <div>
-                  <label htmlFor="reg-company" className="block text-xs font-bold text-foreground mb-1.5">{t("Nom de l'entreprise *")}</label>
-                  <div className="relative">
-                    <FontAwesomeIcon icon={faBriefcase} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                    <input id="reg-company" type="text" autoComplete="organization" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('Ex : Résidence Les Cocotiers')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
-                  </div>
-                </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              {loading ? (
+                <>
+                  <FontAwesomeIcon icon={faSpinner} className="h-3.5 w-3.5 animate-spin" />
+                  <span>{t('Création de votre compte...')}</span>
+                </>
+              ) : (
+                <span>{t('Créer mon compte Hôte')}</span>
               )}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="reg-offer" className="block text-xs font-bold text-foreground mb-1.5">{t('Vous proposez *')}</label>
-                  <select id="reg-offer" value={offer} onChange={(e) => setOffer(e.target.value)} className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors">
-                    <option value="villa">{t('Logement')}</option>
-                    <option value="hotel">{t('Hôtel')}</option>
-                    <option value="vehicle">{t('Véhicule')}</option>
-                    <option value="agency">{t('Logements et véhicules')}</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="reg-city" className="block text-xs font-bold text-foreground mb-1.5">{t('Ville principale *')}</label>
-                  <select id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors">
-                    {['Cotonou', 'Abomey-Calavi', 'Porto-Novo', 'Ouidah', 'Grand-Popo', 'Parakou', 'Natitingou', 'Abomey', 'Bohicon', 'Lokossa', 'Djougou', 'Autre'].map((c) => (
-                      <option key={c} value={c}>{c === 'Autre' ? t('Autre ville') : c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="reg-password" className="block text-xs font-bold text-foreground mb-1.5">
-                  {t("Mot de passe *")}
-                </label>
-                <div className="relative">
-                  <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                  <input
-                    id="reg-password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="new-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={t("Au moins 6 caractères")}
-                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
-                    title={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-foreground/40 hover:text-foreground transition-colors cursor-pointer focus:outline-none"
-                  >
-                    <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-foreground/70">
-                <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
-                <span>
-                  {t("J'accepte les")}{' '}
-                  <Link to="/cgu" target="_blank" className="font-semibold text-primary hover:underline">{t("conditions d'utilisation")}</Link>
-                  {' '}{t('et la')}{' '}
-                  <Link to="/confidentialite" target="_blank" className="font-semibold text-primary hover:underline">{t('politique de confidentialité')}</Link>
-                  {' '}{t('de Bénin Beyond.')}
-                </span>
-              </label>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={loading || loadingGoogle}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
-                >
-                  {loading ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} className="animate-spin h-3.5 w-3.5" />
-                      <span>{t("Création de votre compte...")}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>{t("Créer mon compte Hôte")}</span>
-                      <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3" />
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="pt-2 text-center text-xs text-foreground/60">
-                <span>{t("Déjà inscrit sur Bénin Beyond ?")} </span>
-                <Link to="/login" className="font-bold text-primary hover:underline">
-                  {t("Se connecter")}
-                </Link>
-              </div>
-            </form>
+            </button>
           </div>
+        </form>
+      )}
 
-          {/* Contextual Reassurance Banner at bottom */}
-          <div className="mt-8 rounded-2xl border border-foreground/10 bg-card/60 p-4 text-center backdrop-blur-sm">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground mb-1">
-              <FontAwesomeIcon icon={faShieldHalved} className="text-emerald-500 h-3.5 w-3.5" />
-              <span>{t("Annonces vérifiées")}</span>
-            </div>
-            <p className="text-[11px] text-foreground/60 max-w-md mx-auto">
-              {t("Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce passe des contrôles qualité automatiques avant sa mise en ligne.")}
-            </p>
-            <div className="mt-3 pt-3 border-t border-foreground/10 flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-foreground/70">
-              <span>{t("Vous êtes un voyageur ?")}</span>
-              <Link
-                to="/"
-                className="font-bold text-accent hover:underline flex items-center gap-1"
-              >
-                <span>{t("Explorer et réserver un séjour directement")}</span>
-                <FontAwesomeIcon icon={faArrowRight} className="h-2.5 w-2.5" />
-              </Link>
-            </div>
-          </div>
-
-        </ScrollReveal>
-      </div>
+      <p className="mt-8 text-center text-sm text-foreground/60">
+        {t('Déjà inscrit sur Bénin Beyond ?')}{' '}
+        <Link to="/login" className="font-semibold text-primary hover:underline">
+          {t('Se connecter')}
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-xs text-foreground/45">
+        {t('Vous êtes un voyageur ?')}{' '}
+        <Link to="/explore" className="font-medium text-foreground/70 hover:text-primary hover:underline">
+          {t('Explorer et réserver un séjour directement')}
+        </Link>
+      </p>
     </AuthLayout>
   );
 }

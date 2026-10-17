@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useState, useEffect, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -20,7 +21,7 @@ import {
   faGem
 } from '@fortawesome/free-solid-svg-icons';
 import { ScrollReveal } from './ScrollReveal';
-import { getEvents, INITIAL_CULTURAL_EVENTS } from '../services/eventService';
+import { getEvents, INITIAL_CULTURAL_EVENTS, sortByNextDate } from '../services/eventService';
 import { useLanguage } from '../context/LanguageContext';
 
 const BENIN_CITIES = [
@@ -76,8 +77,6 @@ function getWeatherInfo(code, isDay) {
 export function BeninLiveSection({ showWeather = true, showEvents = true, className = '' }) {
   const { t } = useLanguage();
   const [events, setEvents] = useState(INITIAL_CULTURAL_EVENTS || []);
-  const [activeEventIndex, setActiveEventIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [timeString, setTimeString] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('cotonou');
 
@@ -160,38 +159,9 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
     };
   }, [selectedCity]);
 
-  // Défilement / switcher automatique si les événements dépassent 3
-  useEffect(() => {
-    if (events.length <= 3 || isPaused) return;
-
-    const timer = setInterval(() => {
-      setActiveEventIndex((prev) => (prev + 1) % events.length);
-    }, 4500);
-
-    return () => clearInterval(timer);
-  }, [events.length, isPaused]);
-
-  const nextEvent = () => {
-    if (events.length <= 1) return;
-    setActiveEventIndex((prev) => (prev + 1) % events.length);
-  };
-
-  const prevEvent = () => {
-    if (events.length <= 1) return;
-    setActiveEventIndex((prev) => (prev - 1 + events.length) % events.length);
-  };
-
-  // Sélection des événements à afficher (3 événements visibles avec rotation fluide si > 3)
-  const visibleEvents = useMemo(() => {
-    if (events.length === 0) return [];
-    if (events.length <= 3) return events;
-
-    const items = [];
-    for (let i = 0; i < 3; i++) {
-      items.push(events[(activeEventIndex + i) % events.length]);
-    }
-    return items;
-  }, [events, activeEventIndex]);
+  // Tous les événements, les prochains d'abord ; chacun mène à sa page de détail
+  const featuredEvents = useMemo(() => sortByNextDate(events), [events]);
+  const loop = useMemo(() => [...featuredEvents, ...featuredEvents], [featuredEvents]);
 
   const weatherInfo = getWeatherInfo(weatherData.code, weatherData.isDay);
 
@@ -297,134 +267,66 @@ export function BeninLiveSection({ showWeather = true, showEvents = true, classN
       </ScrollReveal>
       )}
 
-      {/* 2. Cultural & Touristic Events Section */}
+      {/* 2. Événements culturels & histoire : 4 cartes cliquables vers leur page de détail */}
       {showEvents && events.length > 0 && (
-        <div
-          className="mx-auto max-w-8xl px-6 py-10 md:px-12"
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-        >
-          <ScrollReveal delay={50} y={20} className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-8">
+        <div className="mx-auto max-w-8xl px-6 py-12 md:px-12">
+          <div className="mb-6 flex items-end justify-between gap-4">
             <div>
-              <p className="caption text-accent font-semibold tracking-wider flex items-center gap-2">
-                <FontAwesomeIcon icon={faGem} className="h-3.5 w-3.5" />
-                <span>{t("En direct du Bénin")}</span>
-              </p>
-              <h3 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">{t("En direct du Bénin")}</p>
+              <h3 className="mt-1.5 font-heading text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 {t("Événements culturels, Histoires & Saison touristique")}
               </h3>
             </div>
-
-            {/* Navigation Switcher Controls (visibles si plus de 3 événements) */}
-            {events.length > 3 && (
-              <div className="flex items-center gap-3">
-                <div className="text-xs font-semibold text-foreground/50">
-                  {activeEventIndex + 1} / {events.length}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={prevEvent}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
-                    title={t("Événement précédent")}
-                  >
-                    <FontAwesomeIcon icon={faChevronLeft} className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={nextEvent}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card hover:bg-primary hover:text-white text-foreground transition-all active:scale-95 shadow-sm"
-                    title={t("Événement suivant")}
-                  >
-                    <FontAwesomeIcon icon={faChevronRight} className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </ScrollReveal>
-
-          {/* Dynamic Events Cards Grid with Smooth Transition */}
-          <div
-            className={`grid gap-6 ${
-              visibleEvents.length === 1
-                ? 'grid-cols-1 max-w-md mx-auto'
-                : visibleEvents.length === 2
-                ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto'
-                : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-            }`}
-          >
-            {visibleEvents.map((event, idx) => (
-              <div
-                key={`${event.id}-${idx}`}
-                className="group relative h-full overflow-hidden rounded-2xl border border-foreground/10 bg-card hover:border-primary/40 hover:shadow-xl transition-all duration-500 hover:-translate-y-1 flex flex-col"
-              >
-                {/* Event Image */}
-                <div className="relative h-48 w-full overflow-hidden bg-muted shrink-0">
-                  <img
-                    src={event.image}
-                    alt={event.title}
-                    className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-                  {/* Badge */}
-                  <div className="absolute left-3 top-3">
-                    <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
-                      {event.badge}
-                    </span>
-                  </div>
-
-                  {/* Period tag */}
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-xs font-semibold text-white">
-                    <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5 text-accent" />
-                    <span>{event.period}</span>
-                  </div>
-                </div>
-
-                {/* Event Info */}
-                <div className="p-5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h4 className="font-heading text-base font-bold text-foreground group-hover:text-primary transition-colors">
-                      {event.title}
-                    </h4>
-
-                    <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground/60">
-                      <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 text-primary/70 shrink-0" />
-                      <span>{event.location}</span>
-                    </p>
-
-                    <p className="mt-2.5 text-xs leading-relaxed text-foreground/75 line-clamp-2">
-                      {event.description}
-                    </p>
-                  </div>
-
-                  {event.tag && (
-                    <div className="mt-4 pt-3 border-t border-foreground/5 flex items-center justify-between text-[11px] text-foreground/50">
-                      <span className="rounded-md bg-foreground/5 px-2 py-0.5 text-primary font-medium">
-                        {event.tag}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
           </div>
 
-          {/* Carousel Indicator Dots if > 3 */}
-          {events.length > 3 && (
-            <div className="flex items-center justify-center gap-2 mt-6">
-              {events.map((_, dotIdx) => (
-                <button
-                  key={dotIdx}
-                  onClick={() => setActiveEventIndex(dotIdx)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    dotIdx === activeEventIndex
-                      ? 'w-6 bg-primary'
-                      : 'w-2 bg-foreground/20 hover:bg-foreground/40'
-                  }`}
-                  title={`${t("Aller à l'événement")} ${dotIdx + 1}`}
-                />
+          {/* Défilement continu sur une seule ligne (pause au survol), liste doublée pour une boucle sans saut */}
+          <div className="marquee-viewport relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_4%,black_96%,transparent)]">
+            <div
+              className="flex w-max animate-marquee hover:[animation-play-state:paused] focus-within:[animation-play-state:paused]"
+              style={{ animationDuration: `${Math.max(featuredEvents.length, 3) * 7}s` }}
+            >
+              {loop.map((event, idx) => (
+                <Link
+                  key={`${event.id}-${idx}`}
+                  to={`/evenements/${encodeURIComponent(event.id)}`}
+                  className="group mr-5 w-64 shrink-0 sm:w-72"
+                  aria-hidden={idx >= featuredEvents.length ? true : undefined}
+                  tabIndex={idx >= featuredEvents.length ? -1 : undefined}
+                >
+                  <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted">
+                    <img
+                      src={event.image}
+                      alt={event.title}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+                    {event.badge && (
+                      <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black">
+                        {event.badge}
+                      </span>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-white/85">
+                        <FontAwesomeIcon icon={faCalendarDays} className="h-3 w-3 text-accent" />
+                        <span>{event.period}</span>
+                      </p>
+                      <h4 className="mt-1 font-heading text-lg font-bold leading-snug">{event.title}</h4>
+                    </div>
+                  </div>
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-foreground/55">
+                    <FontAwesomeIcon icon={faLocationDot} className="h-3 w-3 shrink-0 text-primary/70" />
+                    <span className="truncate">{event.location}</span>
+                  </p>
+                  <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-foreground/70">{event.description}</p>
+                  <span className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                    {t('Découvrir')}
+                    <FontAwesomeIcon icon={faChevronRight} className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
               ))}
             </div>
-          )}
+          </div>
         </div>
       )}
     </section>

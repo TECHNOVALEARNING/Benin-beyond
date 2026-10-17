@@ -532,3 +532,27 @@
 }
 
 
+
+/* Défilement continu des événements (accueil) */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 50s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+  /* Sans animation : défilement manuel */
+  .marquee-viewport {
+    overflow-x: auto;
+  }
+}
