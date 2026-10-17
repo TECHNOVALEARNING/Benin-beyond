@@ -775,7 +775,8 @@ export function AuthProvider({ children }) {
     cip = '',
     kycDocType = '',
     kycDocUrl = '',
-    password = ''
+    password = '',
+    city = ''
   }) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const assignedRole = resolveUserRole(cleanEmail, role);
@@ -803,6 +804,7 @@ export function AuthProvider({ children }) {
       role: assignedRole,
       company: assignedRole === 'owner' ? (company || 'Partenaire Hébergement & Mobilité') : undefined,
       partner_type: partnerType,
+      city,
       tax_id: taxId,
       rccm: rccm,
       cip: cip,
@@ -839,6 +841,7 @@ export function AuthProvider({ children }) {
               company: company || '',
               phone: phone || '',
               partner_type: partnerType,
+              city: city || '',
               tax_id: taxId,
               rccm: rccm,
               cip: cip,

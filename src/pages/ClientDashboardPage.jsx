@@ -29,6 +29,7 @@ import { ScrollReveal } from '../components/ScrollReveal';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 import { useHasPacks } from '../services/packService';
+import { formatPaymentMethod } from '../utils/paymentMethod';
 
 export function ClientDashboardPage() {
   const { user, logout, upgradeToOwner } = useAuth();
@@ -687,7 +688,7 @@ export function ClientDashboardPage() {
                     </div>
                     <div className="flex justify-between py-1 border-b border-foreground/5">
                       <span className="text-foreground/60">Mode de règlement :</span>
-                      <span className="font-semibold text-foreground">{selectedVoucher.payment_method || 'Paiement Sécurisé'}</span>
+                      <span className="font-semibold text-foreground">{formatPaymentMethod(selectedVoucher.payment_method)}</span>
                     </div>
                     <div className="flex justify-between py-2 text-sm font-bold text-primary border-t border-foreground/10 mt-2">
                       <span>Montant Total Réglé :</span>

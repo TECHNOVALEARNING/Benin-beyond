@@ -27,6 +27,7 @@ import { ScrollReveal } from '../components/ScrollReveal';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 import { useLanguage } from '../context/LanguageContext';
+import { formatPaymentMethod } from '../utils/paymentMethod';
 
 const processedNyoleCallbacks = new Set();
 
@@ -100,7 +101,7 @@ export function CheckoutPage() {
       }
 
       setIsVerifyingPayment(true);
-      setVerificationMessage(t("Validation de votre paiement auprès de Nyole…"));
+      setVerificationMessage(t("Validation de votre paiement…"));
 
       try {
         let result = await verifyNyolePayment(bookingRef);
@@ -130,7 +131,7 @@ export function CheckoutPage() {
           // confirmée automatiquement à réception de la notification Nyole.
           clearPendingCheckout();
           setPaymentVerificationError(
-            t('Votre paiement est en cours de confirmation. Votre réservation {ref} est bien enregistrée et sera confirmée automatiquement dès que Nyole nous notifie le règlement. Inutile de payer à nouveau.', { ref: bookingRef })
+            t('Votre paiement est en cours de confirmation. Votre réservation {ref} est bien enregistrée et sera confirmée automatiquement dès réception du règlement. Inutile de payer à nouveau.', { ref: bookingRef })
           );
         }
       } catch (err) {
@@ -255,10 +256,10 @@ export function CheckoutPage() {
       setIsSubmitting(false);
       setAlertModal({
         isOpen: true,
-        title: t("Initialisation du paiement Nyole"),
+        title: t("Initialisation du paiement"),
         message:
           checkoutRes.error ||
-          t("Une erreur est survenue lors de l’initialisation de votre session de paiement sécurisé Nyole. Veuillez réessayer dans quelques instants.")
+          t("Une erreur est survenue lors de l’initialisation de votre paiement sécurisé. Veuillez réessayer dans quelques instants.")
       });
     }
   };
@@ -278,7 +279,7 @@ export function CheckoutPage() {
         </h1>
         <div className="mt-4 rounded-2xl bg-card border-2 border-primary/30 p-4 shadow-lg">
           <p className="text-foreground text-base sm:text-lg font-bold leading-relaxed">
-            {verificationMessage || 'Validation immédiate de votre réservation auprès de Nyole…'}
+            {verificationMessage || t('Validation de votre paiement…')}
           </p>
           <p className="text-foreground/80 text-xs sm:text-sm font-medium mt-1">
             {t("Veuillez ne pas fermer cette fenêtre. Nous finalisons vos vouchers officiels.")}
@@ -286,7 +287,7 @@ export function CheckoutPage() {
         </div>
         <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-5 py-2 text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 font-bold shadow-sm">
           <FontAwesomeIcon icon={faLock} className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span>{t("Passerelle Sécurisée Nyole Pay — Chiffrement bancaire SSL")}</span>
+          <span>{t("Paiement sécurisé — Chiffrement bancaire SSL")}</span>
         </div>
       </div>
     );
@@ -323,7 +324,7 @@ export function CheckoutPage() {
             </p>
             <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3.5 py-1 text-xs text-accent font-medium">
               <FontAwesomeIcon icon={faCircleCheck} className="h-3 w-3" />
-              <span>{t("Paiement validé avec succès via Nyole Pay")}</span>
+              <span>{t("Paiement validé avec succès")}</span>
             </div>
           </div>
 
@@ -358,7 +359,7 @@ export function CheckoutPage() {
             <div className="mt-6 flex items-center justify-between border-t border-foreground/10 pt-4">
               <span className="font-semibold text-foreground">{t("Mode de paiement")}</span>
               <span className="font-medium text-foreground/80 text-sm">
-                {confirmedBooking.payment_method || 'Nyole Pay'}
+                {formatPaymentMethod(confirmedBooking.payment_method)}
               </span>
             </div>
 
@@ -451,7 +452,7 @@ export function CheckoutPage() {
             <FontAwesomeIcon icon={faTriangleExclamation} className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
             <div className="space-y-0.5">
               <p className="font-bold text-base text-amber-900 dark:text-amber-300">{t("Paiement interrompu")}</p>
-              <p className="text-sm font-medium text-foreground">{t("Vous avez interrompu le règlement sur la passerelle Nyole. Aucun montant n’a été débité.")}</p>
+              <p className="text-sm font-medium text-foreground">{t("Vous avez interrompu le règlement. Aucun montant n’a été débité.")}</p>
             </div>
           </div>
           <button
@@ -488,12 +489,12 @@ export function CheckoutPage() {
               {t("Paiement Sécurisé")}
             </h1>
             <p className="mt-1 text-sm text-foreground/60">
-              {t("Finalisez votre réservation en toute sécurité avec la passerelle officielle Nyole.")}
+              {t("Finalisez votre réservation en toute sécurité par Mobile Money ou carte bancaire.")}
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-1 text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
             <FontAwesomeIcon icon={faLock} className="h-3 w-3" />
-            <span>{t("Passerelle Nyole Active")}</span>
+            <span>{t("Paiement sécurisé")}</span>
           </div>
         </div>
       </ScrollReveal>
@@ -557,12 +558,12 @@ export function CheckoutPage() {
                   {isSubmitting ? (
                     <>
                       <FontAwesomeIcon icon={faSpinner} className="h-5 w-5 animate-spin" />
-                      <span>{t("Redirection vers la passerelle Nyole…")}</span>
+                      <span>{t("Redirection vers la page de paiement…")}</span>
                     </>
                   ) : (
                     <>
                       <FontAwesomeIcon icon={faLock} className="h-4 w-4" />
-                      <span>{t('Payer {amount} avec Nyole', { amount: formatPrice(finalTotal) })}</span>
+                      <span>{t('Payer {amount}', { amount: formatPrice(finalTotal) })}</span>
                     </>
                   )}
                 </button>
@@ -588,7 +589,7 @@ export function CheckoutPage() {
 
               <div className="flex justify-between text-foreground/80">
                 <span>{t("Passerelle de paiement")}</span>
-                <span className="text-primary font-semibold">Nyole Pay</span>
+                <span className="text-primary font-semibold">{t('Mobile Money / Carte')}</span>
               </div>
             </div>
 

@@ -72,6 +72,7 @@ import { BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 import { getVerificationApplication, getLocalVerificationApplication } from '../services/ownerVerificationService';
+import { formatPaymentMethod } from '../utils/paymentMethod';
 
 /** Ligne Supabase « payouts » → format affiché dans le tableau de bord. */
 function normalizePayout(p) {
@@ -1490,7 +1491,7 @@ export function PartnerDashboardPage() {
                             </td>
 
                             <td className="px-5 py-3 text-xs text-foreground/60">
-                              {b.payment_method}
+                              {formatPaymentMethod(b.payment_method)}
                             </td>
 
                             <td className="whitespace-nowrap px-5 py-3 text-xs font-medium">
@@ -2703,7 +2704,7 @@ export function PartnerDashboardPage() {
                           <tr key={b.id}>
                             <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-foreground/70">{b.booking_ref}</td>
                             <td className="px-5 py-3 text-foreground">{b.customer_name}</td>
-                            <td className="px-5 py-3 text-foreground/60">{b.payment_method}</td>
+                            <td className="px-5 py-3 text-foreground/60">{formatPaymentMethod(b.payment_method)}</td>
                             <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground">{formatPrice(b.gross_amount)}</td>
                             <td className="whitespace-nowrap px-5 py-3 tabular-nums text-foreground/60">−{formatPrice(b.commission_amount)}</td>
                             <td className="whitespace-nowrap px-5 py-3 font-medium tabular-nums text-foreground">{formatPrice(b.net_amount)}</td>
@@ -3860,7 +3861,7 @@ export function PartnerDashboardPage() {
               </div>
               <div className="flex justify-between text-[11px] text-foreground/50 pt-1">
                 <span>Mode de Paiement :</span>
-                <span>{selectedBookingModal.payment_method}</span>
+                <span>{formatPaymentMethod(selectedBookingModal.payment_method)}</span>
               </div>
             </div>
 

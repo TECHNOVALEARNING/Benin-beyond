@@ -1,3 +1,4 @@
+import { formatPaymentMethod } from './paymentMethod';
 /**
  * Utilitaire d'impression et d'export de factures & vouchers officiels Bénin Beyond
  * - Garantit un rendu A4 haute définition sans page blanche
@@ -15,7 +16,7 @@ export function generateInvoiceHtml(booking, customer = null, options = {}) {
   const listingTitle = booking?.listing_title || booking?.items?.[0]?.title || booking?.title || (isVehicle ? 'Location de Véhicule de Prestige' : 'Séjour d\'Exception Bénin Beyond');
   const location = booking?.location || booking?.city || 'Bénin (Littoral)';
   const dates = booking?.dates || booking?.period || 'Selon calendrier convenu';
-  const paymentMethod = booking?.payment_method || 'Paiement Sécurisé en Ligne';
+  const paymentMethod = formatPaymentMethod(booking?.payment_method);
   
   const rawTotal = booking?.total_amount || booking?.gross_amount || booking?.amount || 0;
   const formattedTotal = new Intl.NumberFormat('fr-FR').format(Number(rawTotal) || 0) + ' FCFA';

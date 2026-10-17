@@ -46,13 +46,13 @@ export async function startNyoleCheckout(booking) {
       const serverMessage = await error?.context?.json?.().then((d) => d?.error).catch(() => null);
       return {
         success: false,
-        error: serverMessage || data?.error || 'Impossible de contacter le service de paiement Nyole.'
+        error: serverMessage || data?.error || 'Impossible de contacter le service de paiement.'
       };
     }
     return { success: true, bookingRef: data.booking_ref, sessionId: data.session_id, url: data.url };
   } catch (err) {
     console.error('[Nyole] Erreur démarrage paiement:', err);
-    return { success: false, error: err?.message || 'Impossible de contacter le service de paiement Nyole.' };
+    return { success: false, error: err?.message || 'Impossible de contacter le service de paiement.' };
   }
 }
 

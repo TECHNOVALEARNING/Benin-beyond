@@ -11,7 +11,10 @@ import {
   faEyeSlash,
   faArrowRight,
   faSpinner,
-  faShieldHalved
+  faShieldHalved,
+  faUser,
+  faPhone,
+  faBriefcase
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
@@ -27,10 +30,17 @@ export function RegisterPage() {
   const searchParams = new URLSearchParams(location.search);
   const emailParam = searchParams.get('email') || '';
 
-  // Form states : uniquement email & mot de passe ; le propriétaire arrive ensuite directement sur son tableau de bord
+  // Champs d'inscription : identité, contact, type d'activité. Le propriétaire arrive ensuite sur son tableau de bord.
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('+229 ');
   const [email, setEmail] = useState(() => emailParam);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [accountType, setAccountType] = useState('individual'); // 'individual' | 'business'
+  const [companyName, setCompanyName] = useState('');
+  const [offer, setOffer] = useState('villa'); // valeurs acceptées par profiles.partner_type
+  const [city, setCity] = useState('Cotonou');
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -43,8 +53,22 @@ export function RegisterPage() {
     setSuccessMsg('');
 
     const cleanEmail = email.trim();
+    const cleanName = fullName.trim();
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    if (cleanName.length < 3) {
+      setError('Veuillez renseigner votre nom complet.');
+      return;
+    }
+    if (cleanPhone.replace(/\D/g, '').length < 8) {
+      setError('Veuillez renseigner un numéro de téléphone valide.');
+      return;
+    }
     if (!cleanEmail) {
       setError('Veuillez renseigner votre adresse e-mail.');
+      return;
+    }
+    if (accountType === 'business' && !companyName.trim()) {
+      setError("Veuillez renseigner le nom de votre entreprise.");
       return;
     }
 
@@ -58,12 +82,22 @@ export function RegisterPage() {
       return;
     }
 
+    if (!acceptTerms) {
+      setError("Veuillez accepter les conditions d'utilisation pour créer votre compte.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await register({
+        name: cleanName,
         email: cleanEmail,
+        phone: cleanPhone,
         password,
-        role: 'owner'
+        role: 'owner',
+        company: accountType === 'business' ? companyName.trim() : '',
+        partnerType: offer,
+        city
       });
 
       if (res.success) {
@@ -107,11 +141,6 @@ export function RegisterPage() {
       image="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1600&q=85"
       eyebrow="Espace propriétaires"
       headline="Louez votre logement ou votre véhicule aux voyageurs du monde entier."
-      points={[
-        'Inscription gratuite, sans dossier à fournir',
-        'Votre annonce en ligne dès qu’elle respecte la charte qualité',
-        'Paiements sécurisés et versements sur Mobile Money ou compte bancaire'
-      ]}
     >
       <div className="relative w-full">
         <ScrollReveal delay={0} y={20}>
@@ -190,38 +219,100 @@ export function RegisterPage() {
               </span>
             </div>
 
-            {/* Email + Mot de passe Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Formulaire d'inscription */}
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               <div>
-                <label className="block text-xs font-bold text-foreground mb-1.5">
-                  {t("Adresse e-mail professionnelle / de gestion *")}
-                </label>
+                <label htmlFor="reg-name" className="block text-xs font-bold text-foreground mb-1.5">{t('Nom complet *')}</label>
                 <div className="relative">
-                  <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="direction@votre-residence.bj"
-                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
-                  />
+                  <FontAwesomeIcon icon={faUser} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                  <input id="reg-name" type="text" autoComplete="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t('Prénom et nom')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="reg-phone" className="block text-xs font-bold text-foreground mb-1.5">{t('Téléphone / WhatsApp *')}</label>
+                  <div className="relative">
+                    <FontAwesomeIcon icon={faPhone} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                    <input id="reg-phone" type="tel" autoComplete="tel" inputMode="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+229 01 97 00 00 00" className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="reg-email" className="block text-xs font-bold text-foreground mb-1.5">{t('Adresse e-mail *')}</label>
+                  <div className="relative">
+                    <FontAwesomeIcon icon={faEnvelope} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                    <input id="reg-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('vous@exemple.com')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
+                  </div>
+                </div>
+              </div>
+
+              <fieldset>
+                <legend className="block text-xs font-bold text-foreground mb-1.5">{t('Vous êtes *')}</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'individual', label: 'Particulier' },
+                    { id: 'business', label: 'Professionnel (agence, hôtel, loueur)' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setAccountType(opt.id)}
+                      aria-pressed={accountType === opt.id}
+                      className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-colors ${
+                        accountType === opt.id ? 'border-primary bg-primary/10 text-primary' : 'border-foreground/15 text-foreground/70 hover:border-foreground/30'
+                      }`}
+                    >
+                      {t(opt.label)}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {accountType === 'business' && (
+                <div>
+                  <label htmlFor="reg-company" className="block text-xs font-bold text-foreground mb-1.5">{t("Nom de l'entreprise *")}</label>
+                  <div className="relative">
+                    <FontAwesomeIcon icon={faBriefcase} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
+                    <input id="reg-company" type="text" autoComplete="organization" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('Ex : Résidence Les Cocotiers')} className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-4 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors" />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="reg-offer" className="block text-xs font-bold text-foreground mb-1.5">{t('Vous proposez *')}</label>
+                  <select id="reg-offer" value={offer} onChange={(e) => setOffer(e.target.value)} className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors">
+                    <option value="villa">{t('Logement')}</option>
+                    <option value="hotel">{t('Hôtel')}</option>
+                    <option value="vehicle">{t('Véhicule')}</option>
+                    <option value="agency">{t('Logements et véhicules')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="reg-city" className="block text-xs font-bold text-foreground mb-1.5">{t('Ville principale *')}</label>
+                  <select id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-xl border border-foreground/15 bg-background/50 px-3.5 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors">
+                    {['Cotonou', 'Abomey-Calavi', 'Porto-Novo', 'Ouidah', 'Grand-Popo', 'Parakou', 'Natitingou', 'Abomey', 'Bohicon', 'Lokossa', 'Djougou', 'Autre'].map((c) => (
+                      <option key={c} value={c}>{c === 'Autre' ? t('Autre ville') : c}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-foreground mb-1.5">
-                  {t("Mot de passe de sécurité *")}
+                <label htmlFor="reg-password" className="block text-xs font-bold text-foreground mb-1.5">
+                  {t("Mot de passe *")}
                 </label>
                 <div className="relative">
                   <FontAwesomeIcon icon={faLock} className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground/40" />
                   <input
+                    id="reg-password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t("Au moins 6 caractères")}
-                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2.5 text-xs sm:text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
+                    className="w-full rounded-xl border border-foreground/15 bg-background/50 pl-10 pr-11 py-2.5 text-sm text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
                   />
                   <button
                     type="button"
@@ -230,16 +321,21 @@ export function RegisterPage() {
                     title={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-foreground/40 hover:text-foreground transition-colors cursor-pointer focus:outline-none"
                   >
-                    <FontAwesomeIcon
-                      icon={showPassword ? faEyeSlash : faEye}
-                      className="h-3.5 w-3.5"
-                    />
+                    <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <p className="text-[10px] text-foreground/50 mt-1">
-                  {t("Ce mot de passe protégera l'accès à vos annonces, tarifs et versements financiers.")}
-                </p>
               </div>
+
+              <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-foreground/70">
+                <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+                <span>
+                  {t("J'accepte les")}{' '}
+                  <Link to="/cgu" target="_blank" className="font-semibold text-primary hover:underline">{t("conditions d'utilisation")}</Link>
+                  {' '}{t('et la')}{' '}
+                  <Link to="/confidentialite" target="_blank" className="font-semibold text-primary hover:underline">{t('politique de confidentialité')}</Link>
+                  {' '}{t('de Bénin Beyond.')}
+                </span>
+              </label>
 
               <div className="pt-2">
                 <button

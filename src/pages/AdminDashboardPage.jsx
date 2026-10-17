@@ -84,6 +84,7 @@ import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
+import { formatPaymentMethod } from '../utils/paymentMethod';
 
 // ======================================================================
 // Utilitaires KYC — Documents requis et badges de statut vérification
@@ -1278,7 +1279,7 @@ export function AdminDashboardPage() {
         b.created_at ? new Date(b.created_at).toLocaleDateString('fr-FR') : '',
         b.customer_name,
         b.listing_title,
-        b.payment_method,
+        formatPaymentMethod(b.payment_method),
         gross,
         comm,
         gross - comm,
@@ -3720,7 +3721,7 @@ export function AdminDashboardPage() {
                       { label: 'Carte Visa / Mastercard', value: paymentBreakdown.card },
                       { label: 'Celtiis Cash', value: paymentBreakdown.celtiis },
                       { label: 'Moov Money', value: paymentBreakdown.moov },
-                      { label: 'Nyole (canal non précisé)', value: paymentBreakdown.other }
+                      { label: 'Paiement en ligne (canal non précisé)', value: paymentBreakdown.other }
                     ].map((row) => (
                       <li key={row.label} className="flex items-center gap-4 px-5 py-3.5">
                         <span className="w-28 shrink-0 text-sm text-foreground/75 sm:w-52">{row.label}</span>

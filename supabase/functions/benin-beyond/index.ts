@@ -272,7 +272,7 @@ async function syncBooking({
         .update({
           payment_status: 'paid',
           status: booking.status === 'pending' || booking.status === 'cancelled' ? 'confirmed' : booking.status,
-          payment_method: `Nyole (${nyole.provider || 'Mobile Money / Carte'})`,
+          payment_method: 'Mobile Money / Carte',
           nyole_session_id: effectiveSessionId,
           nyole_order_id: nyole.order_id || null,
           updated_at: now
@@ -630,7 +630,7 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     owner_email: firstItem.owner_email || null,
     gross_amount: total,
     net_amount: net,
-    payment_method: 'Nyole Pay'
+    payment_method: 'Paiement en ligne'
   };
   if (isUuid(firstItem.owner_id)) extendedPayload.owner_id = firstItem.owner_id;
 
@@ -679,7 +679,7 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     // Pas de session : la réservation en attente ne doit pas bloquer les dates
     await supabase.from('bookings').delete().eq('id', bookingId);
     return json(
-      { error: session?.message || session?.error || 'Impossible de contacter le service de paiement Nyole.' },
+      { error: session?.message || session?.error || 'Impossible de contacter le service de paiement.' },
       502
     );
   }

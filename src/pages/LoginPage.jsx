@@ -378,11 +378,6 @@ export function LoginPage() {
       image="https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1600&q=85"
       eyebrow="Bon retour parmi nous"
       headline="Vos séjours et vos trajets au Bénin, au même endroit."
-      points={[
-        'Retrouvez vos réservations, reçus et vouchers',
-        'Paiement sécurisé par Mobile Money ou carte',
-        'Assistance 7j/7 pendant tout votre séjour'
-      ]}
     >
       <div className="relative w-full">
         <ScrollReveal delay={0} y={15}>
