@@ -12,148 +12,113 @@ export function Footer() {
   const currentYear = new Date().getFullYear();
   const hasPacks = useHasPacks();
 
+  const navLinks = [
+    { to: '/explore?type=stay', label: 'Séjourner' },
+    { to: '/explore?type=drive', label: 'Véhicules' },
+    { to: '/decouvertes', label: 'Découvertes' },
+    ...(hasPacks ? [{ to: '/packs', label: 'Formules & Packs' }] : []),
+    { to: '/panier', label: 'Mon panier' }
+  ];
+
+  const legalLinks = [
+    { to: '/confidentialite', label: 'Politique de Confidentialité' },
+    { to: '/cgu', label: "Conditions d'Utilisation (CGU)" }
+  ];
+
   return (
     <footer className="relative overflow-hidden border-t border-foreground/10 bg-secondary text-secondary-foreground">
-      {/* Filigrane Monumental "BÉNIN BEYOND" (Directement derrière les écrits du footer, 100% des lettres visibles) */}
-      <div 
-        className="pointer-events-none select-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-0 flex items-center justify-center overflow-hidden px-6 md:px-12"
-        aria-hidden="true"
-      >
-        <svg
-          viewBox="0 0 1600 210"
-          className="w-full max-w-8xl h-auto select-none pointer-events-none"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <defs>
-            <linearGradient id="footerWatermarkGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="white" stopOpacity="0.14" />
-              <stop offset="50%" stopColor="white" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="white" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          <text
-            x="50%"
-            y="62%"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="url(#footerWatermarkGrad)"
-            className="font-heading font-black uppercase"
-            fontSize="120"
-            textLength="1360"
-            lengthAdjust="spacing"
-            style={{ fontFamily: 'var(--font-heading, "Outfit", sans-serif)', fontWeight: 900 }}
-          >
-            BÉNIN BEYOND
-          </text>
-        </svg>
-      </div>
-
-      {/* 1. Main Navigation & Info Grid (Balanced 4-column layout) */}
-      <div className="relative z-10 mx-auto grid max-w-8xl gap-10 px-6 pt-16 pb-12 sm:grid-cols-2 md:grid-cols-12 md:px-12">
-        {/* Brand Col */}
-        <div className="sm:col-span-2 md:col-span-5 lg:col-span-4">
+      {/* 1. Colonnes d'information */}
+      <div className="mx-auto grid max-w-8xl gap-10 px-6 pt-14 pb-10 sm:grid-cols-2 md:px-12 md:pt-16 lg:grid-cols-12">
+        <div className="sm:col-span-2 lg:col-span-5">
           <ScrollReveal delay={0} y={20}>
             <BrandLogo size="md" textColor="text-secondary-foreground" />
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-secondary-foreground/70">
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-secondary-foreground/70">
               {t("L'écosystème d'hospitalité et de mobilité curaté à travers le Bénin. Là où l'héritage terrestre rencontre la précision digitale.")}
             </p>
           </ScrollReveal>
         </div>
 
-        {/* Navigation Col */}
-        <div className="md:col-span-2 lg:col-span-2">
+        <div className="lg:col-span-2">
           <ScrollReveal delay={60} y={20}>
-            <p className="caption text-secondary-foreground/50">{t("Navigation")}</p>
+            <p className="caption text-secondary-foreground/50">{t('Navigation')}</p>
             <ul className="mt-4 space-y-3 text-sm">
-              <li>
-                <Link to="/explore?type=stay" className="hover:text-accent transition-colors">
-                  {t("Séjourner")}
-                </Link>
-              </li>
-              <li>
-                <Link to="/explore?type=drive" className="hover:text-accent transition-colors">
-                  {t("Véhicules")}
-                </Link>
-              </li>
-              <li>
-                <Link to="/decouvertes" className="hover:text-accent transition-colors">
-                  {t("Découvertes")}
-                </Link>
-              </li>
-              {hasPacks && (
-                <li>
-                  <Link to="/packs" className="hover:text-accent transition-colors">
-                    {t("Formules & Packs")}
+              {navLinks.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-secondary-foreground/85 transition-colors hover:text-accent">
+                    {t(link.label)}
                   </Link>
                 </li>
-              )}
-              <li>
-                <Link to="/panier" className="hover:text-accent transition-colors">
-                  {t("Mon panier")}
-                </Link>
-              </li>
+              ))}
             </ul>
           </ScrollReveal>
         </div>
 
-        {/* Confidentialité & Légal Col */}
-        <div className="md:col-span-2 lg:col-span-3">
+        <div className="lg:col-span-2">
           <ScrollReveal delay={120} y={20}>
-            <p className="caption text-secondary-foreground/50">{t("Confidentialité & Légal")}</p>
+            <p className="caption text-secondary-foreground/50">{t('Confidentialité & Légal')}</p>
             <ul className="mt-4 space-y-3 text-sm">
-              <li>
-                <Link to="/confidentialite" className="hover:text-accent transition-colors">
-                  {t("Politique de Confidentialité")}
-                </Link>
-              </li>
-              <li>
-                <Link to="/cgu" className="hover:text-accent transition-colors">
-                  {t("Conditions d'Utilisation (CGU)")}
-                </Link>
-              </li>
+              {legalLinks.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-secondary-foreground/85 transition-colors hover:text-accent">
+                    {t(link.label)}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </ScrollReveal>
         </div>
 
-        {/* Contact Col */}
-        <div className="sm:col-span-2 md:col-span-3 lg:col-span-3">
+        <div className="sm:col-span-2 lg:col-span-3">
           <ScrollReveal delay={180} y={20}>
-            <p className="caption text-secondary-foreground/50">{t("Conciergerie & Support")}</p>
+            <p className="caption text-secondary-foreground/50">{t('Conciergerie & Support')}</p>
             <ul className="mt-4 space-y-3 text-sm">
-              <li className="flex items-center gap-2">
+              <li className="flex items-center gap-2.5">
                 <FontAwesomeIcon icon={faPhone} className="h-3.5 w-3.5 text-accent" />
                 <span>+229 01 96 00 00 00</span>
               </li>
-              <li className="flex items-center gap-2">
+              <li className="flex items-center gap-2.5">
                 <FontAwesomeIcon icon={faEnvelope} className="h-3.5 w-3.5 text-accent" />
-                <span>contact@beninbeyond.com</span>
+                <a href="mailto:contact@beninbeyond.com" className="transition-colors hover:text-accent">
+                  contact@beninbeyond.com
+                </a>
               </li>
-              <li className="text-xs text-secondary-foreground/60 pt-2 leading-relaxed max-w-sm">
-                {t("Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.")}
+              <li className="max-w-xs pt-1 text-xs leading-relaxed text-secondary-foreground/60">
+                {t('Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.')}
               </li>
             </ul>
           </ScrollReveal>
         </div>
       </div>
 
-      {/* 2. Copyright & Legal Quick Links Bar */}
-      <div className="relative z-10 border-t border-secondary-foreground/10">
-        <div className="mx-auto flex max-w-8xl flex-col sm:flex-row items-center justify-between gap-3 px-6 py-5 text-xs text-secondary-foreground/50 md:px-12">
-          <span>© {currentYear} Bénin Beyond. Tous droits réservés.</span>
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-secondary-foreground/60">
-            <Link to="/confidentialite" className="hover:text-accent transition-colors">
-              {t("Politique de Confidentialité")}
-            </Link>
-            <span className="text-secondary-foreground/30">•</span>
-            <Link to="/cgu" className="hover:text-accent transition-colors">
-              {t("Conditions d'Utilisation")}
-            </Link>
-            <span className="text-secondary-foreground/30">•</span>
-            <Link to="/admin" className="hover:text-accent transition-colors text-secondary-foreground/75 font-semibold">
-              {t("Console Administration")}
-            </Link>
-          </div>
-        </div>
+      {/* 2. Copyright */}
+      <div className="border-t border-secondary-foreground/10">
+        <p className="mx-auto max-w-8xl px-6 py-5 text-center text-xs text-secondary-foreground/50 sm:text-left md:px-12">
+          © {currentYear} Bénin Beyond. {t('Tous droits réservés.')}
+        </p>
+      </div>
+
+      {/* 3. Signature monumentale : bandeau dédié, pleine largeur, lettres coupées en bas (aucun texte par-dessus) */}
+      <div className="pointer-events-none select-none px-4 pb-24 md:px-12" aria-hidden="true">
+        <svg viewBox="0 0 1000 150" preserveAspectRatio="xMidYMax meet" className="mx-auto block h-auto w-full max-w-8xl">
+          <defs>
+            <linearGradient id="footerWordmarkGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="white" stopOpacity="0.16" />
+              <stop offset="100%" stopColor="white" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          <text
+            x="500"
+            y="168"
+            textAnchor="middle"
+            textLength="990"
+            lengthAdjust="spacingAndGlyphs"
+            fontSize="200"
+            fill="url(#footerWordmarkGrad)"
+            style={{ fontFamily: 'var(--font-heading, "Outfit", sans-serif)', fontWeight: 900, letterSpacing: '-0.02em' }}
+          >
+            BÉNIN BEYOND
+          </text>
+        </svg>
       </div>
     </footer>
   );

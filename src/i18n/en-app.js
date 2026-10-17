@@ -364,7 +364,7 @@ export const EN_APP_TRANSLATIONS = {
   "Créer mon compte Hôte": "Create my host account",
   "Déjà inscrit sur Bénin Beyond ?": "Already registered with Bénin Beyond?",
   "Annonces vérifiées": "Verified listings",
-  "Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce est vérifiée par notre équipe avant sa mise en ligne.": "After signing up, you go straight to your owner dashboard. Each listing is checked by our team before going live.",
+  "Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce passe des contrôles qualité automatiques avant sa mise en ligne.": "After signing up, you go straight to your owner dashboard. Each listing passes automatic quality checks before going live.",
   "Explorer et réserver un séjour directement": "Explore and book a stay directly",
   "Veuillez renseigner votre adresse e-mail.": "Please enter your email address.",
   "Veuillez définir un mot de passe de sécurité.": "Please set a security password.",

@@ -15,7 +15,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
 import { ScrollReveal } from '../components/ScrollReveal';
-import { BrandLogo } from '../components/BrandLogo';
+import { AuthLayout } from '../components/AuthLayout';
 import { useLanguage } from '../context/LanguageContext';
 
 export function RegisterPage() {
@@ -103,12 +103,17 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="relative min-h-[92vh] w-full flex items-center justify-center px-4 py-16">
-      {/* Background Ambience */}
-      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-lg">
+    <AuthLayout
+      image="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1600&q=85"
+      eyebrow="Espace propriétaires"
+      headline="Louez votre logement ou votre véhicule aux voyageurs du monde entier."
+      points={[
+        'Inscription gratuite, sans dossier à fournir',
+        'Votre annonce en ligne dès qu’elle respecte la charte qualité',
+        'Paiements sécurisés et versements sur Mobile Money ou compte bancaire'
+      ]}
+    >
+      <div className="relative w-full">
         <ScrollReveal delay={0} y={20}>
           
           {/* Session Banner if already connected */}
@@ -130,20 +135,17 @@ export function RegisterPage() {
           )}
 
           {/* Header Hôte */}
-          <div className="text-center mb-8 flex flex-col items-center">
-            <Link to="/" className="inline-flex items-center justify-center group mb-3 hover:opacity-90 transition-opacity">
-              <BrandLogo size="xl" />
-            </Link>
-            <h1 className="font-heading text-2xl sm:text-3xl font-black text-foreground mt-2">
+          <div className="mb-8">
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               {t("Créer votre compte Hôte")}
             </h1>
-            <p className="text-xs text-foreground/60 mt-1.5 max-w-md mx-auto">
+            <p className="mt-2 text-sm text-foreground/60">
               {t("Rejoignez le réseau officiel de prestige au Bénin. Créez votre compte et publiez votre première annonce.")}
             </p>
           </div>
 
           {/* Main Card */}
-          <div className="rounded-3xl border border-foreground/10 bg-card/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+          <div>
             {error && (
               <div className="mb-5 rounded-2xl bg-destructive/15 border border-destructive/30 p-3.5 text-xs text-destructive flex items-center justify-between gap-2.5 animate-fadeIn">
                 <div className="flex items-center gap-2">
@@ -275,7 +277,7 @@ export function RegisterPage() {
               <span>{t("Annonces vérifiées")}</span>
             </div>
             <p className="text-[11px] text-foreground/60 max-w-md mx-auto">
-              {t("Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce est vérifiée par notre équipe avant sa mise en ligne.")}
+              {t("Après l'inscription, vous accédez directement à votre espace propriétaire. Chaque annonce passe des contrôles qualité automatiques avant sa mise en ligne.")}
             </p>
             <div className="mt-3 pt-3 border-t border-foreground/10 flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-foreground/70">
               <span>{t("Vous êtes un voyageur ?")}</span>
@@ -291,6 +293,6 @@ export function RegisterPage() {
 
         </ScrollReveal>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

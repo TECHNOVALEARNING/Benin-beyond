@@ -340,6 +340,18 @@ async function syncBooking({
   return { found: true, booking, nyoleStatus: status };
 }
 
+// Champs utiles au voyageur pour sa confirmation et sa facture (pas de commission, propriétaire, identifiants Nyole)
+const PUBLIC_BOOKING_FIELDS = [
+  'id', 'booking_ref', 'status', 'payment_status', 'payment_method', 'customer_name', 'customer_email',
+  'customer_phone', 'items', 'listing_title', 'listing_image', 'location', 'dates', 'check_in', 'check_out',
+  'guests', 'guests_count', 'rental_type', 'subtotal', 'total_amount', 'gross_amount', 'created_at'
+];
+
+function publicBookingView(booking: any) {
+  if (!booking) return null;
+  return Object.fromEntries(PUBLIC_BOOKING_FIELDS.filter((k) => k in booking).map((k) => [k, booking[k]]));
+}
+
 // ------------------------------------------------------------------------------
 // Point d'entrée
 // ------------------------------------------------------------------------------
@@ -399,7 +411,7 @@ async function handleNyoleWebhook(req: Request): Promise<Response> {
     });
     if (!result.found) return json({ error: 'Réservation introuvable' }, 404);
     return json({
-      booking: result.booking,
+      booking: publicBookingView(result.booking),
       nyole_status: (result as any).nyoleStatus || null,
       reason: (result as any).reason || null
     });
@@ -441,6 +453,111 @@ function returnOrigin(req: Request): string {
   return /^https?:\/\/[^/]+$/i.test(origin) ? origin : 'http://localhost:5173';
 }
 
+const DAY_MS = 86400000;
+const PENDING_HOLD_MS = 60 * 60 * 1000; // une réservation non payée bloque les dates 1 h
+
+// Nombre de nuits / jours facturés : d'après les dates si elles sont valides, sinon la durée du panier
+function billedUnits(item: any, priceUnit: string): number {
+  if (priceUnit === 'vente totale' || priceUnit === 'forfait') return 1;
+  const start = toDateOrNull(item.startDate);
+  const end = toDateOrNull(item.endDate);
+  if (start && end && end > start) {
+    return Math.min(365, Math.round((Date.parse(end) - Date.parse(start)) / DAY_MS));
+  }
+  const n = Math.round(Number(item.nights || item.days || item.qty || 1));
+  return Math.min(365, Math.max(1, Number.isFinite(n) ? n : 1));
+}
+
+/**
+ * Recalcule chaque ligne du panier à partir de la base : prix, unité, propriétaire.
+ * Le navigateur ne fournit que l'identifiant du bien et les dates.
+ */
+async function priceCartFromDatabase(rawItems: any[]) {
+  const priced: any[] = [];
+  for (const item of rawItems) {
+    const id = text(item?.listing_id || item?.listingId || item?.id, 100);
+    if (!id) return { error: 'Article du panier invalide.' };
+
+    if (item?.type === 'pack') {
+      const { data: pack, error } = await supabase.from('packs').select('*').eq('id', id).maybeSingle();
+      if (error || !pack) return { error: 'Ce pack n’est plus disponible.' };
+      const unit = pack.price_unit || 'jour';
+      const units = billedUnits(item, unit);
+      priced.push({
+        ...item,
+        id,
+        type: 'pack',
+        title: pack.title,
+        price: toAmount(pack.price),
+        price_unit: unit,
+        nights: units,
+        days: units,
+        line_total: toAmount(pack.price) * units
+      });
+      continue;
+    }
+
+    const { data: listing, error } = await supabase.from('listings').select('*').eq('id', id).maybeSingle();
+    if (error || !listing) return { error: 'Ce bien n’est plus disponible.' };
+    if (listing.status && listing.status !== 'active') return { error: `« ${listing.title} » n’est pas réservable pour le moment.` };
+
+    const isVehicle = listing.type === 'drive' || listing.subcategory === 'car';
+    const unit = isVehicle ? 'jour' : listing.price_unit || 'nuit';
+    const units = billedUnits(item, unit);
+    const price = toAmount(listing.price);
+    if (!price) return { error: `« ${listing.title} » n’a pas de tarif valide.` };
+
+    priced.push({
+      ...item,
+      id: listing.id,
+      listing_id: listing.id,
+      listingId: listing.id,
+      title: listing.title,
+      price,
+      price_unit: unit,
+      nights: isVehicle ? 0 : units,
+      days: isVehicle ? units : 0,
+      location: listing.location || item.location || null,
+      owner_id: listing.owner_id || null,
+      owner_email: listing.owner_email || null,
+      owner_name: listing.owner_name || null,
+      line_total: price * units
+    });
+  }
+  return { items: priced };
+}
+
+// Dates déjà prises : réservations payées ou confirmées, blocages propriétaires, attentes de paiement de moins d'1 h
+async function findDateConflict(items: any[]) {
+  for (const item of items) {
+    if (item.type === 'pack' || !item.listing_id) continue;
+    const start = toDateOrNull(item.startDate);
+    const end = toDateOrNull(item.endDate);
+    if (!start || !end || end <= start) continue;
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('booking_ref, status, payment_status, created_at, check_in, check_out')
+      .eq('listing_id', String(item.listing_id))
+      .neq('status', 'cancelled')
+      .lt('check_in', end)
+      .gt('check_out', start);
+    if (error) {
+      console.warn('[nyole-checkout] Contrôle de disponibilité impossible :', error.message);
+      continue;
+    }
+    const blocking = (data || []).find((bk: any) => {
+      if (bk.payment_status === 'refunded') return false;
+      if (bk.status === 'pending' && bk.payment_status === 'unpaid') {
+        return Date.now() - Date.parse(bk.created_at) < PENDING_HOLD_MS;
+      }
+      return true;
+    });
+    if (blocking) return `« ${item.title} » est déjà réservé sur une partie de ces dates. Veuillez choisir d’autres dates.`;
+  }
+  return null;
+}
+
 async function handleNyoleCheckout(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Méthode non autorisée' }, 405);
@@ -453,17 +570,27 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     return json({ error: 'Corps JSON invalide' }, 400);
   }
 
-  const items = Array.isArray(b.items) ? b.items.slice(0, 20) : [];
-  const firstItem = items[0] || {};
-  const subtotal = toAmount(b.subtotal);
-  const optionsTotal = toAmount(b.options_total);
-  const total = toAmount(b.total_amount);
+  const rawItems = Array.isArray(b.items) ? b.items.slice(0, 20) : [];
   const customerName = text(b.customer_name, 120);
   const customerPhone = text(b.customer_phone, 40);
   const customerEmail = text(b.customer_email, 200).toLowerCase() || 'voyageur@beninbeyond.com';
 
   if (!customerName || !customerPhone) return json({ error: 'Nom et téléphone obligatoires.' }, 400);
-  if (!total || items.length === 0) return json({ error: 'Panier vide ou montant invalide.' }, 400);
+  if (rawItems.length === 0) return json({ error: 'Panier vide.' }, 400);
+
+  // Prix, propriétaire et disponibilité : uniquement d'après la base (jamais d'après le navigateur)
+  const pricing = await priceCartFromDatabase(rawItems);
+  if (pricing.error) return json({ error: pricing.error }, 400);
+  const items = pricing.items!;
+  const firstItem = items[0] || {};
+
+  const conflict = await findDateConflict(items);
+  if (conflict) return json({ error: conflict }, 409);
+
+  const subtotal = items.reduce((sum: number, it: any) => sum + it.line_total, 0);
+  const optionsTotal = 0;
+  const total = subtotal;
+  if (!total) return json({ error: 'Montant invalide.' }, 400);
 
   const commission = Math.round(total * COMMISSION_RATE);
   const net = total - commission;
@@ -476,7 +603,7 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     customer_phone: customerPhone,
     items,
     protection_options: b.protection_options && typeof b.protection_options === 'object' ? b.protection_options : {},
-    subtotal: subtotal || total,
+    subtotal,
     options_total: optionsTotal,
     total_amount: total,
     commission_rate: COMMISSION_RATE,
@@ -484,8 +611,8 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     partner_payout_amount: net,
     status: 'pending',
     payment_status: 'unpaid',
-    check_in: toDateOrNull(b.check_in || b.start_date),
-    check_out: toDateOrNull(b.check_out || b.end_date),
+    check_in: toDateOrNull(firstItem.startDate),
+    check_out: toDateOrNull(firstItem.endDate),
     guests_count: parseInt(String(b.guests || ''), 10) || 1,
     special_requests: text(b.special_requests || b.notes, 1000) || null
   };
@@ -494,18 +621,18 @@ async function handleNyoleCheckout(req: Request): Promise<Response> {
     rental_type: text(b.rental_type, 30) || 'stay',
     duration_days: b.duration_days ? toAmount(b.duration_days) : null,
     rooms_count: b.rooms_count === null || b.rooms_count === undefined ? null : toAmount(b.rooms_count),
-    listing_id: b.listing_id ? text(b.listing_id, 100) : null,
-    listing_title: text(b.listing_title || firstItem.title, 200) || 'Réservation Bénin Beyond',
-    listing_image: text(b.listing_image || firstItem.image, 1000) || null,
-    location: text(b.location || firstItem.location, 200) || null,
+    listing_id: firstItem.listing_id ? String(firstItem.listing_id) : null,
+    listing_title: text(firstItem.title, 200) || 'Réservation Bénin Beyond',
+    listing_image: text(firstItem.image || b.listing_image, 1000) || null,
+    location: text(firstItem.location, 200) || null,
     dates: text(b.dates, 200) || null,
     guests: text(b.guests, 100) || null,
-    owner_email: text(b.owner_email, 200) || null,
+    owner_email: firstItem.owner_email || null,
     gross_amount: total,
     net_amount: net,
     payment_method: 'Nyole Pay'
   };
-  if (isUuid(b.owner_id)) extendedPayload.owner_id = b.owner_id;
+  if (isUuid(firstItem.owner_id)) extendedPayload.owner_id = firstItem.owner_id;
 
   // 1. Réservation en attente de paiement
   let insert = await supabase.from('bookings').insert({ ...corePayload, ...extendedPayload }).select('id').single();
@@ -604,6 +731,8 @@ async function handleTranslate(req: Request): Promise<Response> {
     .slice(0, MAX_TEXTS)
     .map((t) => (typeof t === 'string' ? t.slice(0, MAX_LENGTH) : ''));
   if (texts.length === 0) return json({ translations: [] });
+  // Garde-fou contre l'épuisement du quota DeepL par des requêtes abusives
+  if (texts.reduce((n, t) => n + t.length, 0) > 20000) return json({ error: 'Trop de texte à traduire en une fois.' }, 413);
 
   const hashes = await Promise.all(texts.map((t) => sha256(t)));
   const results: (string | null)[] = texts.map(() => null);

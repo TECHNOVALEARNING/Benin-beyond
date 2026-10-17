@@ -35,6 +35,14 @@ export async function startNyoleCheckout(booking) {
   try {
     const { data, error } = await supabase.functions.invoke('benin-beyond/nyole-checkout', { body: { booking } });
     if (error || !data?.url) {
+      // Fonction absente (404) ou injoignable : le navigateur ne reçoit qu'une erreur réseau (CORS)
+      if (error?.context?.status === 404 || error?.name === 'FunctionsFetchError') {
+        console.error('[Nyole] Fonction serveur « benin-beyond » introuvable ou injoignable : vérifiez son déploiement sur Supabase.');
+        return {
+          success: false,
+          error: 'Le paiement en ligne est momentanément indisponible. Veuillez réessayer plus tard ou contacter Bénin Beyond.'
+        };
+      }
       const serverMessage = await error?.context?.json?.().then((d) => d?.error).catch(() => null);
       return {
         success: false,

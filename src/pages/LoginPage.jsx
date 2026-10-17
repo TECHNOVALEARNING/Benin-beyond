@@ -20,6 +20,7 @@ import { useAuth, getPostLoginPath } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../supabase/supabaseClient';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { BrandLogo } from '../components/BrandLogo';
+import { AuthLayout } from '../components/AuthLayout';
 import { useLanguage } from '../context/LanguageContext';
 
 export function LoginPage() {
@@ -373,28 +374,30 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen sm:h-screen w-full flex items-center justify-center px-4 py-4 sm:py-2 overflow-y-auto sm:overflow-hidden">
-      {/* Subtle Background Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative z-10 w-full max-w-md my-auto">
+    <AuthLayout
+      image="https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1600&q=85"
+      eyebrow="Bon retour parmi nous"
+      headline="Vos séjours et vos trajets au Bénin, au même endroit."
+      points={[
+        'Retrouvez vos réservations, reçus et vouchers',
+        'Paiement sécurisé par Mobile Money ou carte',
+        'Assistance 7j/7 pendant tout votre séjour'
+      ]}
+    >
+      <div className="relative w-full">
         <ScrollReveal delay={0} y={15}>
-          {/* Header */}
-          <div className="text-center mb-3 sm:mb-4 flex flex-col items-center">
-            <Link to="/" className="inline-flex items-center justify-center group mb-2 hover:opacity-90 transition-opacity">
-              <BrandLogo size="lg" />
-            </Link>
-            <h1 className="font-heading text-lg sm:text-xl font-bold text-foreground mt-0.5">
+          {/* En-tête */}
+          <div className="mb-8">
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               {t("Connexion à votre espace")}
             </h1>
-            <p className="text-[11px] text-foreground/60 mt-0.5 max-w-xs mx-auto">
+            <p className="mt-2 text-sm text-foreground/60">
               {t("Accédez à vos réservations, gérez vos biens ou pilotez la plateforme")}
             </p>
           </div>
 
-          {/* Form Card */}
-          <div className="rounded-3xl border border-foreground/10 bg-card/90 p-5 sm:p-6 shadow-2xl backdrop-blur-xl">
+          {/* Formulaire */}
+          <div>
             {/* Notification de réservation confirmée sécurisée */}
             {fromCheckout && (
               <div className="mb-6 rounded-2xl bg-emerald-500/15 border-2 border-emerald-500/40 p-5 text-foreground shadow-lg space-y-2 animate-fadeIn">
@@ -839,6 +842,6 @@ export function LoginPage() {
           </div>
         )}
       </div>
-    </div>
+    </AuthLayout>
   );
 }

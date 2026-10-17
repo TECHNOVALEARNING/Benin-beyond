@@ -34,7 +34,7 @@ export function CheckoutPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
-  const { user, registerOrLoginClient } = useAuth();
+  const { user } = useAuth();
 
   const [customer, setCustomer] = useState({
     name: user?.name || '',
@@ -118,18 +118,8 @@ export function CheckoutPage() {
           clearCart();
           clearPendingCheckout();
 
-          // Inscription et association automatique du compte Voyageur
-          if (registerOrLoginClient && booking.customer_email) {
-            try {
-              registerOrLoginClient({
-                name: booking.customer_name,
-                email: booking.customer_email,
-                phone: booking.customer_phone
-              });
-            } catch (e) {
-              console.warn('Auto register client notice:', e);
-            }
-          }
+          // Pas de connexion automatique : une fois le paiement confirmé, le voyageur est
+          // envoyé vers la page de connexion avec l'e-mail utilisé pour l'achat.
         } else if (result.nyoleStatus === 'CANCELLED' || booking?.status === 'cancelled') {
           clearPendingCheckout();
           setPaymentVerificationError(
@@ -187,15 +177,6 @@ export function CheckoutPage() {
 
     setIsSubmitting(true);
     const clientEmail = (customer.email || 'voyageur@beninbeyond.com').trim().toLowerCase();
-
-    // Activation automatique du compte Voyageur au moment de l'achat
-    if (registerOrLoginClient) {
-      registerOrLoginClient({
-        name: customer.name,
-        email: clientEmail,
-        phone: customer.phone
-      });
-    }
 
     const firstItem = items[0] || {};
     const isVehicleBooking =

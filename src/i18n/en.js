@@ -92,7 +92,7 @@ export const EN_TRANSLATIONS = {
   'Conciergerie & Support': 'Concierge & support',
   'Assistance voyageur & conciergerie disponible 7j/7 de 08h00 à 22h00 WAT.':
     'Traveller assistance & concierge available 7 days a week, 8am to 10pm WAT.',
-  'Console Administration': 'Admin console',
+  'Tous droits réservés.': 'All rights reserved.',
 
   // Catalogue & cartes
   'Hébergements': 'Accommodation',
@@ -326,6 +326,21 @@ export const EN_TRANSLATIONS = {
   "L'inscription n'a pas pu être finalisée. Veuillez réessayer.": 'Sign-up could not be completed. Please try again.',
   'Identifiants invalides.': 'Invalid credentials.',
   'Erreur lors de la connexion Google': 'Google login error',
+
+  'Le paiement en ligne est momentanément indisponible. Veuillez réessayer plus tard ou contacter Bénin Beyond.':
+    'Online payment is temporarily unavailable. Please try again later or contact Bénin Beyond.',
+
+  // Pages de connexion et d'inscription (panneau photo)
+  'Bon retour parmi nous': 'Welcome back',
+  'Vos séjours et vos trajets au Bénin, au même endroit.': 'Your stays and travel in Benin, all in one place.',
+  'Retrouvez vos réservations, reçus et vouchers': 'Find your bookings, receipts and vouchers',
+  'Paiement sécurisé par Mobile Money ou carte': 'Secure payment by Mobile Money or card',
+  'Assistance 7j/7 pendant tout votre séjour': '7-day assistance throughout your stay',
+  'Espace propriétaires': 'For owners',
+  'Louez votre logement ou votre véhicule aux voyageurs du monde entier.': 'Rent your home or vehicle to travellers from around the world.',
+  'Inscription gratuite, sans dossier à fournir': 'Free sign-up, no paperwork',
+  'Votre annonce en ligne dès qu’elle respecte la charte qualité': 'Your listing goes live as soon as it meets the quality guidelines',
+  'Paiements sécurisés et versements sur Mobile Money ou compte bancaire': 'Secure payments and payouts to Mobile Money or a bank account',
 
   // 404
   'Page non trouvée': 'Page not found',
