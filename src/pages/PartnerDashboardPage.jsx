@@ -57,7 +57,7 @@ import {
   faCalendarDays
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
-import { formatPrice } from '../data/initialListings';
+import { formatPriceXOF as formatPrice } from '../data/initialListings';
 import { addListing, updateListing, deleteListing, getListings, getCustomListings } from '../services/listingService';
 import { getBookings, updateBookingStatus, deleteBooking, blockListingDates, unblockListingDates } from '../services/bookingService';
 import { ScrollReveal } from '../components/ScrollReveal';

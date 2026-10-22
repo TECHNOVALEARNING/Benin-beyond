@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { formatPrice } from '../data/initialListings';
+import { formatPriceXOF as formatPrice } from '../data/initialListings';
 
 const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 

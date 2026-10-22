@@ -779,7 +779,7 @@ export function ListingDetailPage() {
               </div>
               <div className="flex justify-between text-foreground/70">
                 <span>{t("Frais de conciergerie")}</span>
-                <span className="text-emerald-700 font-medium">{t("Inclus (0 FCFA)")}</span>
+                <span className="text-emerald-700 font-medium">{t('Inclus ({amount})', { amount: formatPrice(0) })}</span>
               </div>
               <div className="flex justify-between font-semibold text-base border-t border-foreground/10 pt-3 text-foreground">
                 <span>{t("Total estimé")}</span>

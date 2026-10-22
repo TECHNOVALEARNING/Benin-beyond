@@ -3,7 +3,5 @@
 // dans la base de données Supabase sont affichés sur la plateforme.
 export const INITIAL_LISTINGS = [];
 
-export function formatPrice(n) {
-  if (typeof n !== "number") n = Number(n) || 0;
-  return `${Math.round(n).toLocaleString("fr-FR")} FCFA`;
-}
+// Prix public converti dans la devise du visiteur (geopricing) ; formatPriceXOF pour les montants comptables
+export { formatLocalPrice as formatPrice, formatXOF as formatPriceXOF } from "../utils/currency";

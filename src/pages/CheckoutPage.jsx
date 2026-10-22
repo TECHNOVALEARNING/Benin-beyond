@@ -14,7 +14,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { formatPrice } from '../data/initialListings';
+import { formatPrice, formatPriceXOF } from '../data/initialListings';
+import { getDisplayCurrency } from '../utils/currency';
 import { checkDateAvailability } from '../services/bookingService';
 import {
   startNyoleCheckout,
@@ -563,7 +564,7 @@ export function CheckoutPage() {
                   ) : (
                     <>
                       <FontAwesomeIcon icon={faLock} className="h-4 w-4" />
-                      <span>{t('Payer {amount}', { amount: formatPrice(finalTotal) })}</span>
+                      <span>{t('Payer {amount}', { amount: formatPriceXOF(finalTotal) })}</span>
                     </>
                   )}
                 </button>
@@ -584,7 +585,7 @@ export function CheckoutPage() {
 
               <div className="flex justify-between text-foreground/80">
                 <span>{t("Frais de conciergerie")}</span>
-                <span className="text-emerald-700 font-medium">{t("0 FCFA (Inclus)")}</span>
+                <span className="text-emerald-700 font-medium">{t('{amount} (Inclus)', { amount: formatPrice(0) })}</span>
               </div>
 
               <div className="flex justify-between text-foreground/80">
@@ -599,6 +600,11 @@ export function CheckoutPage() {
                 {formatPrice(finalTotal)}
               </span>
             </div>
+            {!['XOF', 'XAF'].includes(getDisplayCurrency()) && (
+              <p className="mt-1 text-right text-xs text-foreground/50">
+                {t('Montant débité : {amount}', { amount: formatPriceXOF(finalTotal) })}
+              </p>
+            )}
 
             <div className="mt-6 border-t border-foreground/10 pt-4 text-center">
               <div className="inline-flex items-center gap-1.5 text-xs text-foreground/50">

@@ -212,7 +212,7 @@ export function CartPage() {
               </div>
               <div className="flex justify-between text-foreground/80">
                 <span>{t("Frais de service")}</span>
-                <span className="text-emerald-700 font-medium">0 FCFA</span>
+                <span className="text-emerald-700 font-medium">{formatPrice(0)}</span>
               </div>
             </div>
 

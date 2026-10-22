@@ -114,35 +114,11 @@ export function Footer() {
         </div>
       )}
 
-      {/* 3. Copyright */}
-      <div className="border-t border-secondary-foreground/10">
+      {/* 3. Copyright (marge basse : espace pour la barre de navigation flottante) */}
+      <div className="border-t border-secondary-foreground/10 pb-24">
         <p className="mx-auto max-w-8xl px-6 py-5 text-center text-xs text-secondary-foreground/50 sm:text-left md:px-12">
           © {currentYear} Bénin Beyond. {t('Tous droits réservés.')}
         </p>
-      </div>
-
-      {/* 4. Signature monumentale : bandeau dédié, pleine largeur, lettres coupées en bas (aucun texte par-dessus) */}
-      <div className="pointer-events-none select-none px-4 pb-24 md:px-12" aria-hidden="true">
-        <svg viewBox="0 0 1000 150" preserveAspectRatio="xMidYMax meet" className="mx-auto block h-auto w-full max-w-8xl">
-          <defs>
-            <linearGradient id="footerWordmarkGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="white" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="white" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          <text
-            x="500"
-            y="168"
-            textAnchor="middle"
-            textLength="990"
-            lengthAdjust="spacingAndGlyphs"
-            fontSize="200"
-            fill="url(#footerWordmarkGrad)"
-            style={{ fontFamily: 'var(--font-heading, "Outfit", sans-serif)', fontWeight: 900, letterSpacing: '-0.02em' }}
-          >
-            BÉNIN BEYOND
-          </text>
-        </svg>
       </div>
     </footer>
   );

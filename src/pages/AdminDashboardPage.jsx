@@ -64,7 +64,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { faWhatsapp } from '@fortawesome/free-brands-svg-icons';
 import { useAuth, DEMO_USERS } from '../context/AuthContext';
-import { formatPrice } from '../data/initialListings';
+import { formatPriceXOF as formatPrice } from '../data/initialListings';
 import { getListings, deleteListing, updateListingStatus, addListing, updateListing, getCustomListings, activateOwnerListings, suspendOwnerListings } from '../services/listingService';
 import { getOpenListingReports, closeListingReport, REPORT_REASONS } from '../services/reportService';
 import { getBookings, updateBookingStatus, deleteBooking } from '../services/bookingService';
