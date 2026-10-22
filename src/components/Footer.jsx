@@ -10,40 +10,6 @@ export function Footer() {
 
   return (
     <footer className="relative overflow-hidden border-t border-foreground/10 bg-secondary text-secondary-foreground">
-      {/* Filigrane Monumental "BÉNIN BEYOND" (Directement derrière les écrits du footer, 100% des lettres visibles) */}
-      <div 
-        className="pointer-events-none select-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-0 flex items-center justify-center overflow-hidden px-6 md:px-12"
-        aria-hidden="true"
-      >
-        <svg
-          viewBox="0 0 1600 210"
-          className="w-full max-w-8xl h-auto select-none pointer-events-none"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <defs>
-            <linearGradient id="footerWatermarkGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="white" stopOpacity="0.14" />
-              <stop offset="50%" stopColor="white" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="white" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          <text
-            x="50%"
-            y="62%"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="url(#footerWatermarkGrad)"
-            className="font-heading font-black uppercase"
-            fontSize="120"
-            textLength="1360"
-            lengthAdjust="spacing"
-            style={{ fontFamily: 'var(--font-heading, "Outfit", sans-serif)', fontWeight: 900 }}
-          >
-            BÉNIN BEYOND
-          </text>
-        </svg>
-      </div>
-
       {/* 1. Main Navigation & Info Grid (Balanced 4-column layout) */}
       <div className="relative z-10 mx-auto grid max-w-8xl gap-10 px-6 pt-16 pb-12 sm:grid-cols-2 md:grid-cols-12 md:px-12">
         {/* Brand Col */}
@@ -141,10 +107,6 @@ export function Footer() {
             <span className="text-secondary-foreground/30">•</span>
             <Link to="/cgu" className="hover:text-accent transition-colors">
               Conditions d'Utilisation
-            </Link>
-            <span className="text-secondary-foreground/30">•</span>
-            <Link to="/admin" className="hover:text-accent transition-colors text-secondary-foreground/75 font-semibold">
-              Console Administration
             </Link>
           </div>
         </div>

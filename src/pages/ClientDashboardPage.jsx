@@ -24,13 +24,14 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { getBookings } from '../services/bookingService';
 import { submitReview } from '../services/reviewService';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandIcon } from '../components/BrandLogo';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
 
 export function ClientDashboardPage() {
+  const { formatPrice } = useCurrency();
   const { user, logout, upgradeToOwner } = useAuth();
   const navigate = useNavigate();
 

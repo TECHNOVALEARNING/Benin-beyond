@@ -72,7 +72,7 @@ npm run build
 Pour connecter votre propre base Supabase :
 
 1. Créez un projet sur [Supabase](https://supabase.com/).
-2. Dans l'éditeur SQL de votre projet Supabase, exécutez le script contenu dans [`src/supabase/schema.sql`](./src/supabase/schema.sql).
+2. Dans l'éditeur SQL de votre projet Supabase, exécutez le script unique [`src/supabase/benin_beyond_complet.sql`](./src/supabase/benin_beyond_complet.sql) (il crée ou met à jour toute la base et peut être relancé sans risque).
 3. Créez un fichier `.env` à la racine :
    ```env
    VITE_SUPABASE_URL=https://votre-projet.supabase.co

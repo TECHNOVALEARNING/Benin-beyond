@@ -9,9 +9,10 @@ import {
   faShieldHalved,
   faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 
 export function PackCard({ pack }) {
+  const { formatPrice } = useCurrency();
   const primaryItem = pack.included[0];
   const secondaryItem = pack.included[1];
 

@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBagShopping, faArrowRight, faTrash, faCar, faShieldHalved, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function CartPage() {
+  const { formatPrice } = useCurrency();
   const { items, removeItem, updateItem, subtotal } = useCart();
 
   if (items.length === 0) {
@@ -209,7 +210,7 @@ export function CartPage() {
               </div>
               <div className="flex justify-between text-foreground/80">
                 <span>Frais de service</span>
-                <span className="text-emerald-700 font-medium">0 FCFA</span>
+                <span className="text-emerald-700 font-medium">{formatPrice(0)}</span>
               </div>
             </div>
 

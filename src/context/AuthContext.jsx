@@ -421,16 +421,17 @@ export function AuthProvider({ children }) {
       error: "Identifiants administrateur invalides. Connectez-vous avec Google ou utilisez 'Mot de passe oublié' pour définir votre mot de passe."
     };
 
-    // 2. Vérification de l'existence du compte dans Supabase (table profiles)
+    // 2. Vérification de l'existence du compte dans Supabase.
+    // La table profiles n'est plus lisible sans session : la fonction account_exists ne renvoie qu'un booléen.
     let supabaseProfile = null;
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, role, is_active, verified, company_name')
-          .ilike('email', cleanEmail)
-          .maybeSingle();
-        supabaseProfile = prof;
+        const { data: exists, error: existsError } = await supabase.rpc('account_exists', { p_email: cleanEmail });
+        if (existsError) {
+          console.warn('Vérification du compte Supabase (account_exists):', existsError.message);
+        } else if (exists === true) {
+          supabaseProfile = { email: cleanEmail };
+        }
       } catch (err) {
         console.warn('Erreur vérification profil Supabase:', err);
       }

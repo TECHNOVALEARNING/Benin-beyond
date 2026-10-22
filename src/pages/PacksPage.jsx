@@ -13,8 +13,10 @@ import {
 import { getPacks } from '../services/packService';
 import { PackCard } from '../components/PackCard';
 import { ScrollReveal } from '../components/ScrollReveal';
+import { useCurrency } from '../context/CurrencyContext';
 
 export function PacksPage() {
+  const { formatPrice } = useCurrency();
   const [packs, setPacks] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export function PacksPage() {
           </div>
           <div>
             <div className="text-xs font-bold text-foreground">Tarif remisé</div>
-            <div className="text-[11px] text-foreground/60">Jusqu'à -35 000 FCFA/j</div>
+            <div className="text-[11px] text-foreground/60">Jusqu'à -{formatPrice(35000)}/j</div>
           </div>
         </ScrollReveal>
 

@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLocationDot, faArrowUpRightFromSquare, faVideo, faCar, faLock } from '@fortawesome/free-solid-svg-icons';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { getActiveReservationSummary } from '../services/bookingService';
 
 export function ListingCard({ listing, featured = false, aspectRatio, className = '' }) {
+  const { formatPrice } = useCurrency();
   const [activeReservation, setActiveReservation] = useState(null);
 
   useEffect(() => {

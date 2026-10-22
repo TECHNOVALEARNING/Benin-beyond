@@ -56,6 +56,16 @@ const withTimeout = (promise, ms = 3000) => {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_REGEX.test(value);
+
+const newUuid = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+};
 const ALLOWED_BOOKING_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 
 // Colonne absente du schéma (migration non appliquée) : PostgREST PGRST204 / Postgres 42703
@@ -82,16 +92,19 @@ const toAmount = (...values) => {
  * dans la base (migration non appliquée), on réessaie avec les seules colonnes du schéma de base.
  */
 async function insertRemoteBooking(corePayload, extendedPayload) {
-  const first = await supabase
-    .from('bookings')
-    .insert([{ ...corePayload, ...extendedPayload }])
-    .select()
-    .single();
+  // L'identifiant est généré ici et la ligne n'est pas relue après insertion :
+  // un voyageur sans compte n'a pas le droit de lire les réservations (RLS).
+  const id = newUuid();
+  const insertRow = async (row) => {
+    const { error } = await supabase.from('bookings').insert([{ id, ...row }]);
+    return { data: error ? null : { id }, error };
+  };
 
+  const first = await insertRow({ ...corePayload, ...extendedPayload });
   if (!first.error || !isMissingColumnError(first.error)) return first;
 
   console.warn('[Bookings] Colonnes étendues absentes, insertion du schéma de base :', first.error.message);
-  return supabase.from('bookings').insert([corePayload]).select().single();
+  return insertRow(corePayload);
 }
 
 export async function getBookings() {
@@ -524,8 +537,47 @@ export function extractBookingDates(booking) {
  */
 export async function getBookingsForListing(listingId) {
   if (!listingId) return [];
-  const allBookings = await getBookings();
   const deletedIds = getDeletedBookingIds();
+
+  // Les réservations ne sont plus lisibles par tous : la base renvoie seulement
+  // les plages de dates occupées du bien (sans nom, e-mail ni téléphone).
+  let remotePeriods = null;
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await withTimeout(
+        supabase.rpc('get_listing_booked_periods', { p_listing_id: String(listingId) }),
+        3000
+      );
+      if (error) {
+        console.warn('[Bookings] get_listing_booked_periods indisponible :', error.message);
+      } else if (Array.isArray(data)) {
+        remotePeriods = data;
+      }
+    } catch (e) {
+      console.warn('[Bookings] Plages occupées non chargées :', e?.message || e);
+    }
+  }
+
+  // Fonction absente (script SQL pas encore exécuté) : ancien comportement
+  let allBookings;
+  if (remotePeriods) {
+    // La base fait foi ; on ajoute seulement les réservations locales jamais enregistrées dans Supabase
+    let localBookings = [];
+    try {
+      const cached = JSON.parse(localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY) || '[]');
+      localBookings = Array.isArray(cached) ? cached.filter((b) => b && b.sync_error) : [];
+    } catch {}
+    const periodBookings = remotePeriods.map((p, index) => ({
+      id: `period_${listingId}_${index}`,
+      listing_id: String(listingId),
+      start_date: p.start_date,
+      end_date: p.end_date,
+      status: 'confirmed'
+    }));
+    allBookings = [...periodBookings, ...localBookings];
+  } else {
+    allBookings = await getBookings();
+  }
 
   return allBookings.filter((b) => {
     const bId = String(b.id || '');

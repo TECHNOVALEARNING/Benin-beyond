@@ -14,7 +14,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { createBooking, getBookings, checkDateAvailability } from '../services/bookingService';
 import {
   createNyoleCheckoutSession,
@@ -47,6 +47,7 @@ const PROTECTION_OPTIONS = [
 
 
 export function CheckoutPage() {
+  const { formatPrice, formatXof, isLocalCurrency } = useCurrency();
   const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
   const { user, registerOrLoginClient } = useAuth();
@@ -853,7 +854,7 @@ export function CheckoutPage() {
                   ) : (
                     <>
                       <FontAwesomeIcon icon={faLock} className="h-4 w-4" />
-                      <span>Payer {formatPrice(finalTotal)} avec Nyole</span>
+                      <span>Payer {formatXof(finalTotal)} avec Nyole</span>
                     </>
                   )}
                 </button>
@@ -882,7 +883,7 @@ export function CheckoutPage() {
 
               <div className="flex justify-between text-foreground/80">
                 <span>Frais de conciergerie</span>
-                <span className="text-emerald-700 font-medium">0 FCFA (Inclus)</span>
+                <span className="text-emerald-700 font-medium">{formatPrice(0)} (Inclus)</span>
               </div>
 
               <div className="flex justify-between text-foreground/80">
@@ -897,6 +898,11 @@ export function CheckoutPage() {
                 {formatPrice(finalTotal)}
               </span>
             </div>
+            {isLocalCurrency && (
+              <p className="mt-1 text-right text-xs text-foreground/50">
+                Montant débité : {formatXof(finalTotal)} (contre-valeur indicative dans votre devise)
+              </p>
+            )}
 
             <div className="mt-6 border-t border-foreground/10 pt-4 text-center">
               <div className="inline-flex items-center gap-1.5 text-xs text-foreground/50">

@@ -10,11 +10,12 @@ import {
   faChevronRight
 } from '@fortawesome/free-solid-svg-icons';
 import { getPacks } from '../services/packService';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { useCart } from '../context/CartContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 
 export function PackDetailPage() {
+  const { formatPrice } = useCurrency();
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();

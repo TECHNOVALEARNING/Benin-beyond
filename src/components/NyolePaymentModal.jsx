@@ -10,7 +10,7 @@ import {
   faMobileScreen,
   faTriangleExclamation
 } from '@fortawesome/free-solid-svg-icons';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { checkNyoleSessionStatus } from '../services/nyoleService';
 
 /**
@@ -30,6 +30,7 @@ export function NyolePaymentModal({
   onSuccess,
   onCancel
 }) {
+  const { formatPrice, formatXof, isLocalCurrency } = useCurrency();
   const [iframeLoading, setIframeLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
@@ -184,8 +185,11 @@ export function NyolePaymentModal({
                 Montant total
               </div>
               <div className="font-heading text-sm font-bold text-primary">
-                {formatPrice(amount || 0)}
+                {formatXof(amount || 0)}
               </div>
+              {isLocalCurrency && (
+                <div className="text-[10px] text-foreground/50">≈ {formatPrice(amount || 0)}</div>
+              )}
             </div>
 
             <button
@@ -212,7 +216,7 @@ export function NyolePaymentModal({
                 Paiement Validé avec Succès !
               </h3>
               <p className="mt-2 text-sm text-foreground/70 max-w-sm">
-                Votre transaction de <strong>{formatPrice(amount)}</strong> a été confirmée par Nyole. Nous générons vos vouchers et factures officielles…
+                Votre transaction de <strong>{formatXof(amount)}</strong> a été confirmée par Nyole. Nous générons vos vouchers et factures officielles…
               </p>
               <div className="mt-6 flex items-center gap-2 text-xs text-primary font-medium">
                 <FontAwesomeIcon icon={faSpinner} className="h-4 w-4 animate-spin" />

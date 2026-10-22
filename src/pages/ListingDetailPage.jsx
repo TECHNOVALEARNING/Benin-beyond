@@ -24,11 +24,12 @@ import {
 import { getListingById } from '../services/listingService';
 import { checkDateAvailability, getActiveReservationSummary } from '../services/bookingService';
 import { useCart } from '../context/CartContext';
-import { formatPrice } from '../data/initialListings';
+import { useCurrency } from '../context/CurrencyContext';
 import { ScrollReveal } from '../components/ScrollReveal';
 import { ListingVideoPlayer } from '../components/ListingVideoPlayer';
 
 export function ListingDetailPage() {
+  const { formatPrice } = useCurrency();
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();
@@ -775,7 +776,7 @@ export function ListingDetailPage() {
               </div>
               <div className="flex justify-between text-foreground/70">
                 <span>Frais de conciergerie</span>
-                <span className="text-emerald-700 font-medium">Inclus (0 FCFA)</span>
+                <span className="text-emerald-700 font-medium">Inclus ({formatPrice(0)})</span>
               </div>
               <div className="flex justify-between font-semibold text-base border-t border-foreground/10 pt-3 text-foreground">
                 <span>Total estimé</span>
