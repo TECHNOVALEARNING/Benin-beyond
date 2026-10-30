@@ -618,7 +618,7 @@ export function PartnerDashboardPage() {
 
         try {
           // 1. Compression haute fidélité (2048x1536 max, qualité 90% pour une netteté Full HD absolue)
-          const optimizedFile = await compressImageToBlob(file, 2048, 1536, 0.90);
+          const optimizedFile = await compressImageToBlob(file);
           
           // 2. Téléversement dans Supabase Storage dans le dossier structuré de l'hôte
           // Chemin : <userId>/<listingId>/photos/<filename>
@@ -631,7 +631,7 @@ export function PartnerDashboardPage() {
           if (uploadedUrl) {
             setUploadedPhotos((prev) => [...prev, uploadedUrl]);
           } else {
-            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            const dataUrl = await compressImage(file);
             setUploadedPhotos((prev) => [...prev, dataUrl]);
           }
         } catch (err) {
@@ -715,7 +715,7 @@ export function PartnerDashboardPage() {
 
         try {
           // Compression haute résolution 2048x1536 qualité 90% pour un rendu Full HD net
-          const optimizedBlob = await compressImageToBlob(file, 2048, 1536, 0.90);
+          const optimizedBlob = await compressImageToBlob(file);
           const uploadedUrl = await uploadMediaFile(optimizedBlob, {
             userId: ownerId,
             listingId: listingId,
@@ -725,7 +725,7 @@ export function PartnerDashboardPage() {
           if (uploadedUrl) {
             setEditUploadedPhotos((prev) => [...prev, uploadedUrl]);
           } else {
-            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            const dataUrl = await compressImage(file);
             setEditUploadedPhotos((prev) => [...prev, dataUrl]);
           }
         } catch (err) {

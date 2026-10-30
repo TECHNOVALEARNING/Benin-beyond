@@ -991,7 +991,7 @@ export function AdminDashboardPage() {
 
         try {
           // Compression haute résolution 2048x1536 qualité 90% pour un rendu net et fidèle
-          const optimizedBlob = await compressImageToBlob(file, 2048, 1536, 0.90);
+          const optimizedBlob = await compressImageToBlob(file);
           const uploadedUrl = await uploadMediaFile(optimizedBlob, {
             userId: adminOwnerId,
             listingId: 'admin_listing',
@@ -1001,12 +1001,12 @@ export function AdminDashboardPage() {
           if (uploadedUrl && (uploadedUrl.startsWith('http') || uploadedUrl.startsWith('data:'))) {
             setUploadedPhotos((prev) => [...prev, uploadedUrl]);
           } else {
-            const dataUrl = await compressImage(file, 2048, 1536, 0.90);
+            const dataUrl = await compressImage(file);
             setUploadedPhotos((prev) => [...prev, dataUrl]);
           }
         } catch (err) {
           console.warn('Erreur téléversement image admin:', err);
-          const dataUrl = await compressImage(file, 2048, 1536, 0.90).catch(() => null);
+          const dataUrl = await compressImage(file).catch(() => null);
           if (dataUrl) {
             setUploadedPhotos((prev) => [...prev, dataUrl]);
           } else {
