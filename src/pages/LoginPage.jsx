@@ -115,7 +115,7 @@ export function LoginPage() {
     const isServerError = /database error|server_error|unexpected/i.test(oauthErrorMessage);
     setError(
       isServerError
-        ? "La connexion Google a échoué côté serveur (compte mal initialisé dans Supabase). Exécutez le script src/supabase/fix_admin_auth_account.sql puis réessayez."
+        ? "La connexion Google a échoué côté serveur (compte mal initialisé dans Supabase). Contactez l'administration du site."
         : `Connexion Google interrompue : ${oauthErrorMessage}`
     );
     // Nettoyer l'URL pour ne pas réafficher l'erreur au prochain chargement

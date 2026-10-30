@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../supabase/supabaseClient';
 
 /**
- * Signalements d'annonces par les voyageurs (table listing_reports, voir src/supabase/listing_reports.sql).
+ * Signalements d'annonces par les voyageurs (table listing_reports).
  * Tout visiteur peut signaler ; seule l'équipe (admin / assistants) peut lire et traiter.
  */
 

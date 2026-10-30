@@ -24,10 +24,9 @@ Une réservation en attente qui n'est jamais payée ne bloque plus les dates au 
 ## Ordre des étapes (à respecter)
 
 ### 1. Préparer la base (SQL, sans risque)
-Supabase → **SQL Editor** → pour chacun de ces fichiers : coller le contenu → **Run** :
-1. `src/supabase/nyole_1_colonnes.sql` (colonnes de paiement) ;
-2. `src/supabase/listing_reports.sql` (signalements d'annonces) ;
-3. `src/supabase/translations_cache.sql` (mémoire des traductions).
+Supabase → **SQL Editor** : la base doit contenir les colonnes de paiement Nyole (`nyole_session_id`,
+`nyole_order_id`) sur `bookings`, la table `listing_reports` et la table `translations`.
+(Les scripts SQL ne sont plus conservés dans le dépôt : ils sont rédigés au besoin.)
 
 ### 2. Enregistrer les secrets
 Supabase → **Edge Functions** → **Secrets** → **Add new secret** :
@@ -76,9 +75,8 @@ https://VOTRE_REF_PROJET.supabase.co/functions/v1/benin-beyond/nyole-webhook
 Publier le site (fusion de la branche puis déploiement Vercel habituel).
 
 ### 6. Verrouiller la base (SQL)
-Une fois le site publié : Supabase → **SQL Editor** → coller `src/supabase/nyole_2_verrouillage.sql` → **Run**.
+Une fois le site publié : le déclencheur `bookings_protect_payment_fields` doit être actif dans la base.
 À partir de là, plus aucune réservation « payée » ne peut être écrite depuis un navigateur.
-Si vous relancez un jour `security_hardening.sql`, relancez ce script juste après.
 
 ## E-mails de confirmation (Brevo)
 Quand une réservation passe à « payée », la fonction envoie :
@@ -109,7 +107,7 @@ Mise en place :
 Sans cette étape, le site fonctionne : les textes des propriétaires restent simplement en français.
 
 ## Signalements d'annonces
-Après le script `listing_reports.sql` (étape 1), les signalements des voyageurs apparaissent dans l'admin → **Modération**, avec les boutons « Classer » et « Suspendre l'annonce ».
+Une fois la table `listing_reports` créée (étape 1), les signalements des voyageurs apparaissent dans l'admin → **Modération**, avec les boutons « Classer » et « Suspendre l'annonce ».
 
 ## Vérifier que tout marche
 1. Faire une petite réservation réelle (ou avec une clé de test `af_test_sec_...` dans `NYOLE_SECRET_KEY`).

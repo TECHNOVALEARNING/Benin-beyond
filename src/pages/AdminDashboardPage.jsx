@@ -84,6 +84,7 @@ import { getTimeBasedGreeting } from '../utils/dateUtils';
 import { BrandLogo } from '../components/BrandLogo';
 import { EvolutionAreaChart } from '../components/EvolutionAreaChart';
 import { printInvoiceDocument } from '../utils/invoicePrinter';
+import { KycDocumentImage, KycDocumentLink } from '../components/KycDocument';
 import { formatPaymentMethod } from '../utils/paymentMethod';
 
 // ======================================================================
@@ -6571,22 +6572,20 @@ export function AdminDashboardPage() {
                   </p>
                 </div>
                 {selectedKycModal.docUrl && (
-                  <a
-                    href={selectedKycModal.docUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <KycDocumentLink
+                    docRef={selectedKycModal.docUrl}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold hover:bg-primary/20 transition-all"
                   >
                     <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="h-3 w-3" />
                     <span>Ouvrir le scan</span>
-                  </a>
+                  </KycDocumentLink>
                 )}
               </div>
 
               {selectedKycModal.docUrl ? (
                 <div className="rounded-xl border border-foreground/15 overflow-hidden bg-black/40 flex items-center justify-center max-h-72">
-                  <img
-                    src={selectedKycModal.docUrl}
+                  <KycDocumentImage
+                    docRef={selectedKycModal.docUrl}
                     alt="Document KYC"
                     className="max-h-72 w-auto object-contain"
                   />
@@ -7499,16 +7498,14 @@ export function AdminDashboardPage() {
                                 {/* Per-Document Action Buttons */}
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {doc.file_url && (
-                                    <a
-                                      href={doc.file_url}
-                                      target="_blank"
-                                      rel="noreferrer"
+                                    <KycDocumentLink
+                                      docRef={doc.file_url}
                                       className="px-2.5 py-1 rounded-lg border border-foreground/20 text-[11px] font-bold text-foreground hover:bg-muted flex items-center gap-1 transition-colors"
                                       title="Ouvrir le document dans un nouvel onglet"
                                     >
                                       <FontAwesomeIcon icon={faEye} className="h-3 w-3" />
                                       <span>Voir</span>
-                                    </a>
+                                    </KycDocumentLink>
                                   )}
 
                                   <button

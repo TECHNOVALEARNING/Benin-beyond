@@ -93,8 +93,10 @@ export async function uploadMediaFile(file, options = {}) {
   // 1. Envoi prioritaire vers Supabase Storage dans le dossier approprié
   if (isSupabaseConfigured && supabase) {
     try {
+      // Le stockage n'accepte que le dossier du compte connecté : on prend l'identifiant de la session
+      const { data: sessionData } = await supabase.auth.getSession();
       const storagePath = buildStoragePath({
-        userId,
+        userId: sessionData?.session?.user?.id || userId,
         listingId,
         category,
         filename: file.name || (category === 'videos' ? 'video.mp4' : 'photo.webp')
@@ -104,7 +106,7 @@ export async function uploadMediaFile(file, options = {}) {
         .from('listings')
         .upload(storagePath, file, {
           cacheControl: '3600',
-          upsert: true,
+          upsert: false,
           contentType
         });
 

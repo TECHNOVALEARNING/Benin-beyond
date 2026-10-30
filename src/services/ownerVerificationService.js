@@ -241,9 +241,28 @@ function getLocalApplications() {
   }
 }
 
+const KYC_BUCKET = 'kyc';
+const KYC_REF_PREFIX = 'kyc:';
+
 /**
- * Téléverse un document officiel de vérification (CIP, CNI, RCCM, IFU, Titre foncier...) dans Supabase Storage
- * Structure de stockage : verifications/<userId>/<ruleId>_<timestamp>.<ext>
+ * Lien temporaire (5 min) vers une pièce justificative du bucket privé.
+ * Les anciennes valeurs (URL https ou data:) sont renvoyées telles quelles.
+ */
+export async function getVerificationDocumentUrl(ref) {
+  if (!ref || typeof ref !== 'string' || !ref.startsWith(KYC_REF_PREFIX)) return ref || '';
+  if (!isSupabaseConfigured || !supabase) return '';
+  const { data, error } = await supabase.storage.from(KYC_BUCKET).createSignedUrl(ref.slice(KYC_REF_PREFIX.length), 300);
+  if (error) {
+    console.warn('Lien de document KYC indisponible :', error.message);
+    return '';
+  }
+  return data?.signedUrl || '';
+}
+
+/**
+ * Téléverse un document officiel de vérification (CIP, CNI, RCCM, IFU, Titre foncier...) dans le bucket PRIVÉ 'kyc'
+ * Structure de stockage : <id du compte connecté>/<ruleId>_<timestamp>.<ext>
+ * Renvoie une référence « kyc:<chemin> » (pas d'URL publique) : voir getVerificationDocumentUrl.
  */
 export async function uploadVerificationDocument(file, { userId = 'owner', ruleId = 'document' } = {}) {
   if (!file) return '';
@@ -263,13 +282,17 @@ export async function uploadVerificationDocument(file, { userId = 'owner', ruleI
     ext = 'webp';
   }
 
-  const storagePath = `verifications/${cleanUser}/${cleanRule}_${Date.now()}.${ext}`;
+  let storagePath = `${cleanUser}/${cleanRule}_${Date.now()}.${ext}`;
   const contentType = file.type || (ext === 'pdf' ? 'application/pdf' : `image/${ext}`);
 
   if (isSupabaseConfigured && supabase) {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionUserId = sessionData?.session?.user?.id;
+      if (sessionUserId) storagePath = `${sessionUserId}/${cleanRule}_${Date.now()}.${ext}`;
+
       const { data, error } = await supabase.storage
-        .from('listings')
+        .from(KYC_BUCKET)
         .upload(storagePath, file, {
           cacheControl: '3600',
           upsert: false,
@@ -277,13 +300,7 @@ export async function uploadVerificationDocument(file, { userId = 'owner', ruleI
         });
 
       if (!error && data?.path) {
-        const { data: { publicUrl } } = supabase.storage
-          .from('listings')
-          .getPublicUrl(data.path);
-
-        if (publicUrl) {
-          return publicUrl;
-        }
+        return `${KYC_REF_PREFIX}${data.path}`;
       } else if (error) {
         console.warn('Supabase Storage notice (vérifiez la migration SQL pour autoriser le type MIME) :', error.message);
       }

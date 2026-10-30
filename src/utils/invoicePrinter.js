@@ -6,17 +6,22 @@ import { formatPaymentMethod } from './paymentMethod';
  * - Rendu luxury prestige conforme aux normes comptables et conciergerie de luxe
  */
 
+// Toute valeur issue d'une réservation est saisie par un visiteur : on l'échappe avant de l'insérer dans le HTML
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 export function generateInvoiceHtml(booking, customer = null, options = {}) {
-  const ref = booking?.booking_ref || booking?.id || `BB-${Math.floor(Math.random() * 900000 + 100000)}`;
-  const clientName = booking?.customer_name || customer?.name || customer?.full_name || 'Client Bénin Beyond';
-  const clientEmail = booking?.customer_email || customer?.email || 'contact@client.com';
-  const clientPhone = booking?.customer_phone || customer?.phone || '+229 00 00 00 00';
+  const ref = escapeHtml(booking?.booking_ref || booking?.id || `BB-${Math.floor(Math.random() * 900000 + 100000)}`);
+  const clientName = escapeHtml(booking?.customer_name || customer?.name || customer?.full_name || 'Client Bénin Beyond');
+  const clientEmail = escapeHtml(booking?.customer_email || customer?.email || 'contact@client.com');
+  const clientPhone = escapeHtml(booking?.customer_phone || customer?.phone || '+229 00 00 00 00');
   
   const isVehicle = booking?.rental_type === 'drive' || booking?.type === 'drive' || booking?.items?.[0]?.type === 'drive' || booking?.items?.[0]?.rental_type === 'drive';
-  const listingTitle = booking?.listing_title || booking?.items?.[0]?.title || booking?.title || (isVehicle ? 'Location de Véhicule de Prestige' : 'Séjour d\'Exception Bénin Beyond');
-  const location = booking?.location || booking?.city || 'Bénin (Littoral)';
-  const dates = booking?.dates || booking?.period || 'Selon calendrier convenu';
-  const paymentMethod = formatPaymentMethod(booking?.payment_method);
+  const listingTitle = escapeHtml(booking?.listing_title || booking?.items?.[0]?.title || booking?.title || (isVehicle ? 'Location de Véhicule de Prestige' : 'Séjour d\'Exception Bénin Beyond'));
+  const location = escapeHtml(booking?.location || booking?.city || 'Bénin (Littoral)');
+  const dates = escapeHtml(booking?.dates || booking?.period || 'Selon calendrier convenu');
+  const paymentMethod = escapeHtml(formatPaymentMethod(booking?.payment_method));
   
   const rawTotal = booking?.total_amount || booking?.gross_amount || booking?.amount || 0;
   const formattedTotal = new Intl.NumberFormat('fr-FR').format(Number(rawTotal) || 0) + ' FCFA';

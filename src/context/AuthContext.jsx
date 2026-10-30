@@ -8,6 +8,9 @@ const REGISTERED_USERS_KEY = 'benin_beyond_registered_users';
 
 export const SUPER_ADMIN_EMAIL = 'isidoretoudonou@gmail.com';
 
+// Mot de passe du mode local (sans Supabase) uniquement : jamais dans le code, désactivé si absent
+const LOCAL_ADMIN_PASSWORD = import.meta.env?.VITE_LOCAL_ADMIN_PASSWORD || Symbol('désactivé');
+
 export const DEMO_USERS = {
   admin: {
     id: 'usr_admin_isidore',
@@ -507,7 +510,7 @@ export function AuthProvider({ children }) {
       if (supabaseAuthServerError) {
         return {
           success: false,
-          error: "Le serveur d'authentification ne parvient pas à lire ce compte. Exécutez le script src/supabase/fix_admin_auth_account.sql dans Supabase, puis réessayez."
+          error: "Le serveur d'authentification ne parvient pas à lire ce compte. Réessayez dans un instant ou contactez l'administration du site."
         };
       }
 
@@ -575,7 +578,7 @@ export function AuthProvider({ children }) {
     // 4. VÉRIFICATION DU MOT DE PASSE POUR LE SUPER-ADMINISTRATEUR (mode local hors Supabase uniquement)
     if (isAdmin) {
       const matchesSavedPassword = Boolean(savedUser?.password_hash && savedUser.password_hash === passwordHash);
-      if (!matchesSavedPassword && cleanPassword !== 'BeninBeyond2025!') {
+      if (!matchesSavedPassword && cleanPassword !== LOCAL_ADMIN_PASSWORD) {
         return {
           success: false,
           isWrongPassword: true,
@@ -603,7 +606,7 @@ export function AuthProvider({ children }) {
     // 5. GESTION STRICTE DES COMPTES PROMUS OU CONFIGURÉS EN ASSISTANT ADMIN (SUB-ADMIN)
     if (isPromotedSubAdmin || savedUser?.role === 'subadmin' || supabaseProfile?.role === 'subadmin') {
       const matchesSaved = Boolean(savedUser?.password_hash && savedUser.password_hash === passwordHash);
-      if (!matchesSaved && cleanPassword !== 'BeninBeyond2025!') {
+      if (!matchesSaved && cleanPassword !== LOCAL_ADMIN_PASSWORD) {
         return {
           success: false,
           isWrongPassword: true,
@@ -631,7 +634,7 @@ export function AuthProvider({ children }) {
 
     // 6. VÉRIFICATION DU MOT DE PASSE POUR LES COMPTES DÉMO (SI NON MODIFIÉS PAR L'ADMIN)
     if (demoMatch && !userOverride) {
-      const validDemoPasswords = ['BeninBeyond2025!', 'demo123'];
+      const validDemoPasswords = ['demo123'];
       if (!validDemoPasswords.includes(cleanPassword)) {
         return {
           success: false,
